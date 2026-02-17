@@ -248,10 +248,6 @@ fun EVChargingApp(userPreferencesRepository: UserPreferencesRepository) {
                 val slotId = backStackEntry.arguments?.getLong("slotId") ?: return@composable
                 SlotBookingScreen(
                         slotId = slotId,
-                        slotNumber = null,
-                        slotType = "AC",
-                        connectorType = "CCS2",
-                        powerRating = 22.0,
                         onBackClick = { navController.popBackStack() },
                         onConfirmBooking = { sId, startTime, endTime ->
                             currentUserId?.let { userId ->

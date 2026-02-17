@@ -1,6 +1,5 @@
 package com.ganesh.EV_Project.controller;
 
-
 import com.ganesh.EV_Project.enums.SlotStatus;
 import com.ganesh.EV_Project.model.ChargerSlot;
 import com.ganesh.EV_Project.service.ChargerSlotService;
@@ -17,7 +16,6 @@ public class ChargerSlotController {
 
     @Autowired
     private ChargerSlotService slotService;
-
 
     @GetMapping
     public ResponseEntity<List<ChargerSlot>> getAllSlots() {
@@ -36,19 +34,24 @@ public class ChargerSlotController {
         System.out.println("First");
         List<ChargerSlot> availableSlots = slotService.getAvailableSlots(stationId);
         System.out.println("Second");
-        return new ResponseEntity<>(availableSlots,HttpStatus.OK);
+        return new ResponseEntity<>(availableSlots, HttpStatus.OK);
     }
 
     @PutMapping("/{id}/status")
     public ResponseEntity<ChargerSlot> updateSlotStatus(@PathVariable Long id, @RequestParam SlotStatus status) {
         ChargerSlot updatedSlot = slotService.updateSlotStatus(id, status);
-        return new ResponseEntity<>(updatedSlot,HttpStatus.OK);
+        return new ResponseEntity<>(updatedSlot, HttpStatus.OK);
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<ChargerSlot> getSlotById(@PathVariable Long id) {
+        ChargerSlot slot = slotService.getSlotById(id);
+        return new ResponseEntity<>(slot, HttpStatus.OK);
     }
 
     @PostMapping("/station/{stationId}")
     public ResponseEntity<ChargerSlot> createSlot(@RequestBody ChargerSlot slot, @PathVariable Long stationId) {
         ChargerSlot savedSlot = slotService.createSlot(slot, stationId);
-        return new ResponseEntity<>(savedSlot,HttpStatus.CREATED);
+        return new ResponseEntity<>(savedSlot, HttpStatus.CREATED);
     }
 }
-

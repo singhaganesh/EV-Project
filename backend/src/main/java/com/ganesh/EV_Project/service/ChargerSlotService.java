@@ -19,7 +19,6 @@ public class ChargerSlotService {
     @Autowired
     private StationRepository stationRepository;
 
-
     public List<ChargerSlot> getAllSlots() {
         return slotRepository.findAll();
     }
@@ -33,7 +32,7 @@ public class ChargerSlotService {
     public List<ChargerSlot> getAvailableSlots(Long stationId) {
         Station station = stationRepository.findById(stationId)
                 .orElseThrow(() -> new APIException("Station not found"));
-        return slotRepository.findByStationAndStatus(station,SlotStatus.AVAILABLE);
+        return slotRepository.findByStationAndStatus(station, SlotStatus.AVAILABLE);
     }
 
     public ChargerSlot updateSlotStatus(Long id, SlotStatus status) {
@@ -50,5 +49,9 @@ public class ChargerSlotService {
         slot.setStatus(SlotStatus.AVAILABLE);
         return slotRepository.save(slot);
     }
-}
 
+    public ChargerSlot getSlotById(Long id) {
+        return slotRepository.findById(id)
+                .orElseThrow(() -> new APIException("Slot not found"));
+    }
+}

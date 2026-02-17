@@ -17,14 +17,16 @@ sealed class ChargingUiState {
     data class SessionStopped(val session: ChargingSession) : ChargingUiState()
     data class SessionLoaded(val session: ChargingSession) : ChargingUiState()
     data class SessionsLoaded(val sessions: List<ChargingSession>) : ChargingUiState()
+    data class PowerDataLoaded(val powerData: com.ganesh.ev.data.model.LivePowerData) :
+            ChargingUiState()
     data class Error(val message: String) : ChargingUiState()
 }
 
 class ChargingViewModel : ViewModel() {
-    
+
     private val _uiState = MutableStateFlow<ChargingUiState>(ChargingUiState.Initial)
     val uiState: StateFlow<ChargingUiState> = _uiState.asStateFlow()
-    
+
     fun startCharging(bookingId: Long) {
         viewModelScope.launch {
             _uiState.value = ChargingUiState.Loading
@@ -39,14 +41,15 @@ class ChargingViewModel : ViewModel() {
                         _uiState.value = ChargingUiState.Error("Failed to start charging session")
                     }
                 } else {
-                    _uiState.value = ChargingUiState.Error("Failed to start charging: ${response.message()}")
+                    _uiState.value =
+                            ChargingUiState.Error("Failed to start charging: ${response.message()}")
                 }
             } catch (e: Exception) {
                 _uiState.value = ChargingUiState.Error("Network error: ${e.message}")
             }
         }
     }
-    
+
     fun stopCharging(sessionId: Long) {
         viewModelScope.launch {
             _uiState.value = ChargingUiState.Loading
@@ -60,14 +63,15 @@ class ChargingViewModel : ViewModel() {
                         _uiState.value = ChargingUiState.Error("Failed to stop charging session")
                     }
                 } else {
-                    _uiState.value = ChargingUiState.Error("Failed to stop charging: ${response.message()}")
+                    _uiState.value =
+                            ChargingUiState.Error("Failed to stop charging: ${response.message()}")
                 }
             } catch (e: Exception) {
                 _uiState.value = ChargingUiState.Error("Network error: ${e.message}")
             }
         }
     }
-    
+
     fun loadSession(sessionId: Long) {
         viewModelScope.launch {
             _uiState.value = ChargingUiState.Loading
@@ -88,7 +92,7 @@ class ChargingViewModel : ViewModel() {
             }
         }
     }
-    
+
     fun loadUserHistory(userId: Long) {
         viewModelScope.launch {
             _uiState.value = ChargingUiState.Loading
@@ -105,8 +109,48 @@ class ChargingViewModel : ViewModel() {
             }
         }
     }
-    
+
+    private var isPolling = false
+
+    fun startPollingPower(stationId: Long) {
+        if (isPolling) return
+        isPolling = true
+        viewModelScope.launch {
+            while (isPolling) {
+                try {
+                    val response = RetrofitClient.apiService.getStationLivePower(stationId)
+                    if (response.isSuccessful && response.body()?.data != null) {
+                        // Note: We don't overwrite the main state if it's SessionStarted/Loaded,
+                        // so we might need a separate StateFlow for power data or a composite
+                        // state.
+                        // For simplicity, we emit a side-effect or update a separate flow.
+                        // However, since UIState is a sealed class, switching to PowerDataLoaded
+                        // might hide the Session info.
+                        // Ideally, we should add powerData to SessionStarted/Loaded or use a
+                        // separate flow.
+                        // I'll update the approach to use a separate flow for power data.
+                        _powerDataState.value = response.body()?.data
+                    }
+                } catch (e: Exception) {
+                    // Ignore polling errors
+                }
+                kotlinx.coroutines.delay(5000) // Poll every 5 seconds
+            }
+        }
+    }
+
+    fun stopPolling() {
+        isPolling = false
+    }
+
+    private val _powerDataState = MutableStateFlow<com.ganesh.ev.data.model.LivePowerData?>(null)
+    val powerDataState: StateFlow<com.ganesh.ev.data.model.LivePowerData?> =
+            _powerDataState.asStateFlow()
+
     fun resetState() {
         _uiState.value = ChargingUiState.Initial
+        _powerDataState.value = null
+        stopPolling()
+        isPolling = false
     }
 }
