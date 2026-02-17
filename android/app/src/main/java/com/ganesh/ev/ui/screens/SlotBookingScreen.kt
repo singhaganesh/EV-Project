@@ -1,6 +1,8 @@
 package com.ganesh.ev.ui.screens
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
@@ -10,7 +12,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ganesh.ev.data.model.ChargerSlot
-import com.ganesh.ev.data.model.SlotType
 import com.ganesh.ev.ui.theme.*
 import com.ganesh.ev.ui.viewmodel.SlotBookingUiState
 import com.ganesh.ev.ui.viewmodel.SlotBookingViewModel
@@ -108,41 +109,79 @@ fun SlotBookingContent(slot: ChargerSlot, onConfirmBooking: (Long, String, Strin
         val endTime = timeFormat.format(calendar.time)
 
         val totalHours = selectedDuration
-        val pricePerHour =
-                when (slot.slotType) {
-                        SlotType.DC -> 25.0
-                        SlotType.AC -> 15.0
-                        else -> 20.0
-                }
+        val pricePerKwh = slot.station?.pricePerKwh ?: 15.0
+        val pricePerHour = slot.powerRating * pricePerKwh
         val estimatedPrice = totalHours * pricePerHour
 
         Column(
-                modifier = Modifier.fillMaxSize().padding(16.dp),
+                modifier =
+                        Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
                 // Slot details
                 ClayCard {
+                        slot.station?.let { station ->
+                                Text(
+                                        text = station.name,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                        }
                         Text(
                                 text = "Slot ${slot.slotNumber ?: "#${slot.id}"}",
                                 style = MaterialTheme.typography.titleLarge
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Horizontal detailsrow
+                        Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Text(
+                                                text = "Type",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        Text(
+                                                text = "${slot.slotType}",
+                                                style = MaterialTheme.typography.titleMedium
+                                        )
+                                }
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Text(
+                                                text = "Connector",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        Text(
+                                                text = "${slot.connectorType}",
+                                                style = MaterialTheme.typography.titleMedium
+                                        )
+                                }
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Text(
+                                                text = "Power",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        Text(
+                                                text = "${slot.powerRating} kW",
+                                                style = MaterialTheme.typography.titleMedium
+                                        )
+                                }
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
                         Text(
-                                text = "Type: ${slot.slotType}",
-                                style = MaterialTheme.typography.bodyMedium
-                        )
-                        Text(
-                                text = "Connector: ${slot.connectorType}",
-                                style = MaterialTheme.typography.bodyMedium
-                        )
-                        Text(
-                                text = "Power: ${slot.powerRating} kW",
-                                style = MaterialTheme.typography.bodyMedium
-                        )
-                        Text(
-                                text = "Rate: ₹$pricePerHour/hour",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.primary
+                                text =
+                                        "Rate: ₹${String.format(Locale.US, "%.2f", pricePerKwh)}/kWh",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.align(Alignment.End)
                         )
                 }
 
@@ -247,7 +286,7 @@ fun SlotBookingContent(slot: ChargerSlot, onConfirmBooking: (Long, String, Strin
                         }
                 }
 
-                Spacer(modifier = Modifier.weight(1f))
+                Spacer(modifier = Modifier.height(16.dp))
 
                 ClayButton(
                         onClick = {

@@ -24,27 +24,27 @@ public class ChargerSlot {
     private Long id;
 
     // Many slots belong to one station
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "station_id", nullable = false)
     private Station station;
 
     @Column(nullable = false)
-    private String slotLabel;       // e.g., "Slot-A1"
+    private String slotLabel; // e.g., "Slot-A1"
 
     @Column(nullable = false)
     @Enumerated(EnumType.STRING)
-    private SlotType slotType;        // e.g., "AC", "DC"
+    private SlotType slotType; // e.g., "AC", "DC"
 
     @Column(nullable = false)
     @Enumerated(EnumType.STRING)
-    private SlotStatus status;          // e.g., "AVAILABLE", "OCCUPIED", "MAINTENANCE"
+    private SlotStatus status; // e.g., "AVAILABLE", "OCCUPIED", "MAINTENANCE"
 
     @Column(nullable = false)
     @Enumerated(EnumType.STRING)
-    private ConnectorType connectorType;   // e.g., "CCS2", "CHAdeMO"
+    private ConnectorType connectorType; // e.g., "CCS2", "CHAdeMO"
 
     @Column(nullable = false)
-    private Double powerKw;         // e.g., 22.0
+    private Double powerKw; // e.g., 22.0
 
     @CreationTimestamp
     private LocalDateTime createdAt;
@@ -52,7 +52,6 @@ public class ChargerSlot {
     @UpdateTimestamp
     private LocalDateTime updatedAt;
 
-    @Version                     // for optimistic locking
+    @Version // for optimistic locking
     private Long version;
 }
-

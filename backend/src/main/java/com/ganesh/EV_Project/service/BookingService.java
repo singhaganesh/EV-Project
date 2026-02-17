@@ -26,16 +26,15 @@ public class BookingService {
 
     @Autowired
     private BookingRepository bookingRepository;
-    
+
     @Autowired
     private ChargerSlotRepository slotRepository;
-    
+
     @Autowired
     private UserRepository userRepository;
-    
+
     @Autowired
     private ChargingSessionRepository chargingSessionRepository;
-
 
     @Transactional
     public Booking createBooking(BookingRequest request) {
@@ -59,18 +58,21 @@ public class BookingService {
         if (slot.getStatus() != SlotStatus.AVAILABLE) {
             throw new APIException("Slot not available for booking");
         }
-        
+
         // Check for overlapping bookings
         List<Booking> overlappingBookings = bookingRepository.findOverlappingBookings(
                 request.getSlotId(), request.getStartTime(), request.getEndTime());
-        
+
         if (!overlappingBookings.isEmpty()) {
             throw new APIException("Slot is already booked for the selected time range");
         }
 
-        // Calculate price estimate (Rs. 15 per kWh, assuming 1 hour charging)
+        // Calculate price estimate using station's actual price per kWh
         double hours = java.time.Duration.between(request.getStartTime(), request.getEndTime()).toMinutes() / 60.0;
-        double priceEstimate = hours * slot.getPowerKw() * 15.0; // Rs. 15 per kWh
+        double pricePerKwh = slot.getStation() != null && slot.getStation().getPricePerKwh() != null
+                ? slot.getStation().getPricePerKwh()
+                : 15.0;
+        double priceEstimate = hours * slot.getPowerKw() * pricePerKwh;
 
         // Create booking
         Booking booking = Booking.builder()
@@ -101,12 +103,12 @@ public class BookingService {
     public void cancelBooking(Long bookingId) {
         Booking booking = bookingRepository.findById(bookingId)
                 .orElseThrow(() -> new APIException("Booking not found"));
-        
+
         // Only allow cancelling confirmed bookings
         if (booking.getStatus() != BookingStatus.CONFIRMED) {
             throw new APIException("Cannot cancel booking with status: " + booking.getStatus());
         }
-        
+
         booking.setStatus(BookingStatus.CANCELLED);
         bookingRepository.save(booking);
 
