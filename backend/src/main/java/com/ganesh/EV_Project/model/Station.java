@@ -32,7 +32,12 @@ public class Station {
     @JoinColumn(name = "owner_id")
     private User owner;
 
-    @Lob
+    @Column(columnDefinition = "TEXT")
     private String meta;
-}
 
+    @Column(columnDefinition = "DOUBLE PRECISION DEFAULT 0.0")
+    private Double rating;
+
+    @Column
+    private java.time.LocalDateTime lastUsedTime;
+}

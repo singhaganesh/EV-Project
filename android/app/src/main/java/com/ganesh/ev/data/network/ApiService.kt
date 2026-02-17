@@ -12,6 +12,7 @@ import com.ganesh.ev.data.model.Payment
 import com.ganesh.ev.data.model.PaymentIntentResponse
 import com.ganesh.ev.data.model.StartChargingRequest
 import com.ganesh.ev.data.model.Station
+import com.ganesh.ev.data.model.StationMarker
 import com.ganesh.ev.data.model.StationWithScore
 import retrofit2.Response
 import retrofit2.http.Body
@@ -115,8 +116,26 @@ interface ApiService {
         suspend fun getNearbyStations(
                 @Query("lat") latitude: Double,
                 @Query("lng") longitude: Double,
-                @Query("radius") radius: Double = 10.0
+                @Query("radius") radius: Double = 50.0,
+                @Query("limit") limit: Int = 5
         ): Response<ApiResponse<List<StationWithScore>>>
+
+        // Viewport-based markers (lightweight, for map pins)
+        @GET("api/stations/viewport")
+        suspend fun getStationsInViewport(
+                @Query("neLat") neLat: Double,
+                @Query("neLng") neLng: Double,
+                @Query("swLat") swLat: Double,
+                @Query("swLng") swLng: Double
+        ): Response<ApiResponse<List<StationMarker>>>
+
+        // Single station detail (on marker click)
+        @GET("api/stations/{id}/detail")
+        suspend fun getStationDetail(
+                @Path("id") stationId: Long,
+                @Query("lat") latitude: Double,
+                @Query("lng") longitude: Double
+        ): Response<ApiResponse<StationWithScore>>
 
         @GET("api/iot/stations/{stationId}/live-power")
         suspend fun getStationLivePower(

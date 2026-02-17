@@ -23,7 +23,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.ganesh.ev.data.model.Station
+import com.ganesh.ev.data.model.StationMarker
 import com.ganesh.ev.data.model.StationWithScore
 import com.ganesh.ev.ui.components.StationCard
 import com.ganesh.ev.ui.theme.*
@@ -35,6 +35,7 @@ import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.maps.android.compose.*
 import java.util.Locale
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -44,10 +45,11 @@ fun HomeScreen(
         viewModel: StationViewModel = viewModel()
 ) {
         val uiState by viewModel.uiState.collectAsState()
+        val viewportMarkers by viewModel.viewportMarkers.collectAsState()
+        val isLoadingStations by viewModel.isLoadingStations.collectAsState()
         val context = LocalContext.current
 
         var showList by remember { mutableStateOf(false) }
-        var selectedStation by remember { mutableStateOf<Station?>(null) }
         var currentLocation by remember { mutableStateOf<LatLng?>(null) }
         var hasLocationPermission by remember { mutableStateOf(false) }
 
@@ -56,12 +58,34 @@ fun HomeScreen(
                 position = CameraPosition.fromLatLngZoom(defaultLocation, 12f)
         }
 
-        // FusedLocationProviderClient
         val fusedLocationClient = remember {
                 LocationServices.getFusedLocationProviderClient(context)
         }
 
-        // Permission launcher
+        // Derive nearby stations from UI state
+        val nearbyStations =
+                remember(uiState) {
+                        when (uiState) {
+                                is StationUiState.NearbyStationsLoaded ->
+                                        (uiState as StationUiState.NearbyStationsLoaded).stations
+                                is StationUiState.StationsLoaded ->
+                                        (uiState as StationUiState.StationsLoaded).stations.map {
+                                                StationWithScore(
+                                                        it,
+                                                        0.0,
+                                                        0.0,
+                                                        0.0,
+                                                        0.0,
+                                                        0.0,
+                                                        0.0,
+                                                        0,
+                                                        0
+                                                )
+                                        }
+                                else -> emptyList()
+                        }
+                }
+
         val permissionLauncher =
                 rememberLauncherForActivityResult(
                         contract = ActivityResultContracts.RequestMultiplePermissions()
@@ -72,7 +96,6 @@ fun HomeScreen(
                                                 true
                 }
 
-        // Check and request permissions
         LaunchedEffect(Unit) {
                 val fineLocationGranted =
                         ContextCompat.checkSelfPermission(
@@ -98,7 +121,6 @@ fun HomeScreen(
                 }
         }
 
-        // Get current location
         fun fetchCurrentLocation() {
                 if (hasLocationPermission) {
                         try {
@@ -108,7 +130,7 @@ fun HomeScreen(
                                                 currentLocation = latLng
                                                 cameraPositionState.position =
                                                         CameraPosition.fromLatLngZoom(latLng, 15f)
-                                                // Load nearby stations with scoring
+                                                // Load nearest 5 for bottom pager
                                                 viewModel.loadNearbyStations(
                                                         it.latitude,
                                                         it.longitude
@@ -118,34 +140,28 @@ fun HomeScreen(
                         } catch (e: SecurityException) {
                                 // Permission not granted
                         }
-                } else {
-                        // Fallback if no permission
-                        viewModel.loadStations()
                 }
         }
 
-        // Fetch location when permission is granted
+        // Once location permission is granted, get location and THEN fetch stations
         LaunchedEffect(hasLocationPermission) {
                 if (hasLocationPermission) {
                         fetchCurrentLocation()
                 }
         }
 
-        // Removed simple loadStations call, relying on fetchCurrentLocation or fallback
-        // LaunchedEffect(Unit) { viewModel.loadStations() }
-
-        LaunchedEffect(uiState) {
-                if (uiState is StationUiState.StationsLoaded) {
-                        val stations = (uiState as StationUiState.StationsLoaded).stations
-                        if (stations.isNotEmpty() && selectedStation == null) {
-                                selectedStation = stations.first()
-                                val location =
-                                        LatLng(
-                                                stations.first().latitude,
-                                                stations.first().longitude
-                                        )
-                                cameraPositionState.position =
-                                        CameraPosition.fromLatLngZoom(location, 14f)
+        // Debounced viewport marker loading on camera move
+        LaunchedEffect(cameraPositionState.isMoving) {
+                if (!cameraPositionState.isMoving) {
+                        delay(500) // Debounce 500ms after camera stops
+                        val bounds = cameraPositionState.projection?.visibleRegion?.latLngBounds
+                        if (bounds != null) {
+                                viewModel.loadViewportMarkers(
+                                        neLat = bounds.northeast.latitude,
+                                        neLng = bounds.northeast.longitude,
+                                        swLat = bounds.southwest.latitude,
+                                        swLng = bounds.southwest.longitude
+                                )
                         }
                 }
         }
@@ -185,104 +201,44 @@ fun HomeScreen(
                 },
                 containerColor = MaterialTheme.colorScheme.background
         ) { paddingValues ->
-                when (val state = uiState) {
-                        is StationUiState.Loading -> {
-                                Box(
-                                        modifier = Modifier.fillMaxSize().padding(paddingValues),
-                                        contentAlignment = Alignment.Center
-                                ) { ClayProgressIndicator() }
-                        }
-                        is StationUiState.Error -> {
-                                Box(
-                                        modifier = Modifier.fillMaxSize().padding(paddingValues),
-                                        contentAlignment = Alignment.Center
-                                ) {
-                                        Column(
-                                                horizontalAlignment = Alignment.CenterHorizontally,
-                                                modifier = Modifier.padding(24.dp)
-                                        ) {
-                                                ClayCard(
-                                                        containerColor =
-                                                                MaterialTheme.colorScheme
-                                                                        .errorContainer
-                                                ) {
-                                                        Text(
-                                                                text = state.message,
-                                                                color =
-                                                                        MaterialTheme.colorScheme
-                                                                                .error,
-                                                                style =
-                                                                        MaterialTheme.typography
-                                                                                .bodyMedium
-                                                        )
-                                                }
-                                                Spacer(modifier = Modifier.height(16.dp))
-                                                ClayButton(onClick = { viewModel.loadStations() }) {
-                                                        Text("Retry")
-                                                }
-                                        }
-                                }
-                        }
-                        is StationUiState.StationsLoaded -> {
-                                // Legacy fallback support
-                                val stations =
-                                        state.stations.map {
-                                                StationWithScore(
-                                                        it,
-                                                        0.0,
-                                                        0.0,
-                                                        0.0,
-                                                        0.0,
-                                                        0.0,
-                                                        0.0,
-                                                        0,
-                                                        0
-                                                ) // Dummy score
-                                        }
-                                StationContent(
-                                        stations = stations,
-                                        showList = showList,
-                                        cameraPositionState = cameraPositionState,
-                                        hasLocationPermission = hasLocationPermission,
-                                        onStationClick = onStationClick,
-                                        paddingValues = paddingValues
-                                )
-                        }
-                        is StationUiState.NearbyStationsLoaded -> {
-                                StationContent(
-                                        stations = state.stations,
-                                        showList = showList,
-                                        cameraPositionState = cameraPositionState,
-                                        hasLocationPermission = hasLocationPermission,
-                                        onStationClick = onStationClick,
-                                        paddingValues = paddingValues
-                                )
-                        }
-                        else -> {}
-                }
+                // Always show the map/content — never block with a full-screen loader
+                StationContent(
+                        nearbyStations = nearbyStations,
+                        viewportMarkers = viewportMarkers,
+                        showList = showList,
+                        isLoading = isLoadingStations,
+                        cameraPositionState = cameraPositionState,
+                        hasLocationPermission = hasLocationPermission,
+                        onStationClick = onStationClick,
+                        onMarkerClick = { id, lat, lng -> viewModel.onMarkerClicked(id, lat, lng) },
+                        paddingValues = paddingValues
+                )
         }
 }
 
 @Composable
 fun StationContent(
-        stations: List<StationWithScore>,
+        nearbyStations: List<StationWithScore>,
+        viewportMarkers: List<StationMarker>,
         showList: Boolean,
+        isLoading: Boolean,
         cameraPositionState: CameraPositionState,
         hasLocationPermission: Boolean,
         onStationClick: (Long) -> Unit,
+        onMarkerClick: (Long, Double, Double) -> Unit,
         paddingValues: PaddingValues
 ) {
         var selectedStation by remember { mutableStateOf<StationWithScore?>(null) }
 
-        // Auto-select first (highest ranked)
-        LaunchedEffect(stations) {
-                if (stations.isNotEmpty() && selectedStation == null) {
-                        selectedStation = stations.first()
+        // Auto-select first (highest ranked) when stations arrive
+        LaunchedEffect(nearbyStations) {
+                if (nearbyStations.isNotEmpty() && selectedStation == null) {
+                        selectedStation = nearbyStations.first()
                         cameraPositionState.position =
                                 CameraPosition.fromLatLngZoom(
                                         LatLng(
-                                                stations.first().station.latitude,
-                                                stations.first().station.longitude
+                                                nearbyStations.first().station.latitude,
+                                                nearbyStations.first().station.longitude
                                         ),
                                         14f
                                 )
@@ -290,13 +246,26 @@ fun StationContent(
         }
 
         if (showList) {
-                // List View
                 Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
-                        StationListView(stations = stations, onStationClick = onStationClick)
+                        if (nearbyStations.isEmpty() && isLoading) {
+                                Box(
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentAlignment = Alignment.Center
+                                ) { ClayProgressIndicator() }
+                        } else {
+                                StationListView(
+                                        stations = nearbyStations,
+                                        onStationClick = onStationClick
+                                )
+                        }
                 }
         } else {
-                // Map View with Pager
-                Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
+                // MAP VIEW — fill to bottom edge (no bottom padding, map goes under nav)
+                Box(
+                        modifier =
+                                Modifier.fillMaxSize()
+                                        .padding(top = paddingValues.calculateTopPadding())
+                ) {
                         GoogleMap(
                                 modifier = Modifier.fillMaxSize(),
                                 cameraPositionState = cameraPositionState,
@@ -308,45 +277,69 @@ fun StationContent(
                                                 myLocationButtonEnabled = false
                                         )
                         ) {
-                                stations.forEachIndexed { index, item ->
-                                        val station = item.station
+                                // Viewport markers (lightweight pins for ALL visible stations)
+                                viewportMarkers.forEach { marker ->
+                                        val isNearby =
+                                                nearbyStations.any { it.station.id == marker.id }
+
                                         Marker(
                                                 state =
                                                         MarkerState(
                                                                 position =
                                                                         LatLng(
-                                                                                station.latitude,
-                                                                                station.longitude
+                                                                                marker.latitude,
+                                                                                marker.longitude
                                                                         )
                                                         ),
-                                                title = station.name,
+                                                title = marker.name,
                                                 snippet =
-                                                        if (index == 0)
-                                                                "Recommended (Score: ${String.format("%.2f", item.score)})"
-                                                        else
-                                                                "Score: ${String.format("%.2f", item.score)}",
+                                                        if (marker.available) "Available"
+                                                        else "Busy",
                                                 icon =
-                                                        if (index == 0)
+                                                        if (isNearby)
                                                                 BitmapDescriptorFactory
                                                                         .defaultMarker(
                                                                                 BitmapDescriptorFactory
                                                                                         .HUE_AZURE
                                                                         )
+                                                        else if (marker.available)
+                                                                BitmapDescriptorFactory
+                                                                        .defaultMarker(
+                                                                                BitmapDescriptorFactory
+                                                                                        .HUE_GREEN
+                                                                        )
                                                         else
                                                                 BitmapDescriptorFactory
-                                                                        .defaultMarker(),
+                                                                        .defaultMarker(
+                                                                                BitmapDescriptorFactory
+                                                                                        .HUE_RED
+                                                                        ),
                                                 onClick = {
-                                                        selectedStation = item
+                                                        onMarkerClick(
+                                                                marker.id,
+                                                                marker.latitude,
+                                                                marker.longitude
+                                                        )
                                                         true
                                                 }
                                         )
                                 }
                         }
 
-                        // Station Pager at bottom
-                        if (stations.isNotEmpty()) {
+                        // Loading indicator at bottom of map when fetching stations
+                        if (isLoading) {
+                                LinearProgressIndicator(
+                                        modifier =
+                                                Modifier.fillMaxWidth()
+                                                        .align(Alignment.BottomCenter),
+                                        color = MaterialTheme.colorScheme.primary
+                                )
+                        }
+
+                        // Station Card pager at bottom (shows nearest 5)
+                        if (nearbyStations.isNotEmpty()) {
                                 StationPagerOverlay(
-                                        stations = stations,
+                                        stations = nearbyStations,
                                         selectedStation = selectedStation,
                                         onStationSelected = { item ->
                                                 selectedStation = item
