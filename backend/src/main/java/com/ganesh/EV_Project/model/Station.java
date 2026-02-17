@@ -40,4 +40,13 @@ public class Station {
 
     @Column
     private java.time.LocalDateTime lastUsedTime;
+
+    @Column
+    private String operatingHours; // e.g. "24 Hours", "6 AM - 10 PM"
+
+    @Column(columnDefinition = "DOUBLE PRECISION DEFAULT 0.0")
+    private Double pricePerKwh; // e.g. 16.5
+
+    @Column(columnDefinition = "BOOLEAN DEFAULT true")
+    private Boolean isOpen; // true = Open Now
 }

@@ -24,17 +24,21 @@ public class ChargerSlotController {
     }
 
     @GetMapping("/station/{stationId}")
-    public ResponseEntity<List<ChargerSlot>> getSlotsByStation(@PathVariable Long stationId) {
+    public ResponseEntity<com.ganesh.EV_Project.payload.APIResponse> getSlotsByStation(@PathVariable Long stationId) {
         List<ChargerSlot> slotsByStation = slotService.getSlotsByStation(stationId);
-        return new ResponseEntity<>(slotsByStation, HttpStatus.OK);
+        return new ResponseEntity<>(
+                new com.ganesh.EV_Project.payload.APIResponse(true, "Slots fetched successfully", slotsByStation),
+                HttpStatus.OK);
     }
 
     @GetMapping("/station/{stationId}/available")
-    public ResponseEntity<List<ChargerSlot>> getAvailableSlots(@PathVariable Long stationId) {
+    public ResponseEntity<com.ganesh.EV_Project.payload.APIResponse> getAvailableSlots(@PathVariable Long stationId) {
         System.out.println("First");
         List<ChargerSlot> availableSlots = slotService.getAvailableSlots(stationId);
         System.out.println("Second");
-        return new ResponseEntity<>(availableSlots, HttpStatus.OK);
+        return new ResponseEntity<>(
+                new com.ganesh.EV_Project.payload.APIResponse(true, "Available slots fetched", availableSlots),
+                HttpStatus.OK);
     }
 
     @PutMapping("/{id}/status")

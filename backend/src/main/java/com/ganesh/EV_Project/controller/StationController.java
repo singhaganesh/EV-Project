@@ -17,7 +17,6 @@ public class StationController {
     @Autowired
     private StationService stationService;
 
-
     @GetMapping
     public ResponseEntity<List<Station>> getAllStations() {
         List<Station> allStations = stationService.getAllStations();
@@ -26,10 +25,11 @@ public class StationController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<Station> getStationById(@PathVariable Long id) {
+    public ResponseEntity<com.ganesh.EV_Project.payload.APIResponse> getStationById(@PathVariable Long id) {
         Station station = stationService.getStationById(id);
-
-        return new ResponseEntity<>(station,HttpStatus.OK);
+        return new ResponseEntity<>(
+                new com.ganesh.EV_Project.payload.APIResponse(true, "Station fetched successfully", station),
+                HttpStatus.OK);
     }
 
     @PostMapping
@@ -37,19 +37,18 @@ public class StationController {
 
         Station savedStation = stationService.addStation(station);
 
-        return new ResponseEntity<>(savedStation,HttpStatus.CREATED);
+        return new ResponseEntity<>(savedStation, HttpStatus.CREATED);
     }
 
     @PutMapping("/{id}")
     public ResponseEntity<Station> updateStation(@PathVariable Long id, @RequestBody Station station) {
         Station updatedStation = stationService.updateStation(id, station);
-        return new ResponseEntity<>(updatedStation,HttpStatus.OK);
+        return new ResponseEntity<>(updatedStation, HttpStatus.OK);
     }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<String> deleteStation(@PathVariable Long id) {
         stationService.deleteStation(id);
-        return new ResponseEntity<>("Station deleted successfully",HttpStatus.OK);
+        return new ResponseEntity<>("Station deleted successfully", HttpStatus.OK);
     }
 }
-

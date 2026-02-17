@@ -19,7 +19,10 @@ data class Station(
         val latitude: Double,
         val longitude: Double,
         val address: String,
-        val meta: String?
+        val meta: String?,
+        val operatingHours: String? = null,
+        val pricePerKwh: Double? = null,
+        val isOpen: Boolean? = null
 )
 
 data class ChargerSlot(
@@ -33,25 +36,25 @@ data class ChargerSlot(
 )
 
 enum class SlotType {
-    AC,
-    DC
+        AC,
+        DC
 }
 
 enum class ConnectorType {
-    CCS2,
-    CHADEMO,
-    GB_T,
-    TESLA,
-    TYPE_2
+        CCS2,
+        CHADEMO,
+        GB_T,
+        TESLA,
+        TYPE_2
 }
 
 enum class SlotStatus {
-    AVAILABLE,
-    RESERVED,
-    BOOKED,
-    CHARGING,
-    MAINTENANCE,
-    OCCUPIED
+        AVAILABLE,
+        RESERVED,
+        BOOKED,
+        CHARGING,
+        MAINTENANCE,
+        OCCUPIED
 }
 
 data class Booking(
@@ -66,12 +69,12 @@ data class Booking(
 )
 
 enum class BookingStatus {
-    PENDING,
-    CONFIRMED,
-    ONGOING,
-    COMPLETED,
-    EXPIRED,
-    CANCELLED
+        PENDING,
+        CONFIRMED,
+        ONGOING,
+        COMPLETED,
+        EXPIRED,
+        CANCELLED
 }
 
 data class ChargingSession(
@@ -97,11 +100,11 @@ data class Payment(
 )
 
 enum class PaymentStatus {
-    PENDING,
-    PROCESSING,
-    COMPLETED,
-    FAILED,
-    REFUNDED
+        PENDING,
+        PROCESSING,
+        COMPLETED,
+        FAILED,
+        REFUNDED
 }
 
 // Request/Response Models

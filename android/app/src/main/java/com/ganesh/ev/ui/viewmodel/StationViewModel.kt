@@ -72,6 +72,7 @@ class StationViewModel : ViewModel() {
     fun loadStationDetail(stationId: Long) {
         viewModelScope.launch {
             _isLoadingStations.value = true
+            _uiState.value = StationUiState.Loading
             try {
                 val stationResponse = RetrofitClient.apiService.getStationById(stationId)
                 val slotsResponse = RetrofitClient.apiService.getSlotsByStation(stationId)
