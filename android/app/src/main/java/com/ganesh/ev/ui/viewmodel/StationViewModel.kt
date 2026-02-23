@@ -5,7 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.ganesh.ev.data.model.ChargerSlot
 import com.ganesh.ev.data.model.LivePowerData
 import com.ganesh.ev.data.model.Station
-import com.ganesh.ev.data.model.StationMarker
+import com.ganesh.ev.data.model.StationPin
 import com.ganesh.ev.data.model.StationWithScore
 import com.ganesh.ev.data.network.RetrofitClient
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -35,17 +35,22 @@ class StationViewModel : ViewModel() {
     private val _isLoadingStations = MutableStateFlow(false)
     val isLoadingStations: StateFlow<Boolean> = _isLoadingStations.asStateFlow()
 
-    // Viewport markers (lightweight, for map pins)
-    private val _viewportMarkers = MutableStateFlow<List<StationMarker>>(emptyList())
-    val viewportMarkers: StateFlow<List<StationMarker>> = _viewportMarkers.asStateFlow()
+    // Other pins (lightweight lat/lng only — non-nearby stations)
+    private val _otherPins = MutableStateFlow<List<StationPin>>(emptyList())
+    val otherPins: StateFlow<List<StationPin>> = _otherPins.asStateFlow()
 
-    // Selected station detail (on marker click)
-    private val _selectedStationDetail = MutableStateFlow<StationWithScore?>(null)
-    val selectedStationDetail: StateFlow<StationWithScore?> = _selectedStationDetail.asStateFlow()
+    // In-Memory Pin Cache: Prevents pins from flickering/disappearing during panning
+    private val pinCache = mutableMapOf<Long, StationPin>()
 
     // Store user location for detail queries
     private var userLat: Double = 0.0
     private var userLng: Double = 0.0
+
+    // Store the last known viewport bounds so we can re-use them on marker click
+    private var lastNeLat: Double = 0.0
+    private var lastNeLng: Double = 0.0
+    private var lastSwLat: Double = 0.0
+    private var lastSwLng: Double = 0.0
 
     fun loadStations() {
         viewModelScope.launch {
@@ -96,22 +101,82 @@ class StationViewModel : ViewModel() {
         }
     }
 
-    // Load nearest 5 stations — map stays visible, only a thin loading bar shows
-    fun loadNearbyStations(lat: Double, lng: Double) {
+    // ===== UNIFIED: Viewport + Nearby in one call =====
+    // Full data for top 5 nearby, lat/lng pins for the rest
+    fun loadViewportWithNearby(
+            neLat: Double,
+            neLng: Double,
+            swLat: Double,
+            swLng: Double,
+            lat: Double,
+            lng: Double
+    ) {
+        // Smart Delta Check: Skip fetch if viewport hasn't moved significantly
+        if (!shouldRefetchViewport(neLat, neLng, swLat, swLng) &&
+                        _uiState.value !is StationUiState.Initial
+        ) {
+            return
+        }
+
         userLat = lat
         userLng = lng
+        lastNeLat = neLat
+        lastNeLng = neLng
+        lastSwLat = swLat
+        lastSwLng = swLng
+
         viewModelScope.launch {
             _isLoadingStations.value = true
             try {
-                val response = RetrofitClient.apiService.getNearbyStations(lat, lng, 50.0, 5)
+                val response =
+                        RetrofitClient.apiService.getViewportWithNearby(
+                                neLat,
+                                neLng,
+                                swLat,
+                                swLng,
+                                lat,
+                                lng,
+                                5 // limit
+                        )
                 if (response.isSuccessful) {
-                    val stations = response.body()?.data ?: emptyList()
-                    if (stations.isNotEmpty()) {
-                        _uiState.value = StationUiState.NearbyStationsLoaded(stations)
-                    } else {
-                        fetchAllStations()
+                    val data = response.body()?.data
+                    if (data != null) {
+                        val nearby = data.nearbyStations
+
+                        // Only update nearby stations on FIRST load.
+                        // After that, nearby only changes when user clicks a pin
+                        // (handled by onMarkerClicked).
+                        val currentState = _uiState.value
+                        if (nearby.isNotEmpty() &&
+                                        currentState !is StationUiState.NearbyStationsLoaded
+                        ) {
+                            _uiState.value = StationUiState.NearbyStationsLoaded(nearby)
+                        }
+
+                        // Merge new pins into the in-memory cache
+                        data.otherPins.forEach { pin -> pinCache[pin.id] = pin }
+                        // Also cache nearby pins so they show as green dots when user pans away
+                        nearby.forEach { s ->
+                            pinCache[s.station.id] =
+                                    StationPin(
+                                            s.station.id,
+                                            s.station.latitude,
+                                            s.station.longitude
+                                    )
+                        }
+
+                        // Emit ALL cached pins, excluding the current nearby stations in the pager
+                        val currentNearbyIds =
+                                when (val state = _uiState.value) {
+                                    is StationUiState.NearbyStationsLoaded ->
+                                            state.stations.map { it.station.id }.toSet()
+                                    else -> emptySet()
+                                }
+                        _otherPins.value =
+                                pinCache.values.filter { !currentNearbyIds.contains(it.id) }
                     }
                 } else {
+                    // Fallback to old endpoint
                     fetchAllStations()
                 }
             } catch (e: Exception) {
@@ -121,69 +186,89 @@ class StationViewModel : ViewModel() {
         }
     }
 
-    // Load lightweight markers for current map viewport
-    fun loadViewportMarkers(neLat: Double, neLng: Double, swLat: Double, swLng: Double) {
-        viewModelScope.launch {
-            _isLoadingStations.value = true
-            try {
-                val response =
-                        RetrofitClient.apiService.getStationsInViewport(neLat, neLng, swLat, swLng)
-                if (response.isSuccessful) {
-                    _viewportMarkers.value = response.body()?.data ?: emptyList()
-                }
-            } catch (e: Exception) {
-                // Silent fail — keep existing markers
-            }
-            _isLoadingStations.value = false
-        }
+    private fun shouldRefetchViewport(
+            newNeLat: Double,
+            newNeLng: Double,
+            newSwLat: Double,
+            newSwLng: Double
+    ): Boolean {
+        if (lastNeLat == 0.0 && lastNeLng == 0.0) return true // First load
+
+        // Calculate viewport width/height
+        val latSpan = Math.abs(lastNeLat - lastSwLat)
+        val lngSpan = Math.abs(lastNeLng - lastSwLng)
+
+        // Calculate how much the center has moved
+        val latMove = Math.abs(newNeLat - lastNeLat)
+        val lngMove = Math.abs(newNeLng - lastNeLng)
+
+        // Only refetch if the map panned by more than 15% of the visible area
+        return (latMove > latSpan * 0.15) || (lngMove > lngSpan * 0.15)
     }
 
-    // When a marker is clicked: fetch 5 nearest stations from the marker's lat/lng
-    // and update the bottom pager (clicked station first, then 4 nearest)
-    // Distances are always recalculated from the user's actual location.
+    // When a marker is clicked: call the unified endpoint centered on clicked marker
+    // to get 5 nearest from that point (full data) + rest as pins
     fun onMarkerClicked(stationId: Long, markerLat: Double, markerLng: Double) {
         viewModelScope.launch {
             _isLoadingStations.value = true
             try {
                 val response =
-                        RetrofitClient.apiService.getNearbyStations(markerLat, markerLng, 50.0, 5)
+                        RetrofitClient.apiService.getViewportWithNearby(
+                                lastNeLat,
+                                lastNeLng,
+                                lastSwLat,
+                                lastSwLng,
+                                markerLat,
+                                markerLng,
+                                5
+                        )
                 if (response.isSuccessful) {
-                    val stations = response.body()?.data ?: emptyList()
-                    if (stations.isNotEmpty()) {
-                        // Recalculate distance from user's actual location
-                        val withUserDistance =
-                                stations.map { s ->
-                                    s.copy(
-                                            distance =
-                                                    haversineKm(
-                                                            userLat,
-                                                            userLng,
-                                                            s.station.latitude,
-                                                            s.station.longitude
-                                                    )
-                                    )
-                                }
-                        // Ensure clicked station is first in the list
-                        val clicked = withUserDistance.find { it.station.id == stationId }
-                        val others = withUserDistance.filter { it.station.id != stationId }.take(4)
-                        val reordered =
-                                if (clicked != null) {
-                                    listOf(clicked) + others
-                                } else {
-                                    val detailResponse =
-                                            RetrofitClient.apiService.getStationDetail(
-                                                    stationId,
-                                                    userLat,
-                                                    userLng
-                                            )
-                                    if (detailResponse.isSuccessful) {
-                                        val detail = detailResponse.body()?.data
-                                        if (detail != null) {
-                                            listOf(detail) + withUserDistance.take(4)
+                    val data = response.body()?.data
+                    if (data != null) {
+                        val nearby = data.nearbyStations
+                        if (nearby.isNotEmpty()) {
+                            // Recalculate distance from user's actual location
+                            val withUserDistance =
+                                    nearby.map { s ->
+                                        s.copy(
+                                                distance =
+                                                        haversineKm(
+                                                                userLat,
+                                                                userLng,
+                                                                s.station.latitude,
+                                                                s.station.longitude
+                                                        )
+                                        )
+                                    }
+                            // Ensure clicked station is first in the list
+                            val clicked = withUserDistance.find { it.station.id == stationId }
+                            val others =
+                                    withUserDistance.filter { it.station.id != stationId }.take(4)
+                            val reordered =
+                                    if (clicked != null) {
+                                        listOf(clicked) + others
+                                    } else {
+                                        // Clicked station not in nearby — fetch its detail
+                                        // individually
+                                        val detailResponse =
+                                                RetrofitClient.apiService.getStationDetail(
+                                                        stationId,
+                                                        userLat,
+                                                        userLng
+                                                )
+                                        if (detailResponse.isSuccessful) {
+                                            val detail = detailResponse.body()?.data
+                                            if (detail != null) {
+                                                listOf(detail) + withUserDistance.take(4)
+                                            } else withUserDistance
                                         } else withUserDistance
-                                    } else withUserDistance
+                                    }
+                            _uiState.value = StationUiState.NearbyStationsLoaded(reordered)
+                        }
+                        _otherPins.value =
+                                pinCache.values.filter { pin ->
+                                    !nearby.map { it.station.id }.contains(pin.id)
                                 }
-                        _uiState.value = StationUiState.NearbyStationsLoaded(reordered)
                     }
                 }
             } catch (e: Exception) {
@@ -194,7 +279,8 @@ class StationViewModel : ViewModel() {
     }
 
     fun clearSelectedDetail() {
-        _selectedStationDetail.value = null
+        pinCache.clear()
+        _otherPins.value = emptyList()
     }
 
     fun loadStationPower(stationId: Long) {

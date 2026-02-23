@@ -2,6 +2,7 @@ package com.ganesh.EV_Project.controller;
 
 import com.ganesh.EV_Project.dto.StationMarkerDTO;
 import com.ganesh.EV_Project.dto.StationScoreDTO;
+import com.ganesh.EV_Project.dto.ViewportResponseDTO;
 import com.ganesh.EV_Project.service.StationRecommendationService;
 import com.ganesh.EV_Project.payload.APIResponse;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,6 +28,23 @@ public class StationRecommendationController {
 
         List<StationMarkerDTO> markers = recommendationService.getStationsInViewport(swLat, neLat, swLng, neLng);
         return ResponseEntity.ok(new APIResponse(true, "Viewport stations fetched", markers));
+    }
+
+    // ===== NEW: Unified viewport + nearby — full data for top N, pins for the rest
+    // =====
+    @GetMapping("/viewport-nearby")
+    public ResponseEntity<APIResponse> getViewportWithNearby(
+            @RequestParam double neLat,
+            @RequestParam double neLng,
+            @RequestParam double swLat,
+            @RequestParam double swLng,
+            @RequestParam double lat,
+            @RequestParam double lng,
+            @RequestParam(defaultValue = "5") int limit) {
+
+        ViewportResponseDTO response = recommendationService.getViewportWithNearby(
+                swLat, neLat, swLng, neLng, lat, lng, limit);
+        return ResponseEntity.ok(new APIResponse(true, "Viewport with nearby stations fetched", response));
     }
 
     // Top N nearest stations with full scoring (for bottom pager/list)

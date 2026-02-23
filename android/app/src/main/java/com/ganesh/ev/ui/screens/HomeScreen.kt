@@ -4,7 +4,6 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.*
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -23,7 +22,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.ganesh.ev.data.model.StationMarker
+import com.ganesh.ev.data.model.StationPin
 import com.ganesh.ev.data.model.StationWithScore
 import com.ganesh.ev.ui.components.StationCard
 import com.ganesh.ev.ui.theme.*
@@ -45,7 +44,7 @@ fun HomeScreen(
         viewModel: StationViewModel = viewModel()
 ) {
         val uiState by viewModel.uiState.collectAsState()
-        val viewportMarkers by viewModel.viewportMarkers.collectAsState()
+        val otherPins by viewModel.otherPins.collectAsState()
         val isLoadingStations by viewModel.isLoadingStations.collectAsState()
         val context = LocalContext.current
 
@@ -130,11 +129,7 @@ fun HomeScreen(
                                                 currentLocation = latLng
                                                 cameraPositionState.position =
                                                         CameraPosition.fromLatLngZoom(latLng, 15f)
-                                                // Load nearest 5 for bottom pager
-                                                viewModel.loadNearbyStations(
-                                                        it.latitude,
-                                                        it.longitude
-                                                )
+                                                // Will be picked up by camera-move listener
                                         }
                                 }
                         } catch (e: SecurityException) {
@@ -143,24 +138,38 @@ fun HomeScreen(
                 }
         }
 
-        // Once location permission is granted, get location and THEN fetch stations
+        // Once location permission is granted, get location
         LaunchedEffect(hasLocationPermission) {
                 if (hasLocationPermission) {
                         fetchCurrentLocation()
                 }
         }
 
-        // Debounced viewport marker loading on camera move
+        // Debounced unified viewport+nearby fetch on camera move
         LaunchedEffect(cameraPositionState.isMoving) {
                 if (!cameraPositionState.isMoving) {
                         delay(500) // Debounce 500ms after camera stops
                         val bounds = cameraPositionState.projection?.visibleRegion?.latLngBounds
-                        if (bounds != null) {
-                                viewModel.loadViewportMarkers(
+                        val userLoc = currentLocation
+                        if (bounds != null && userLoc != null) {
+                                viewModel.loadViewportWithNearby(
                                         neLat = bounds.northeast.latitude,
                                         neLng = bounds.northeast.longitude,
                                         swLat = bounds.southwest.latitude,
-                                        swLng = bounds.southwest.longitude
+                                        swLng = bounds.southwest.longitude,
+                                        lat = userLoc.latitude,
+                                        lng = userLoc.longitude
+                                )
+                        } else if (bounds != null) {
+                                // No user location yet — use map center as reference
+                                val center = cameraPositionState.position.target
+                                viewModel.loadViewportWithNearby(
+                                        neLat = bounds.northeast.latitude,
+                                        neLng = bounds.northeast.longitude,
+                                        swLat = bounds.southwest.latitude,
+                                        swLng = bounds.southwest.longitude,
+                                        lat = center.latitude,
+                                        lng = center.longitude
                                 )
                         }
                 }
@@ -204,7 +213,7 @@ fun HomeScreen(
                 // Always show the map/content — never block with a full-screen loader
                 StationContent(
                         nearbyStations = nearbyStations,
-                        viewportMarkers = viewportMarkers,
+                        otherPins = otherPins,
                         showList = showList,
                         isLoading = isLoadingStations,
                         cameraPositionState = cameraPositionState,
@@ -219,7 +228,7 @@ fun HomeScreen(
 @Composable
 fun StationContent(
         nearbyStations: List<StationWithScore>,
-        viewportMarkers: List<StationMarker>,
+        otherPins: List<StationPin>,
         showList: Boolean,
         isLoading: Boolean,
         cameraPositionState: CameraPositionState,
@@ -277,48 +286,59 @@ fun StationContent(
                                                 myLocationButtonEnabled = false
                                         )
                         ) {
-                                // Viewport markers (lightweight pins for ALL visible stations)
-                                viewportMarkers.forEach { marker ->
-                                        val isNearby =
-                                                nearbyStations.any { it.station.id == marker.id }
-
+                                // Nearby stations — full-data markers (colored by availability)
+                                nearbyStations.forEach { item ->
+                                        val station = item.station
                                         Marker(
                                                 state =
                                                         MarkerState(
                                                                 position =
                                                                         LatLng(
-                                                                                marker.latitude,
-                                                                                marker.longitude
+                                                                                station.latitude,
+                                                                                station.longitude
                                                                         )
                                                         ),
-                                                title = marker.name,
+                                                title = station.name,
                                                 snippet =
-                                                        if (marker.available) "Available"
+                                                        if (item.availableSlots > 0) "Available"
                                                         else "Busy",
                                                 icon =
-                                                        if (isNearby)
-                                                                BitmapDescriptorFactory
-                                                                        .defaultMarker(
-                                                                                BitmapDescriptorFactory
-                                                                                        .HUE_AZURE
-                                                                        )
-                                                        else if (marker.available)
-                                                                BitmapDescriptorFactory
-                                                                        .defaultMarker(
-                                                                                BitmapDescriptorFactory
-                                                                                        .HUE_GREEN
-                                                                        )
-                                                        else
-                                                                BitmapDescriptorFactory
-                                                                        .defaultMarker(
-                                                                                BitmapDescriptorFactory
-                                                                                        .HUE_RED
-                                                                        ),
+                                                        BitmapDescriptorFactory.defaultMarker(
+                                                                BitmapDescriptorFactory.HUE_AZURE
+                                                        ),
                                                 onClick = {
                                                         onMarkerClick(
-                                                                marker.id,
-                                                                marker.latitude,
-                                                                marker.longitude
+                                                                station.id,
+                                                                station.latitude,
+                                                                station.longitude
+                                                        )
+                                                        true
+                                                }
+                                        )
+                                }
+
+                                // Other pins — lightweight markers (just lat/lng, no
+                                // name/availability)
+                                otherPins.forEach { pin ->
+                                        Marker(
+                                                state =
+                                                        MarkerState(
+                                                                position =
+                                                                        LatLng(
+                                                                                pin.latitude,
+                                                                                pin.longitude
+                                                                        )
+                                                        ),
+                                                title = "Station",
+                                                icon =
+                                                        BitmapDescriptorFactory.defaultMarker(
+                                                                BitmapDescriptorFactory.HUE_GREEN
+                                                        ),
+                                                onClick = {
+                                                        onMarkerClick(
+                                                                pin.id,
+                                                                pin.latitude,
+                                                                pin.longitude
                                                         )
                                                         true
                                                 }

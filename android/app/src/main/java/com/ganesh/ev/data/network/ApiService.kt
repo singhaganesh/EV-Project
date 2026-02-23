@@ -14,6 +14,7 @@ import com.ganesh.ev.data.model.StartChargingRequest
 import com.ganesh.ev.data.model.Station
 import com.ganesh.ev.data.model.StationMarker
 import com.ganesh.ev.data.model.StationWithScore
+import com.ganesh.ev.data.model.ViewportResponse
 import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.GET
@@ -120,7 +121,7 @@ interface ApiService {
                 @Query("limit") limit: Int = 5
         ): Response<ApiResponse<List<StationWithScore>>>
 
-        // Viewport-based markers (lightweight, for map pins)
+        // Viewport-based markers (lightweight, for map pins) — legacy
         @GET("api/stations/viewport")
         suspend fun getStationsInViewport(
                 @Query("neLat") neLat: Double,
@@ -128,6 +129,18 @@ interface ApiService {
                 @Query("swLat") swLat: Double,
                 @Query("swLng") swLng: Double
         ): Response<ApiResponse<List<StationMarker>>>
+
+        // Unified viewport + nearby: full data for top N, lat/lng pins for the rest
+        @GET("api/stations/viewport-nearby")
+        suspend fun getViewportWithNearby(
+                @Query("neLat") neLat: Double,
+                @Query("neLng") neLng: Double,
+                @Query("swLat") swLat: Double,
+                @Query("swLng") swLng: Double,
+                @Query("lat") lat: Double,
+                @Query("lng") lng: Double,
+                @Query("limit") limit: Int = 5
+        ): Response<ApiResponse<ViewportResponse>>
 
         // Single station detail (on marker click)
         @GET("api/stations/{id}/detail")

@@ -1,7 +1,9 @@
 package com.ganesh.EV_Project.service;
 
 import com.ganesh.EV_Project.dto.StationMarkerDTO;
+import com.ganesh.EV_Project.dto.StationPinDTO;
 import com.ganesh.EV_Project.dto.StationScoreDTO;
+import com.ganesh.EV_Project.dto.ViewportResponseDTO;
 import com.ganesh.EV_Project.model.ChargerSlot;
 import com.ganesh.EV_Project.model.Station;
 import com.ganesh.EV_Project.repository.ChargerSlotRepository;
@@ -91,6 +93,58 @@ public class StationRecommendationService {
                 station.getLongitude());
 
         return buildStationScoreDTO(station, distance);
+    }
+
+    // ===== VIEWPORT + NEARBY: Unified endpoint (Optimized) =====
+    public ViewportResponseDTO getViewportWithNearby(
+            double swLat, double neLat, double swLng, double neLng,
+            double userLat, double userLng, int limit) {
+
+        // 1. Fetch lightweight pins only (No N+1 query, no Slot loading)
+        List<StationPinDTO> allPins = stationRepository.findPinsByBoundingBox(swLat, neLat, swLng, neLng);
+
+        // 2. Calculate distance and sort (in-memory, fast)
+        // We use a temporary wrapper to hold pin + distance
+        record PinWithDistance(StationPinDTO pin, double distance) {
+        }
+
+        List<PinWithDistance> sortedPins = allPins.stream()
+                .map(pin -> new PinWithDistance(pin, calculateHaversineDistance(
+                        userLat, userLng, pin.getLatitude(), pin.getLongitude())))
+                .sorted(Comparator.comparingDouble(PinWithDistance::distance))
+                .collect(Collectors.toList());
+
+        // 3. Split: Top N (needs full data) vs Rest (pins only)
+        List<PinWithDistance> topNPins = sortedPins.stream().limit(limit).collect(Collectors.toList());
+
+        java.util.Set<Long> topNIds = topNPins.stream()
+                .map(p -> p.pin().getId())
+                .collect(Collectors.toSet());
+
+        List<StationPinDTO> otherPins = allPins.stream()
+                .filter(pin -> !topNIds.contains(pin.getId()))
+                .collect(Collectors.toList());
+
+        // 4. Fetch FULL data ONLY for the Top N nearest stations
+        List<StationScoreDTO> nearbyStations = new ArrayList<>();
+        if (!topNIds.isEmpty()) {
+            List<Station> topNStations = stationRepository.findAllById(topNIds);
+
+            // Re-map to maintain the sorted distance order
+            for (PinWithDistance pwd : topNPins) {
+                topNStations.stream()
+                        .filter(s -> s.getId().equals(pwd.pin().getId()))
+                        .findFirst()
+                        .ifPresent(station -> {
+                            nearbyStations.add(buildStationScoreDTO(station, pwd.distance()));
+                        });
+            }
+        }
+
+        return ViewportResponseDTO.builder()
+                .nearbyStations(nearbyStations)
+                .otherPins(otherPins)
+                .build();
     }
 
     // ===== Shared DTO builder =====

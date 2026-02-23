@@ -18,4 +18,13 @@ public interface StationRepository extends JpaRepository<Station, Long> {
             @Param("neLat") double neLat,
             @Param("swLng") double swLng,
             @Param("neLng") double neLng);
+
+    // Bounding box query — returns LIGHTWEIGHT pins only (optimizes memory and
+    // bandwidth)
+    @Query("SELECT new com.ganesh.EV_Project.dto.StationPinDTO(s.id, s.latitude, s.longitude) FROM Station s WHERE s.latitude BETWEEN :swLat AND :neLat AND s.longitude BETWEEN :swLng AND :neLng")
+    List<com.ganesh.EV_Project.dto.StationPinDTO> findPinsByBoundingBox(
+            @Param("swLat") double swLat,
+            @Param("neLat") double neLat,
+            @Param("swLng") double swLng,
+            @Param("neLng") double neLng);
 }
