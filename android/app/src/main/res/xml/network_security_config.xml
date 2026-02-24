@@ -4,5 +4,6 @@
         <domain includeSubdomains="true">10.0.2.2</domain>
         <domain includeSubdomains="true">localhost</domain>
         <domain includeSubdomains="true">192.168.0.248</domain>
+        <domain includeSubdomains="true">EV-Charging-Backend-env.eba-bppan2jb.eu-north-1.elasticbeanstalk.com</domain>
     </domain-config>
 </network-security-config>
