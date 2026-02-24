@@ -73,9 +73,11 @@ fun HomeScreen(
                 }
         }
 
-        val defaultLocation = LatLng(19.0760, 72.8777)
+        val defaultLocation =
+                LatLng(viewModel.savedCameraLat ?: 19.0760, viewModel.savedCameraLng ?: 72.8777)
+        val defaultZoom = viewModel.savedCameraZoom ?: 12f
         val cameraPositionState = rememberCameraPositionState {
-                position = CameraPosition.fromLatLngZoom(defaultLocation, 12f)
+                position = CameraPosition.fromLatLngZoom(defaultLocation, defaultZoom)
         }
 
         val fusedLocationClient = remember {
@@ -152,7 +154,7 @@ fun HomeScreen(
                                                 val latLng = LatLng(it.latitude, it.longitude)
                                                 currentLocation = latLng
                                                 cameraPositionState.position =
-                                                        CameraPosition.fromLatLngZoom(latLng, 15f)
+                                                        CameraPosition.fromLatLngZoom(latLng, 12f)
                                                 // Will be picked up by camera-move listener
                                         }
                                 }
@@ -176,16 +178,25 @@ fun HomeScreen(
         // Guaranteed non-null from here. Convert back to standard boolean to pass to children.
         val hasPermissionResolved = hasLocationPermission == true
 
-        // Once location permission is granted, get location
+        // Once location permission is granted, get location (only on first load)
         LaunchedEffect(hasPermissionResolved) {
-                if (hasPermissionResolved) {
+                if (hasPermissionResolved && !viewModel.hasInitialLocationBeenFetched) {
                         fetchCurrentLocation()
+                        viewModel.hasInitialLocationBeenFetched = true
                 }
         }
 
-        // Debounced unified viewport+nearby fetch on camera move
+        // Save camera position and fetch viewport data when camera stops moving
         LaunchedEffect(cameraPositionState.isMoving) {
                 if (!cameraPositionState.isMoving) {
+                        // Save camera position to ViewModel for state preservation
+                        val pos = cameraPositionState.position
+                        viewModel.saveCameraPosition(
+                                pos.target.latitude,
+                                pos.target.longitude,
+                                pos.zoom
+                        )
+
                         delay(500) // Debounce 500ms after camera stops
                         val bounds = cameraPositionState.projection?.visibleRegion?.latLngBounds
                         val userLoc = currentLocation
@@ -234,7 +245,7 @@ fun HomeScreen(
                                                                         CameraPosition
                                                                                 .fromLatLngZoom(
                                                                                         currentLocation!!,
-                                                                                        15f
+                                                                                        12f
                                                                                 )
                                                         } else {
                                                                 fetchCurrentLocation()
@@ -442,7 +453,7 @@ fun StationContent(
                                                                         item.station.latitude,
                                                                         item.station.longitude
                                                                 ),
-                                                                15f
+                                                                12f
                                                         )
                                         },
                                         onStationClick = onStationClick,

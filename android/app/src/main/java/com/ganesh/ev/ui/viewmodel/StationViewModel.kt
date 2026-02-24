@@ -52,6 +52,18 @@ class StationViewModel : ViewModel() {
     private var lastSwLat: Double = 0.0
     private var lastSwLng: Double = 0.0
 
+    // Camera state preservation across navigation
+    var hasInitialLocationBeenFetched: Boolean = false
+    var savedCameraLat: Double? = null
+    var savedCameraLng: Double? = null
+    var savedCameraZoom: Float? = null
+
+    fun saveCameraPosition(lat: Double, lng: Double, zoom: Float) {
+        savedCameraLat = lat
+        savedCameraLng = lng
+        savedCameraZoom = zoom
+    }
+
     fun loadStations() {
         viewModelScope.launch {
             _isLoadingStations.value = true
