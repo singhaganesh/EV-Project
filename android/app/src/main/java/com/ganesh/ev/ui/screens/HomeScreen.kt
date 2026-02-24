@@ -2,6 +2,10 @@ package com.ganesh.ev.ui.screens
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -29,6 +33,7 @@ import com.ganesh.ev.ui.theme.*
 import com.ganesh.ev.ui.viewmodel.StationUiState
 import com.ganesh.ev.ui.viewmodel.StationViewModel
 import com.google.android.gms.location.LocationServices
+import com.google.android.gms.maps.model.BitmapDescriptor
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
@@ -50,7 +55,23 @@ fun HomeScreen(
 
         var showList by remember { mutableStateOf(false) }
         var currentLocation by remember { mutableStateOf<LatLng?>(null) }
-        var hasLocationPermission by remember { mutableStateOf(false) }
+        var hasLocationPermission by remember { mutableStateOf<Boolean?>(null) }
+
+        var backPressedTime by remember { mutableStateOf(0L) }
+        BackHandler {
+                val currentTime = System.currentTimeMillis()
+                if (currentTime - backPressedTime < 2000) {
+                        (context as? android.app.Activity)?.finish()
+                } else {
+                        backPressedTime = currentTime
+                        android.widget.Toast.makeText(
+                                        context,
+                                        "Press back again to exit",
+                                        android.widget.Toast.LENGTH_SHORT
+                                )
+                                .show()
+                }
+        }
 
         val defaultLocation = LatLng(19.0760, 72.8777)
         val cameraPositionState = rememberCameraPositionState {
@@ -108,9 +129,12 @@ fun HomeScreen(
                                 Manifest.permission.ACCESS_COARSE_LOCATION
                         ) == PackageManager.PERMISSION_GRANTED
 
-                hasLocationPermission = fineLocationGranted || coarseLocationGranted
+                val granted = fineLocationGranted || coarseLocationGranted
 
-                if (!hasLocationPermission) {
+                if (granted) {
+                        hasLocationPermission = true
+                } else {
+                        // Launch permission request. State remains null until user decides.
                         permissionLauncher.launch(
                                 arrayOf(
                                         Manifest.permission.ACCESS_FINE_LOCATION,
@@ -121,7 +145,7 @@ fun HomeScreen(
         }
 
         fun fetchCurrentLocation() {
-                if (hasLocationPermission) {
+                if (hasLocationPermission == true) {
                         try {
                                 fusedLocationClient.lastLocation.addOnSuccessListener { location ->
                                         location?.let {
@@ -138,9 +162,23 @@ fun HomeScreen(
                 }
         }
 
+        // --- GATE CHECK: Block UI and API calls until permission is resolved ---
+        if (hasLocationPermission == null) {
+                Box(
+                        modifier =
+                                Modifier.fillMaxSize()
+                                        .background(MaterialTheme.colorScheme.background),
+                        contentAlignment = Alignment.Center
+                ) { ClayProgressIndicator() }
+                return // Exit composition to prevent Map rendering and data fetching
+        }
+
+        // Guaranteed non-null from here. Convert back to standard boolean to pass to children.
+        val hasPermissionResolved = hasLocationPermission == true
+
         // Once location permission is granted, get location
-        LaunchedEffect(hasLocationPermission) {
-                if (hasLocationPermission) {
+        LaunchedEffect(hasPermissionResolved) {
+                if (hasPermissionResolved) {
                         fetchCurrentLocation()
                 }
         }
@@ -217,7 +255,7 @@ fun HomeScreen(
                         showList = showList,
                         isLoading = isLoadingStations,
                         cameraPositionState = cameraPositionState,
-                        hasLocationPermission = hasLocationPermission,
+                        hasLocationPermission = hasPermissionResolved,
                         onStationClick = onStationClick,
                         onMarkerClick = { id, lat, lng -> viewModel.onMarkerClicked(id, lat, lng) },
                         paddingValues = paddingValues
@@ -238,6 +276,30 @@ fun StationContent(
         paddingValues: PaddingValues
 ) {
         var selectedStation by remember { mutableStateOf<StationWithScore?>(null) }
+        val context = LocalContext.current
+
+        // Pre-generate custom marker bitmaps (memoized for performance)
+        val selectedBitmap: Bitmap = remember {
+                createCustomMarkerBitmap(
+                        context,
+                        true,
+                        android.graphics.Color.parseColor("#2196F3")
+                )
+        }
+        val unselectedBitmap: Bitmap = remember {
+                createCustomMarkerBitmap(
+                        context,
+                        false,
+                        android.graphics.Color.parseColor("#2196F3")
+                )
+        }
+        val otherPinBitmap: Bitmap = remember {
+                createCustomMarkerBitmap(
+                        context,
+                        false,
+                        android.graphics.Color.parseColor("#4CAF50")
+                )
+        }
 
         // Auto-select first (highest ranked) when stations arrive
         LaunchedEffect(nearbyStations) {
@@ -286,9 +348,26 @@ fun StationContent(
                                                 myLocationButtonEnabled = false
                                         )
                         ) {
-                                // Nearby stations — full-data markers (colored by availability)
+                                // Maps is initialized here. Safe to call BitmapDescriptorFactory.
+                                val selectedIcon =
+                                        remember(selectedBitmap) {
+                                                BitmapDescriptorFactory.fromBitmap(selectedBitmap)
+                                        }
+                                val unselectedIcon =
+                                        remember(unselectedBitmap) {
+                                                BitmapDescriptorFactory.fromBitmap(unselectedBitmap)
+                                        }
+                                val otherPinIcon =
+                                        remember(otherPinBitmap) {
+                                                BitmapDescriptorFactory.fromBitmap(otherPinBitmap)
+                                        }
+                                // Nearby stations — full-data markers (dynamic size)
                                 nearbyStations.forEach { item ->
                                         val station = item.station
+                                        val isSelected = selectedStation?.station?.id == station.id
+                                        val markerIcon: BitmapDescriptor =
+                                                if (isSelected) selectedIcon else unselectedIcon
+
                                         Marker(
                                                 state =
                                                         MarkerState(
@@ -302,10 +381,8 @@ fun StationContent(
                                                 snippet =
                                                         if (item.availableSlots > 0) "Available"
                                                         else "Busy",
-                                                icon =
-                                                        BitmapDescriptorFactory.defaultMarker(
-                                                                BitmapDescriptorFactory.HUE_AZURE
-                                                        ),
+                                                icon = markerIcon,
+                                                zIndex = if (isSelected) 1f else 0f,
                                                 onClick = {
                                                         onMarkerClick(
                                                                 station.id,
@@ -317,8 +394,7 @@ fun StationContent(
                                         )
                                 }
 
-                                // Other pins — lightweight markers (just lat/lng, no
-                                // name/availability)
+                                // Other pins — small lightweight markers
                                 otherPins.forEach { pin ->
                                         Marker(
                                                 state =
@@ -330,10 +406,7 @@ fun StationContent(
                                                                         )
                                                         ),
                                                 title = "Station",
-                                                icon =
-                                                        BitmapDescriptorFactory.defaultMarker(
-                                                                BitmapDescriptorFactory.HUE_GREEN
-                                                        ),
+                                                icon = otherPinIcon,
                                                 onClick = {
                                                         onMarkerClick(
                                                                 pin.id,
@@ -530,4 +603,98 @@ fun ClayStationCard(item: StationWithScore, onClick: () -> Unit) {
                         )
                 }
         }
+}
+
+/** Draw a teardrop-shaped map pin as a Bitmap. Selected markers are drawn larger for emphasis. */
+private fun createCustomMarkerBitmap(
+        context: android.content.Context,
+        isSelected: Boolean,
+        color: Int
+): Bitmap {
+        val density = context.resources.displayMetrics.density
+
+        // Dimensions: selected pins are ~2x the size of unselected
+        val headRadiusDp = if (isSelected) 14f else 12f
+        val headRadius = headRadiusDp * density
+        val pinHeight = headRadius * 2.6f // total height of pin (head + tail)
+        val strokeW = if (isSelected) 2.5f * density else 1.5f * density
+
+        val width = (headRadius * 2 + strokeW * 2 + 4 * density).toInt()
+        val height = (pinHeight + strokeW + 4 * density).toInt()
+
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+
+        val cx = width / 2f
+        val headCy = headRadius + strokeW + 1 * density
+        val tipY = headCy + pinHeight - headRadius
+
+        // Build the teardrop path: circle head + pointed bottom
+        val path = android.graphics.Path()
+        // The angle where the circle transitions to the tip lines
+        val halfAngle = 35f // degrees from bottom-center of circle to tangent point
+        val startAngle = 90f + halfAngle
+        val sweepAngle = 360f - 2f * halfAngle
+
+        val oval =
+                android.graphics.RectF(
+                        cx - headRadius,
+                        headCy - headRadius,
+                        cx + headRadius,
+                        headCy + headRadius
+                )
+
+        // Start from the tip, draw line to circle tangent, arc around, line back to tip
+        val tangentAngleLeft = Math.toRadians((90.0 + halfAngle))
+        val tangentAngleRight = Math.toRadians((90.0 - halfAngle))
+        val leftX = cx + headRadius * Math.cos(tangentAngleLeft).toFloat()
+        val leftY = headCy + headRadius * Math.sin(tangentAngleLeft).toFloat()
+        val rightX = cx + headRadius * Math.cos(tangentAngleRight).toFloat()
+        val rightY = headCy + headRadius * Math.sin(tangentAngleRight).toFloat()
+
+        path.moveTo(cx, tipY) // tip of pin
+        path.lineTo(leftX, leftY) // line to left tangent
+        path.arcTo(oval, startAngle, sweepAngle) // arc around the head
+        path.lineTo(cx, tipY) // line back to tip
+        path.close()
+
+        // Shadow
+        val shadowPaint =
+                Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                        this.color = android.graphics.Color.argb(40, 0, 0, 0)
+                        style = Paint.Style.FILL
+                }
+        canvas.save()
+        canvas.translate(0f, 1.5f * density)
+        canvas.drawPath(path, shadowPaint)
+        canvas.restore()
+
+        // Fill
+        val fillPaint =
+                Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                        this.color = color
+                        style = Paint.Style.FILL
+                }
+        canvas.drawPath(path, fillPaint)
+
+        // White border
+        val borderPaint =
+                Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                        this.color = android.graphics.Color.WHITE
+                        style = Paint.Style.STROKE
+                        strokeWidth = strokeW
+                        strokeJoin = Paint.Join.ROUND
+                }
+        canvas.drawPath(path, borderPaint)
+
+        // Inner white dot on the circle head
+        val dotRadius = if (isSelected) 4f * density else 2.5f * density
+        val dotPaint =
+                Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                        this.color = android.graphics.Color.WHITE
+                        style = Paint.Style.FILL
+                }
+        canvas.drawCircle(cx, headCy, dotRadius, dotPaint)
+
+        return bitmap
 }

@@ -402,19 +402,10 @@ fun ClayProgressIndicator(
         modifier: Modifier = Modifier,
         color: Color = MaterialTheme.colorScheme.primary
 ) {
-    Box(
-            modifier =
-                    modifier.size(64.dp)
-                            .claySurface(cornerRadius = 32.dp, shadowElevation = 4.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.surface)
-                            .border(1.dp, Color.White.copy(alpha = 0.4f), CircleShape),
-            contentAlignment = Alignment.Center
-    ) {
-        CircularProgressIndicator(
-                modifier = Modifier.size(36.dp),
-                color = color,
-                strokeWidth = 3.dp
-        )
-    }
+    CircularProgressIndicator(
+            modifier = modifier.size(48.dp),
+            color = color,
+            strokeWidth = 4.dp
+    )
 }
+

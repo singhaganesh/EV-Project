@@ -13,11 +13,9 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.navigation.NavDestination.Companion.hierarchy
-import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -29,7 +27,6 @@ import com.ganesh.ev.data.network.RetrofitClient
 import com.ganesh.ev.data.repository.UserPreferencesRepository
 import com.ganesh.ev.ui.screens.*
 import com.ganesh.ev.ui.theme.ClayBottomBar
-import com.ganesh.ev.ui.theme.ClayProgressIndicator
 import com.ganesh.ev.ui.theme.EvTheme
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -99,26 +96,7 @@ fun EVChargingApp(userPreferencesRepository: UserPreferencesRepository) {
     val navController = rememberNavController()
     var currentUserId by remember { mutableStateOf<Long?>(null) }
     var currentUser by remember { mutableStateOf<User?>(null) }
-    var isLoading by remember { mutableStateOf(true) }
-    var isLoggedIn by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
-
-    // Check for existing session on first launch
-    LaunchedEffect(Unit) {
-        try {
-            val token = userPreferencesRepository.authToken.first()
-            val user = userPreferencesRepository.currentUser.first()
-            if (token != null && token.isNotEmpty()) {
-                RetrofitClient.setAuthToken(token)
-                currentUser = user
-                currentUserId = user?.id
-                isLoggedIn = true
-            }
-        } catch (e: Exception) {
-            // Ignore errors, show login
-        }
-        isLoading = false
-    }
 
     val bottomNavItems =
             listOf(
@@ -175,9 +153,7 @@ fun EVChargingApp(userPreferencesRepository: UserPreferencesRepository) {
                                                     else -> item.route
                                                 }
                                         navController.navigate(route) {
-                                            popUpTo(navController.graph.findStartDestination().id) {
-                                                saveState = true
-                                            }
+                                            popUpTo("home") { saveState = true }
                                             launchSingleTop = true
                                             restoreState = true
                                         }
@@ -190,13 +166,34 @@ fun EVChargingApp(userPreferencesRepository: UserPreferencesRepository) {
     ) { innerPadding ->
         NavHost(
                 navController = navController,
-                startDestination = if (isLoading) "splash" else if (isLoggedIn) "home" else "login",
+                startDestination = "splash",
                 modifier = Modifier.padding(bottom = innerPadding.calculateBottomPadding())
         ) {
             composable("splash") {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    ClayProgressIndicator()
-                }
+                SplashScreen(
+                        userPreferencesRepository = userPreferencesRepository,
+                        onAuthValid = { token ->
+                            // Token is still valid — restore session and go to Home
+                            coroutineScope.launch {
+                                try {
+                                    val user = userPreferencesRepository.currentUser.first()
+                                    currentUser = user
+                                    currentUserId = user?.id
+                                } catch (_: Exception) {}
+                            }
+                            navController.navigate("home") {
+                                popUpTo("splash") { inclusive = true }
+                            }
+                        },
+                        onAuthExpired = {
+                            // Token expired or missing — clear data and go to Login
+                            coroutineScope.launch { userPreferencesRepository.clearUserData() }
+                            RetrofitClient.clearAuthToken()
+                            navController.navigate("login") {
+                                popUpTo("splash") { inclusive = true }
+                            }
+                        }
+                )
             }
 
             composable("login") {
