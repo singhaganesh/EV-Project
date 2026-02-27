@@ -48,7 +48,7 @@ public class SecurityConfig {
         configuration.setAllowedHeaders(Arrays.asList("*"));
         configuration.setAllowCredentials(true);
         configuration.setExposedHeaders(Arrays.asList("Authorization", "Content-Type"));
-        
+
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
         return source;
@@ -60,7 +60,8 @@ public class SecurityConfig {
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> {
-                    auth.requestMatchers("/api/auth/login", "/api/auth/register", "/api/auth/send-otp", "/api/auth/validate-otp", "/api/auth/complete-profile").permitAll();
+                    auth.requestMatchers("/api/auth/login", "/api/auth/register", "/api/auth/send-otp",
+                            "/api/auth/validate-otp", "/api/auth/complete-profile").permitAll();
                     auth.requestMatchers("/api/public/**").permitAll();
                     auth.requestMatchers("/ws/**").permitAll();
                     auth.requestMatchers("/api/payments/webhook").permitAll();

@@ -25,7 +25,6 @@ public class UserDetailsServiceImpl implements UserDetailsService {
         return new org.springframework.security.core.userdetails.User(
                 user.getMobileNumber(),
                 "", // No password for OTP-based auth
-                Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + user.getRole()))
-        );
+                Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + user.getRole())));
     }
 }

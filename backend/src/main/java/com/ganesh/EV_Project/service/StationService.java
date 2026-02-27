@@ -15,7 +15,6 @@ public class StationService {
     @Autowired
     private StationRepository stationRepository;
 
-
     public List<Station> getAllStations() {
         return stationRepository.findAll();
     }
@@ -47,4 +46,3 @@ public class StationService {
         stationRepository.deleteById(id);
     }
 }
-
