@@ -26,7 +26,8 @@ import org.json.JSONObject
 fun SplashScreen(
         userPreferencesRepository: UserPreferencesRepository,
         onAuthValid: (token: String) -> Unit,
-        onAuthExpired: () -> Unit
+        onAuthExpired: () -> Unit,
+        onShowOnboarding: () -> Unit
 ) {
     var visible by remember { mutableStateOf(false) }
 
@@ -41,6 +42,7 @@ fun SplashScreen(
 
         var tokenValid = false
         var validToken: String? = null
+        var onboardingNeeded = false
 
         try {
             val token = userPreferencesRepository.authToken.first()
@@ -48,6 +50,9 @@ fun SplashScreen(
                 RetrofitClient.setAuthToken(token)
                 tokenValid = true
                 validToken = token
+            } else {
+                // If not logged in, check if onboarding is needed
+                onboardingNeeded = userPreferencesRepository.shouldShowOnboarding.first()
             }
         } catch (_: Exception) {
             // Any error → treat as expired
@@ -61,6 +66,8 @@ fun SplashScreen(
 
         if (tokenValid && validToken != null) {
             onAuthValid(validToken)
+        } else if (onboardingNeeded) {
+            onShowOnboarding()
         } else {
             onAuthExpired()
         }

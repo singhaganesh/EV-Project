@@ -29,7 +29,8 @@ public class ChargerSlot {
     private Station station;
 
     @Column(nullable = false)
-    private String slotLabel; // e.g., "Slot-A1"
+    @com.fasterxml.jackson.annotation.JsonProperty("slotNumber")
+    private String slotLabel; // e.g., "1", "2"
 
     @Column(nullable = false)
     @Enumerated(EnumType.STRING)
@@ -37,13 +38,14 @@ public class ChargerSlot {
 
     @Column(nullable = false)
     @Enumerated(EnumType.STRING)
-    private SlotStatus status; // e.g., "AVAILABLE", "OCCUPIED", "MAINTENANCE"
+    private SlotStatus status; // e.g., "AVAILABLE", "OCCUPIED"
 
     @Column(nullable = false)
     @Enumerated(EnumType.STRING)
-    private ConnectorType connectorType; // e.g., "CCS2", "CHAdeMO"
+    private ConnectorType connectorType; // e.g., "CCS2", "TYPE_2"
 
     @Column(nullable = false)
+    @com.fasterxml.jackson.annotation.JsonProperty("powerRating")
     private Double powerKw; // e.g., 22.0
 
     @CreationTimestamp

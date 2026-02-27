@@ -82,6 +82,7 @@ sealed class Screen(val route: String) {
         fun createRoute(userId: Long) = "history/$userId"
     }
     object Profile : Screen("profile")
+    object Onboarding : Screen("onboarding")
 }
 
 sealed class BottomNavItem(val route: String, val icon: ImageVector, val label: String) {
@@ -191,6 +192,24 @@ fun EVChargingApp(userPreferencesRepository: UserPreferencesRepository) {
                             RetrofitClient.clearAuthToken()
                             navController.navigate("login") {
                                 popUpTo("splash") { inclusive = true }
+                            }
+                        },
+                        onShowOnboarding = {
+                            navController.navigate("onboarding") {
+                                popUpTo("splash") { inclusive = true }
+                            }
+                        }
+                )
+            }
+
+            composable("onboarding") {
+                OnboardingScreen(
+                        onFinished = {
+                            coroutineScope.launch {
+                                userPreferencesRepository.setOnboardingCompleted()
+                            }
+                            navController.navigate("login") {
+                                popUpTo("onboarding") { inclusive = true }
                             }
                         }
                 )

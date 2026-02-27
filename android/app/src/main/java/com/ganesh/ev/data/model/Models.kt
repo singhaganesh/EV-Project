@@ -42,10 +42,9 @@ enum class SlotType {
 
 enum class ConnectorType {
         CCS2,
-        CHADEMO,
+        TYPE_2,
         GB_T,
-        TESLA,
-        TYPE_2
+        MCS
 }
 
 enum class SlotStatus {
