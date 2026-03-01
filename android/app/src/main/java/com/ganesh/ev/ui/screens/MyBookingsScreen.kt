@@ -13,10 +13,12 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ganesh.ev.data.model.Booking
 import com.ganesh.ev.data.model.BookingStatus
-import com.ganesh.ev.data.model.ChargerSlot
 import com.ganesh.ev.ui.theme.*
 import com.ganesh.ev.ui.viewmodel.BookingUiState
 import com.ganesh.ev.ui.viewmodel.BookingViewModel
+import java.text.SimpleDateFormat
+import java.util.Locale
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -51,7 +53,10 @@ fun MyBookingsScreen(
                                     imageVector = Icons.Default.DateRange,
                                     contentDescription = null,
                                     modifier = Modifier.size(64.dp),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                    tint =
+                                            MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                                                    alpha = 0.5f
+                                            )
                             )
                             Spacer(modifier = Modifier.height(12.dp))
                             Text(
@@ -99,15 +104,16 @@ fun MyBookingsScreen(
 
 @Composable
 fun ClayBookingCard(booking: Booking, onClick: () -> Unit) {
-    val statusColor = when (booking.status) {
-        BookingStatus.CONFIRMED -> MaterialTheme.colorScheme.primary
-        BookingStatus.ONGOING -> ClayInfo
-        BookingStatus.COMPLETED -> ClaySuccess
-        BookingStatus.CANCELLED -> MaterialTheme.colorScheme.error
-        BookingStatus.PENDING -> MaterialTheme.colorScheme.secondary
-        BookingStatus.EXPIRED -> MaterialTheme.colorScheme.error
-        else -> MaterialTheme.colorScheme.onSurfaceVariant
-    }
+    val statusColor =
+            when (booking.status) {
+                BookingStatus.CONFIRMED -> MaterialTheme.colorScheme.primary
+                BookingStatus.ONGOING -> ClayInfo
+                BookingStatus.COMPLETED -> ClaySuccess
+                BookingStatus.CANCELLED -> MaterialTheme.colorScheme.error
+                BookingStatus.PENDING -> MaterialTheme.colorScheme.secondary
+                BookingStatus.EXPIRED -> MaterialTheme.colorScheme.error
+                else -> MaterialTheme.colorScheme.onSurfaceVariant
+            }
 
     val stationName = booking.slot?.station?.name
     val slotNumber = booking.slot?.slotNumber
@@ -136,7 +142,44 @@ fun ClayBookingCard(booking: Booking, onClick: () -> Unit) {
             )
         }
 
-        Spacer(modifier = Modifier.height(4.dp))
+        if (booking.status == BookingStatus.CONFIRMED && booking.expiresAt != null) {
+            var timeRemainingMs by remember { mutableStateOf(0L) }
+            LaunchedEffect(booking.status, booking.expiresAt) {
+                try {
+                    val format = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault())
+                    // Sometimes format can be missing seconds so fallback to HH:mm
+                    val parsedDate =
+                            try {
+                                format.parse(booking.expiresAt)
+                            } catch (e: Exception) {
+                                SimpleDateFormat("yyyy-MM-dd'T'HH:mm", Locale.getDefault())
+                                        .parse(booking.expiresAt)
+                            }
+                    if (parsedDate != null) {
+                        val expiresAtMillis = parsedDate.time
+                        while (true) {
+                            val remaining = expiresAtMillis - System.currentTimeMillis()
+                            timeRemainingMs = if (remaining > 0) remaining else 0
+                            if (remaining <= 0) break
+                            delay(1000)
+                        }
+                    }
+                } catch (e: Exception) {}
+            }
+
+            if (timeRemainingMs > 0) {
+                Spacer(modifier = Modifier.height(8.dp))
+                val min = timeRemainingMs / 60000
+                val sec = (timeRemainingMs % 60000) / 1000
+                Text(
+                        text = "Expires in ${min}m ${sec}s",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.error
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
 
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(

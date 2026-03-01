@@ -20,20 +20,28 @@ sealed class BookingUiState {
 }
 
 class BookingViewModel : ViewModel() {
-    
+
     private val _uiState = MutableStateFlow<BookingUiState>(BookingUiState.Initial)
     val uiState: StateFlow<BookingUiState> = _uiState.asStateFlow()
-    
-    fun createBooking(userId: Long, slotId: Long, startTime: String, endTime: String) {
+
+    fun createBooking(
+            userId: Long,
+            slotId: Long,
+            startTime: String,
+            endTime: String,
+            vehicleType: String
+    ) {
         viewModelScope.launch {
             _uiState.value = BookingUiState.Loading
             try {
-                val request = BookingRequest(
-                    userId = userId,
-                    slotId = slotId,
-                    startTime = startTime,
-                    endTime = endTime
-                )
+                val request =
+                        BookingRequest(
+                                userId = userId,
+                                slotId = slotId,
+                                startTime = startTime,
+                                endTime = endTime,
+                                vehicleType = vehicleType
+                        )
                 val response = RetrofitClient.apiService.createBooking(request)
                 if (response.isSuccessful) {
                     val booking = response.body()?.data
@@ -43,14 +51,15 @@ class BookingViewModel : ViewModel() {
                         _uiState.value = BookingUiState.Error("Failed to create booking")
                     }
                 } else {
-                    _uiState.value = BookingUiState.Error("Failed to create booking: ${response.message()}")
+                    _uiState.value =
+                            BookingUiState.Error("Failed to create booking: ${response.message()}")
                 }
             } catch (e: Exception) {
                 _uiState.value = BookingUiState.Error("Network error: ${e.message}")
             }
         }
     }
-    
+
     fun loadUserBookings(userId: Long) {
         viewModelScope.launch {
             _uiState.value = BookingUiState.Loading
@@ -67,14 +76,15 @@ class BookingViewModel : ViewModel() {
             }
         }
     }
-    
+
     fun cancelBooking(bookingId: Long) {
         viewModelScope.launch {
             _uiState.value = BookingUiState.Loading
             try {
                 val response = RetrofitClient.apiService.cancelBooking(bookingId)
                 if (response.isSuccessful) {
-                    _uiState.value = BookingUiState.BookingCancelled("Booking cancelled successfully")
+                    _uiState.value =
+                            BookingUiState.BookingCancelled("Booking cancelled successfully")
                 } else {
                     _uiState.value = BookingUiState.Error("Failed to cancel booking")
                 }
@@ -83,7 +93,7 @@ class BookingViewModel : ViewModel() {
             }
         }
     }
-    
+
     fun resetState() {
         _uiState.value = BookingUiState.Initial
     }

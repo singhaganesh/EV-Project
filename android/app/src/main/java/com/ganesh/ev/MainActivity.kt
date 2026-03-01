@@ -62,9 +62,17 @@ sealed class Screen(val route: String) {
         fun createRoute(slotId: Long) = "booking/slot/$slotId"
     }
     object BookingConfirmation :
-            Screen("booking/confirm/user/{userId}/slot/{slotId}/start/{startTime}/end/{endTime}") {
-        fun createRoute(userId: Long, slotId: Long, startTime: String, endTime: String) =
-                "booking/confirm/user/$userId/slot/$slotId/start/${startTime.replace(":", "%3A")}/end/${endTime.replace(":", "%3A")}"
+            Screen(
+                    "booking/confirm/user/{userId}/slot/{slotId}/start/{startTime}/end/{endTime}/vehicle/{vehicleType}"
+            ) {
+        fun createRoute(
+                userId: Long,
+                slotId: Long,
+                startTime: String,
+                endTime: String,
+                vehicleType: String
+        ) =
+                "booking/confirm/user/$userId/slot/$slotId/start/${startTime.replace(":", "%3A")}/end/${endTime.replace(":", "%3A")}/vehicle/$vehicleType"
     }
     object MyBookings : Screen("bookings/{userId}") {
         fun createRoute(userId: Long) = "bookings/$userId"
@@ -265,14 +273,15 @@ fun EVChargingApp(userPreferencesRepository: UserPreferencesRepository) {
                 SlotBookingScreen(
                         slotId = slotId,
                         onBackClick = { navController.popBackStack() },
-                        onConfirmBooking = { sId, startTime, endTime ->
+                        onConfirmBooking = { sId, startTime, endTime, vehicleType ->
                             currentUserId?.let { userId ->
                                 navController.navigate(
                                         Screen.BookingConfirmation.createRoute(
                                                 userId,
                                                 sId,
                                                 startTime,
-                                                endTime
+                                                endTime,
+                                                vehicleType
                                         )
                                 )
                             }
@@ -287,7 +296,8 @@ fun EVChargingApp(userPreferencesRepository: UserPreferencesRepository) {
                                     navArgument("userId") { type = NavType.LongType },
                                     navArgument("slotId") { type = NavType.LongType },
                                     navArgument("startTime") { type = NavType.StringType },
-                                    navArgument("endTime") { type = NavType.StringType }
+                                    navArgument("endTime") { type = NavType.StringType },
+                                    navArgument("vehicleType") { type = NavType.StringType }
                             )
             ) { backStackEntry ->
                 val userId = backStackEntry.arguments?.getLong("userId") ?: return@composable
@@ -298,12 +308,14 @@ fun EVChargingApp(userPreferencesRepository: UserPreferencesRepository) {
                 val endTime =
                         backStackEntry.arguments?.getString("endTime")?.replace("%3A", ":")
                                 ?: return@composable
+                val vehicleType = backStackEntry.arguments?.getString("vehicleType") ?: "CAR"
 
                 BookingConfirmationScreen(
                         userId = userId,
                         slotId = slotId,
                         startTime = startTime,
                         endTime = endTime,
+                        vehicleType = vehicleType,
                         onViewBookings = {
                             currentUserId?.let { uid ->
                                 navController.navigate("bookings/$uid") { popUpTo("home") }

@@ -19,10 +19,15 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import com.ganesh.EV_Project.enums.VehicleType;
+import org.springframework.beans.factory.annotation.Value;
 
 @Service
 @RequiredArgsConstructor
 public class BookingService {
+
+    @Value("${app.booking.expiration-minutes:15}")
+    private int expirationMinutes;
 
     @Autowired
     private BookingRepository bookingRepository;
@@ -67,11 +72,24 @@ public class BookingService {
             throw new APIException("Slot is already booked for the selected time range");
         }
 
+        // Verify if it's a truck booking and if the dispensary supports trucks
+        if (request.getVehicleType() == VehicleType.TRUCK) {
+            if (slot.getDispensary() != null && !Boolean.TRUE.equals(slot.getDispensary().getAcceptsTrucks())) {
+                throw new APIException("This slot's dispensary does not support trucks");
+            }
+        }
+
         // Calculate price estimate using station's actual price per kWh
         double hours = java.time.Duration.between(request.getStartTime(), request.getEndTime()).toMinutes() / 60.0;
         double pricePerKwh = slot.getStation() != null && slot.getStation().getPricePerKwh() != null
                 ? slot.getStation().getPricePerKwh()
                 : 15.0;
+
+        if (request.getVehicleType() == VehicleType.TRUCK && slot.getStation() != null
+                && slot.getStation().getTruckPricePerKwh() != null) {
+            pricePerKwh = slot.getStation().getTruckPricePerKwh();
+        }
+
         double priceEstimate = hours * slot.getPowerKw() * pricePerKwh;
 
         // Create booking
@@ -82,6 +100,8 @@ public class BookingService {
                 .endTime(request.getEndTime())
                 .status(BookingStatus.CONFIRMED)
                 .priceEstimate(priceEstimate)
+                .vehicleType(request.getVehicleType())
+                .expiresAt(request.getStartTime().plusMinutes(expirationMinutes))
                 .build();
 
         // Update slot status
@@ -126,7 +146,10 @@ public class BookingService {
         for (Booking booking : confirmedBookings) {
             boolean hasSession = chargingSessionRepository.existsByBookingId(booking.getId());
 
-            if (LocalDateTime.now().isAfter(booking.getStartTime().plusMinutes(15)) && !hasSession) {
+            LocalDateTime expiration = booking.getExpiresAt() != null ? booking.getExpiresAt()
+                    : booking.getStartTime().plusMinutes(expirationMinutes);
+
+            if (LocalDateTime.now().isAfter(expiration) && !hasSession) {
                 booking.setStatus(BookingStatus.EXPIRED);
                 booking.getSlot().setStatus(SlotStatus.AVAILABLE);
                 bookingRepository.save(booking);

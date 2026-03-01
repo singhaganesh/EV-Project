@@ -11,8 +11,10 @@ import java.util.List;
 @Repository
 public interface ChargerSlotRepository extends JpaRepository<ChargerSlot, Long> {
     List<ChargerSlot> findByStation(Station station);
+
     List<ChargerSlot> findByStatus(String status);
+
     List<ChargerSlot> findByStationAndStatus(Station station, SlotStatus status);
+
+    void deleteByStation(Station station);
 }
-
-

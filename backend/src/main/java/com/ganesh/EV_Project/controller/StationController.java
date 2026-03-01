@@ -24,6 +24,12 @@ public class StationController {
         return new ResponseEntity<>(allStations, HttpStatus.OK);
     }
 
+    @GetMapping("/owner/{ownerId}")
+    public ResponseEntity<List<Station>> getStationsByOwnerId(@PathVariable Long ownerId) {
+        List<Station> ownerStations = stationService.getStationsByOwnerId(ownerId);
+        return new ResponseEntity<>(ownerStations, HttpStatus.OK);
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<com.ganesh.EV_Project.payload.APIResponse> getStationById(@PathVariable Long id) {
         Station station = stationService.getStationById(id);

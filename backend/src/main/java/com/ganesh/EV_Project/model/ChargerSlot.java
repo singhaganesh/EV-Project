@@ -28,6 +28,10 @@ public class ChargerSlot {
     @JoinColumn(name = "station_id", nullable = false)
     private Station station;
 
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "dispensary_id")
+    private Dispensary dispensary;
+
     @Column(nullable = false)
     @com.fasterxml.jackson.annotation.JsonProperty("slotNumber")
     private String slotLabel; // e.g., "1", "2"

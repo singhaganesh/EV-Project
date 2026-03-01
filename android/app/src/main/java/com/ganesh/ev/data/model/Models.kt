@@ -22,7 +22,15 @@ data class Station(
         val meta: String?,
         val operatingHours: String? = null,
         val pricePerKwh: Double? = null,
+        val truckPricePerKwh: Double? = null,
         val isOpen: Boolean? = null
+)
+
+data class Dispensary(
+        val id: Long,
+        val name: String,
+        val totalPowerKw: Double,
+        val acceptsTrucks: Boolean
 )
 
 data class ChargerSlot(
@@ -32,7 +40,8 @@ data class ChargerSlot(
         @SerializedName("connectorType") val connectorType: ConnectorType,
         @SerializedName("powerRating") val powerRating: Double,
         val status: SlotStatus,
-        val station: Station?
+        val station: Station?,
+        val dispensary: Dispensary?
 )
 
 enum class SlotType {
@@ -64,6 +73,8 @@ data class Booking(
         @SerializedName("endTime") val endTime: String,
         val status: BookingStatus,
         @SerializedName("priceEstimate") val priceEstimate: Double,
+        @SerializedName("vehicleType") val vehicleType: String?,
+        @SerializedName("expiresAt") val expiresAt: String?,
         @SerializedName("createdAt") val createdAt: String?
 )
 
@@ -122,7 +133,8 @@ data class BookingRequest(
         @SerializedName("userId") val userId: Long,
         @SerializedName("slotId") val slotId: Long,
         @SerializedName("startTime") val startTime: String,
-        @SerializedName("endTime") val endTime: String
+        @SerializedName("endTime") val endTime: String,
+        @SerializedName("vehicleType") val vehicleType: String
 )
 
 data class StartChargingRequest(@SerializedName("bookingId") val bookingId: Long)

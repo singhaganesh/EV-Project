@@ -23,7 +23,7 @@ import java.util.*
 fun SlotBookingScreen(
         slotId: Long,
         onBackClick: () -> Unit,
-        onConfirmBooking: (Long, String, String) -> Unit,
+        onConfirmBooking: (Long, String, String, String) -> Unit,
         viewModel: SlotBookingViewModel = viewModel()
 ) {
         val uiState by viewModel.uiState.collectAsState()
@@ -84,10 +84,14 @@ fun SlotBookingScreen(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SlotBookingContent(slot: ChargerSlot, onConfirmBooking: (Long, String, String) -> Unit) {
+fun SlotBookingContent(
+        slot: ChargerSlot,
+        onConfirmBooking: (Long, String, String, String) -> Unit
+) {
         var selectedDate by remember { mutableStateOf(Date()) }
         var selectedHour by remember { mutableStateOf(9) }
         var selectedDuration by remember { mutableStateOf(1) }
+        var selectedVehicle by remember { mutableStateOf("CAR") }
 
         val datePickerState =
                 rememberDatePickerState(initialSelectedDateMillis = System.currentTimeMillis())
@@ -109,9 +113,15 @@ fun SlotBookingContent(slot: ChargerSlot, onConfirmBooking: (Long, String, Strin
         val endTime = timeFormat.format(calendar.time)
 
         val totalHours = selectedDuration
-        val pricePerKwh = slot.station?.pricePerKwh ?: 15.0
+        val pricePerKwh =
+                if (selectedVehicle == "TRUCK" && slot.station?.truckPricePerKwh != null)
+                        slot.station.truckPricePerKwh
+                else slot.station?.pricePerKwh ?: 15.0
         val pricePerHour = slot.powerRating * pricePerKwh
         val estimatedPrice = totalHours * pricePerHour
+
+        val isTruckAvailable = slot.dispensary?.acceptsTrucks ?: true
+        val canBook = selectedVehicle == "CAR" || isTruckAvailable
 
         Column(
                 modifier =
@@ -243,6 +253,62 @@ fun SlotBookingContent(slot: ChargerSlot, onConfirmBooking: (Long, String, Strin
                         )
                 }
 
+                // Vehicle Type Selection
+                ClayCard {
+                        Text(
+                                text = "Select Vehicle Type",
+                                style = MaterialTheme.typography.titleMedium
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                                ClayOutlinedButton(
+                                        onClick = { selectedVehicle = "CAR" },
+                                        modifier = Modifier.weight(1f),
+                                        containerColor =
+                                                if (selectedVehicle == "CAR")
+                                                        MaterialTheme.colorScheme.primaryContainer
+                                                else MaterialTheme.colorScheme.surface
+                                ) {
+                                        Text(
+                                                "Car",
+                                                color =
+                                                        if (selectedVehicle == "CAR")
+                                                                MaterialTheme.colorScheme
+                                                                        .onPrimaryContainer
+                                                        else MaterialTheme.colorScheme.onSurface
+                                        )
+                                }
+                                ClayOutlinedButton(
+                                        onClick = { selectedVehicle = "TRUCK" },
+                                        modifier = Modifier.weight(1f),
+                                        containerColor =
+                                                if (selectedVehicle == "TRUCK")
+                                                        MaterialTheme.colorScheme.primaryContainer
+                                                else MaterialTheme.colorScheme.surface
+                                ) {
+                                        Text(
+                                                "Truck",
+                                                color =
+                                                        if (selectedVehicle == "TRUCK")
+                                                                MaterialTheme.colorScheme
+                                                                        .onPrimaryContainer
+                                                        else MaterialTheme.colorScheme.onSurface
+                                        )
+                                }
+                        }
+                        if (selectedVehicle == "TRUCK" && !isTruckAvailable) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                        text = "This dispensary does not accept trucks.",
+                                        color = MaterialTheme.colorScheme.error,
+                                        style = MaterialTheme.typography.bodySmall
+                                )
+                        }
+                }
+
                 // Booking summary
                 ClayCard(containerColor = MaterialTheme.colorScheme.primaryContainer) {
                         Text(text = "Booking Summary", style = MaterialTheme.typography.titleMedium)
@@ -326,9 +392,15 @@ fun SlotBookingContent(slot: ChargerSlot, onConfirmBooking: (Long, String, Strin
                                                         }
                                                 )
 
-                                onConfirmBooking(slot.id, bookingStartTime, bookingEndTime)
+                                onConfirmBooking(
+                                        slot.id,
+                                        bookingStartTime,
+                                        bookingEndTime,
+                                        selectedVehicle
+                                )
                         },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = canBook
                 ) { Text("Confirm Booking") }
         }
 

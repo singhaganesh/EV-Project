@@ -38,12 +38,24 @@ public class Booking {
 
     @Column(nullable = false)
     @Enumerated(EnumType.STRING)
-    private BookingStatus status;         // e.g., "PENDING", "CONFIRMED", "CANCELLED"
+    private BookingStatus status; // e.g., "PENDING", "CONFIRMED", "CANCELLED"
 
     @Column
-    private Double priceEstimate;  // estimated cost at time of booking
+    private Double priceEstimate; // estimated cost at time of booking
+
+    @Column
+    @Enumerated(EnumType.STRING)
+    private com.ganesh.EV_Project.enums.VehicleType vehicleType;
+
+    @Column
+    private LocalDateTime actualStartTime;
+
+    @Column
+    private LocalDateTime actualEndTime;
+
+    @Column
+    private LocalDateTime expiresAt;
 
     @CreationTimestamp
     private LocalDateTime createdAt;
 }
-

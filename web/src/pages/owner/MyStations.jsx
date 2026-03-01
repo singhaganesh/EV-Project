@@ -1,41 +1,55 @@
-import React from 'react';
-import { Search, Filter, Map, Zap, Activity, MoreHorizontal, ArrowRight, Plus, MapPin, AlertTriangle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Search, Filter, Map, Zap, Activity, MoreHorizontal, ArrowRight, Plus, MapPin, AlertTriangle, Trash2 } from 'lucide-react';
 import StatusBadge from '../../components/common/StatusBadge';
-
-const stationsData = [
-    {
-        id: '#ST-001',
-        name: 'Downtown Metro Hub',
-        location: '123 Main St, Metro City',
-        status: 'ONLINE',
-        chargers: { total: 8, available: 0 },
-        power: '150 kW DC',
-        image: 'https://images.unsplash.com/photo-1620986144865-c9676771d1e4?q=80&w=250&auto=format&fit=crop',
-        usersCount: 3
-    },
-    {
-        id: '#ST-042',
-        name: 'Westside Mall Plaza',
-        location: '456 West Ave, Metro City',
-        status: 'MAINTENANCE',
-        chargers: { total: 4, offline: 4 },
-        power: '50 kW AC',
-        image: 'https://images.unsplash.com/photo-1662973166687-fa741c039fb6?q=80&w=250&auto=format&fit=crop',
-        alert: 'Technician Scheduled'
-    },
-    {
-        id: '#ST-289',
-        name: 'Northside Supercharger',
-        location: '88 North Loop, Metro City',
-        status: 'ONLINE',
-        chargers: { total: 12, available: 5 },
-        power: '350 kW DC',
-        image: 'https://images.unsplash.com/photo-1593941707882-a5bba14938c7?q=80&w=250&auto=format&fit=crop',
-        usersCount: 1
-    }
-];
+import api from '../../api/axios';
+import AddStationModal from '../../components/owner/AddStationModal';
 
 export default function MyStations() {
+    const [stations, setStations] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+
+    const fetchStations = async () => {
+        try {
+            setLoading(true);
+            const userStr = localStorage.getItem('user');
+            if (!userStr) {
+                setStations([]);
+                setLoading(false);
+                return;
+            }
+            const user = JSON.parse(userStr);
+
+            const response = await api.get(`/stations/owner/${user.id}`);
+            const data = response.data;
+            // Handle if the response structure is { data: [...] } or just an array
+            const arr = Array.isArray(data) ? data : (data.data || []);
+            setStations(arr);
+        } catch (error) {
+            console.error('Error fetching stations:', error);
+            setStations([]);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchStations();
+    }, []);
+
+    const handleDeleteStation = async (stationId, stationName) => {
+        if (window.confirm(`Are you sure you want to completely delete "${stationName}"?\n\nThis will permanently erase all associated chargers and booking histories. This action cannot be undone.`)) {
+            try {
+                await api.delete(`/stations/${stationId}`);
+                toast.success('Station deleted successfully.');
+                fetchStations();
+            } catch (error) {
+                console.error('Error deleting station:', error);
+                toast.error('Failed to delete station. Please try again.');
+            }
+        }
+    };
+
     return (
         <div className="space-y-8 max-w-[1400px] mx-auto pb-12">
 
@@ -61,7 +75,7 @@ export default function MyStations() {
                         <Map className="w-4 h-4" />
                         Map View
                     </button>
-                    <button className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 bg-[#00E5FF] hover:bg-[#00B4DB] text-[#1A2234] font-bold rounded-full shadow-lg shadow-[#00E5FF]/20 transition-all sm:ml-2">
+                    <button onClick={() => setIsAddModalOpen(true)} className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 bg-[#00E5FF] hover:bg-[#00B4DB] text-[#1A2234] font-bold rounded-full shadow-lg shadow-[#00E5FF]/20 transition-all sm:ml-2">
                         <Plus className="w-5 h-5" />
                         Add New Station
                     </button>
@@ -103,8 +117,8 @@ export default function MyStations() {
 
             {/* Station Cards Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {stationsData.map((station) => {
-                    const isOnline = station.status === 'ONLINE';
+                {loading ? <div className="col-span-2 text-center py-10">Loading stations...</div> : stations.map((station) => {
+                    const isOnline = station.isOpen !== false;
 
                     return (
                         <div key={station.id} className="bg-white rounded-[24px] p-6 shadow-[0_4px_20px_rgba(0,0,0,0.03)] border border-slate-100/50 relative overflow-hidden group hover:shadow-[0_8px_30px_rgba(0,0,0,0.06)] transition-all">
@@ -127,61 +141,50 @@ export default function MyStations() {
 
                             {/* Main Info */}
                             <div className="flex items-center gap-5 mb-8">
-                                <div className="w-20 h-20 rounded-2xl overflow-hidden shrink-0 shadow-sm">
-                                    <img src={station.image} alt={station.name} className="w-full h-full object-cover" />
+                                <div className="w-20 h-20 rounded-2xl overflow-hidden shrink-0 shadow-sm bg-slate-100 flex items-center justify-center text-slate-400">
+                                    <MapPin className="w-8 h-8" />
                                 </div>
                                 <div>
                                     <h3 className="text-lg font-bold text-[#1A2234] leading-tight mb-1">{station.name}</h3>
                                     <div className="flex items-center gap-1.5 text-slate-500 text-sm mb-1.5">
                                         <MapPin className="w-3.5 h-3.5" />
-                                        {station.location}
+                                        {station.address}
                                     </div>
-                                    <span className="text-xs font-mono font-medium text-slate-400 bg-slate-50 px-2 py-0.5 rounded">ID: {station.id}</span>
+                                    <span className="text-xs font-mono font-medium text-slate-400 bg-slate-50 px-2 py-0.5 rounded">ID: #{station.id}</span>
                                 </div>
                             </div>
 
                             {/* Inner Stats Pills */}
                             <div className="flex gap-4 mb-6">
                                 <div className="flex-1 bg-slate-50 rounded-2xl p-4 border border-slate-100/50">
-                                    <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Chargers</p>
+                                    <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Dispensaries</p>
                                     <div className="flex items-baseline gap-1">
-                                        <span className="text-xl font-bold text-[#1A2234]">{station.chargers.total}</span>
-                                        <span className="text-xs font-medium text-slate-500">
-                                            {isOnline ? `/ ${station.chargers.available} Avail` : `/ ${station.chargers.offline} Offline`}
-                                        </span>
+                                        <span className="text-xl font-bold text-[#1A2234]">{station.dispensaries?.length || 0}</span>
                                     </div>
                                 </div>
                                 <div className="flex-1 bg-slate-50 rounded-2xl p-4 border border-slate-100/50">
-                                    <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Power Output</p>
+                                    <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Pricing (Car / Truck)</p>
                                     <div className="flex items-baseline gap-1">
-                                        <span className="text-xl font-bold text-[#1A2234]">{station.power.split(' ')[0]}</span>
-                                        <span className="text-xs font-medium text-slate-500">{station.power.split(' ').slice(1).join(' ')}</span>
+                                        <span className="text-sm font-bold text-[#1A2234]">₹{station.pricePerKwh} / ₹{station.truckPricePerKwh}</span>
                                     </div>
                                 </div>
                             </div>
 
                             {/* Footer Actions */}
                             <div className="flex items-center justify-between pt-2">
-                                {isOnline ? (
-                                    <div className="flex items-center">
-                                        {/* Fake Avatar Stack */}
-                                        <div className="flex -space-x-2">
-                                            <div className="w-7 h-7 rounded-full bg-slate-200 border-2 border-white overflow-hidden"><img src="https://i.pravatar.cc/100?img=1" alt="" /></div>
-                                            <div className="w-7 h-7 rounded-full bg-slate-200 border-2 border-white overflow-hidden"><img src="https://i.pravatar.cc/100?img=2" alt="" /></div>
-                                        </div>
-                                        <span className="text-xs font-medium text-slate-500 ml-2">+{station.usersCount}</span>
-                                    </div>
-                                ) : (
-                                    <div className="flex items-center gap-1.5 text-xs font-medium text-amber-600 bg-amber-50 px-3 py-1.5 rounded-lg">
-                                        <AlertTriangle className="w-3.5 h-3.5" />
-                                        {station.alert}
-                                    </div>
-                                )}
+                                <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500 bg-slate-50 px-3 py-1.5 rounded-lg">
+                                    {station.isOpen ? 'Open Now' : 'Closed'}
+                                </div>
 
-                                <button className="flex items-center gap-1.5 text-sm font-bold text-[#00B4DB] hover:text-[#00E5FF] transition-colors group-hover:translate-x-1 duration-300">
-                                    Manage
-                                    <ArrowRight className="w-4 h-4" />
-                                </button>
+                                <div className="flex items-center gap-4">
+                                    <button onClick={() => handleDeleteStation(station.id, station.name)} className="text-red-400 hover:text-red-600 transition-colors p-1.5 hover:bg-red-50 rounded-lg" title="Delete Station">
+                                        <Trash2 className="w-4 h-4" />
+                                    </button>
+                                    <button className="flex items-center gap-1.5 text-sm font-bold text-[#00B4DB] hover:text-[#00E5FF] transition-colors group-hover:translate-x-1 duration-300">
+                                        Manage
+                                        <ArrowRight className="w-4 h-4" />
+                                    </button>
+                                </div>
                             </div>
 
                         </div>
@@ -189,7 +192,7 @@ export default function MyStations() {
                 })}
 
                 {/* Add New Station Card */}
-                <button className="bg-slate-50/50 rounded-[24px] p-6 border-2 border-dashed border-slate-200 flex flex-col items-center justify-center min-h-[320px] hover:border-cyan-300 hover:bg-cyan-50/20 transition-all group">
+                <button onClick={() => setIsAddModalOpen(true)} className="bg-slate-50/50 rounded-[24px] p-6 border-2 border-dashed border-slate-200 flex flex-col items-center justify-center min-h-[320px] hover:border-cyan-300 hover:bg-cyan-50/20 transition-all group">
                     <div className="w-16 h-16 rounded-full bg-white shadow-sm flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
                         <Plus className="w-6 h-6 text-slate-400 group-hover:text-cyan-500 transition-colors" />
                     </div>
@@ -197,6 +200,12 @@ export default function MyStations() {
                 </button>
 
             </div>
+
+            <AddStationModal
+                isOpen={isAddModalOpen}
+                onClose={() => setIsAddModalOpen(false)}
+                onSuccess={fetchStations}
+            />
 
         </div>
     );

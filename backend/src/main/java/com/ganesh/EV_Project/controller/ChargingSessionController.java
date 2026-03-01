@@ -58,6 +58,7 @@ public class ChargingSessionController {
 
             // Update booking status
             booking.setStatus(BookingStatus.ONGOING);
+            booking.setActualStartTime(LocalDateTime.now());
             bookingRepository.save(booking);
 
             // Update slot status
@@ -111,7 +112,20 @@ public class ChargingSessionController {
             double hours = java.time.Duration.between(session.getStartTime(), endTime).toMinutes() / 60.0;
             double powerRating = session.getBooking().getSlot().getPowerKw();
             double energyConsumed = hours * powerRating; // kWh
-            double cost = energyConsumed * 15.0; // Rs. 15 per kWh
+
+            Booking booking = session.getBooking();
+            double pricePerKwh = booking.getSlot().getStation() != null
+                    && booking.getSlot().getStation().getPricePerKwh() != null
+                            ? booking.getSlot().getStation().getPricePerKwh()
+                            : 15.0;
+
+            if (booking.getVehicleType() == com.ganesh.EV_Project.enums.VehicleType.TRUCK
+                    && booking.getSlot().getStation() != null
+                    && booking.getSlot().getStation().getTruckPricePerKwh() != null) {
+                pricePerKwh = booking.getSlot().getStation().getTruckPricePerKwh();
+            }
+
+            double cost = energyConsumed * pricePerKwh;
 
             session.setEndTime(endTime);
             session.setEnergyKwh(energyConsumed);
@@ -120,8 +134,8 @@ public class ChargingSessionController {
             ChargingSession savedSession = chargingSessionRepository.save(session);
 
             // Update booking status
-            Booking booking = session.getBooking();
             booking.setStatus(BookingStatus.COMPLETED);
+            booking.setActualEndTime(endTime);
             bookingRepository.save(booking);
 
             // Update slot status

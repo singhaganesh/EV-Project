@@ -13,7 +13,7 @@ object RetrofitClient {
     // For Emulator: Use "http://10.0.2.2:8080/" (special IP = laptop's localhost)
     // For Physical Device: Use your laptop's IPv4 address (e.g., "http://192.168.0.248:8080/")
     // AWS Live Backend:
-    private const val BASE_URL = "http://192.168.0.248:8080/"
+    private const val BASE_URL = "http://10.136.227.45:8080/"
 
     private var authToken: String = ""
 

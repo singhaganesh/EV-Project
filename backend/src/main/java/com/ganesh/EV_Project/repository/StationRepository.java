@@ -10,6 +10,8 @@ import java.util.List;
 public interface StationRepository extends JpaRepository<Station, Long> {
         boolean existsByName(String name);
 
+        List<Station> findByOwnerId(Long ownerId);
+
         // Bounding box query — returns only stations visible in the current map
         // viewport
         @Query("SELECT s FROM Station s WHERE s.latitude BETWEEN :swLat AND :neLat AND s.longitude BETWEEN :swLng AND :neLng")
