@@ -287,6 +287,7 @@ fun StationContent(
         paddingValues: PaddingValues
 ) {
         var selectedStation by remember { mutableStateOf<StationWithScore?>(null) }
+        var selectedOtherPinId by remember { mutableStateOf<Long?>(null) }
         val context = LocalContext.current
 
         // Pre-generate custom marker bitmaps (memoized for performance)
@@ -314,16 +315,13 @@ fun StationContent(
 
         // Auto-select first (highest ranked) when stations arrive
         LaunchedEffect(nearbyStations) {
-                if (nearbyStations.isNotEmpty() && selectedStation == null) {
-                        selectedStation = nearbyStations.first()
-                        cameraPositionState.position =
-                                CameraPosition.fromLatLngZoom(
-                                        LatLng(
-                                                nearbyStations.first().station.latitude,
-                                                nearbyStations.first().station.longitude
-                                        ),
-                                        14f
-                                )
+                selectedOtherPinId = null
+                if (nearbyStations.isNotEmpty()) {
+                        val isSelectedStillNearby =
+                                nearbyStations.any { it.station.id == selectedStation?.station?.id }
+                        if (!isSelectedStillNearby || selectedStation == null) {
+                                selectedStation = nearbyStations.first()
+                        }
                 }
         }
 
@@ -334,6 +332,12 @@ fun StationContent(
                                         modifier = Modifier.fillMaxSize(),
                                         contentAlignment = Alignment.Center
                                 ) { ClayProgressIndicator() }
+                        } else if (nearbyStations.isEmpty()) {
+                                // Show "no stations" message from the previous step
+                                Box(
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentAlignment = Alignment.Center
+                                ) { Text("No charging stations in this area.") }
                         } else {
                                 StationListView(
                                         stations = nearbyStations,
@@ -352,7 +356,10 @@ fun StationContent(
                                 modifier = Modifier.fillMaxSize(),
                                 cameraPositionState = cameraPositionState,
                                 properties =
-                                        MapProperties(isMyLocationEnabled = hasLocationPermission),
+                                        MapProperties(
+                                                isMyLocationEnabled = hasLocationPermission,
+                                                minZoomPreference = 5f
+                                        ),
                                 uiSettings =
                                         MapUiSettings(
                                                 zoomControlsEnabled = false,
@@ -395,11 +402,9 @@ fun StationContent(
                                                 icon = markerIcon,
                                                 zIndex = if (isSelected) 1f else 0f,
                                                 onClick = {
-                                                        onMarkerClick(
-                                                                station.id,
-                                                                station.latitude,
-                                                                station.longitude
-                                                        )
+                                                        // It's already in the nearby list! Just
+                                                        // select it locally. No network fetch.
+                                                        selectedStation = item
                                                         true
                                                 }
                                         )
@@ -407,6 +412,10 @@ fun StationContent(
 
                                 // Other pins — small lightweight markers
                                 otherPins.forEach { pin ->
+                                        val isSelected = selectedOtherPinId == pin.id
+                                        val iconToUse =
+                                                if (isSelected) selectedIcon else otherPinIcon
+
                                         Marker(
                                                 state =
                                                         MarkerState(
@@ -417,8 +426,13 @@ fun StationContent(
                                                                         )
                                                         ),
                                                 title = "Station",
-                                                icon = otherPinIcon,
+                                                icon = iconToUse,
+                                                zIndex = if (isSelected) 1f else 0f,
                                                 onClick = {
+                                                        // Set to null so the map knows we are
+                                                        // waiting for a fresh selection
+                                                        selectedStation = null
+                                                        selectedOtherPinId = pin.id
                                                         onMarkerClick(
                                                                 pin.id,
                                                                 pin.latitude,
@@ -445,17 +459,7 @@ fun StationContent(
                                 StationPagerOverlay(
                                         stations = nearbyStations,
                                         selectedStation = selectedStation,
-                                        onStationSelected = { item ->
-                                                selectedStation = item
-                                                cameraPositionState.position =
-                                                        CameraPosition.fromLatLngZoom(
-                                                                LatLng(
-                                                                        item.station.latitude,
-                                                                        item.station.longitude
-                                                                ),
-                                                                12f
-                                                        )
-                                        },
+                                        onStationSelected = { item -> selectedStation = item },
                                         onStationClick = onStationClick,
                                         modifier =
                                                 Modifier.align(Alignment.BottomCenter)

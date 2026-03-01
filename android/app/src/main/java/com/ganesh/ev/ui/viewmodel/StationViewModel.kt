@@ -221,6 +221,15 @@ class StationViewModel : ViewModel() {
     // When a marker is clicked: call the unified endpoint centered on clicked marker
     // to get 5 nearest from that point (full data) + rest as pins
     fun onMarkerClicked(stationId: Long, markerLat: Double, markerLng: Double) {
+        // Smart Skip: If already in nearbyStations, do nothing.
+        // The UI handles selection locally for these.
+        val currentState = _uiState.value
+        if (currentState is StationUiState.NearbyStationsLoaded) {
+            if (currentState.stations.any { it.station.id == stationId }) {
+                return
+            }
+        }
+
         viewModelScope.launch {
             _isLoadingStations.value = true
             try {
