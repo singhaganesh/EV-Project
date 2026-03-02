@@ -43,8 +43,8 @@ public class DispensaryService {
         }
         Dispensary saved = dispensaryRepository.save(dispensary);
 
-        // Auto-create 2 guns; connectorType denormalized from dispensary for backward compat
-        double powerPerGun = saved.getTotalPowerKw() != null ? saved.getTotalPowerKw() : 30.0;
+        // Auto-create 2 guns; each gun gets half the dispenser's total power
+        double powerPerGun = saved.getTotalPowerKw() != null ? saved.getTotalPowerKw() / 2.0 : 30.0;
         ConnectorType connectorType = saved.getConnectorType();
         for (int i = 1; i <= 2; i++) {
             ChargerSlot slot = ChargerSlot.builder()
@@ -71,10 +71,10 @@ public class DispensaryService {
         existing.setTotalPowerKw(updated.getTotalPowerKw());
         existing.setAcceptsTrucks(updated.getAcceptsTrucks());
 
-        // Also update power on all child guns
+        // Update power on all child guns (each gun gets half the dispenser total)
         List<ChargerSlot> guns = chargerSlotRepository.findByDispensary(existing);
         for (ChargerSlot gun : guns) {
-            gun.setPowerKw(updated.getTotalPowerKw());
+            gun.setPowerKw(updated.getTotalPowerKw() / 2.0);
             chargerSlotRepository.save(gun);
         }
 

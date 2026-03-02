@@ -57,7 +57,7 @@ public class StationService {
 
         if (savedStation.getDispensaries() != null) {
             for (Dispensary d : savedStation.getDispensaries()) {
-                double powerPerGun = d.getTotalPowerKw() != null ? d.getTotalPowerKw() : 30.0;
+                double powerPerGun = d.getTotalPowerKw() != null ? d.getTotalPowerKw() / 2.0 : 30.0;
                 ConnectorType ct = d.getConnectorType() != null ? d.getConnectorType() : ConnectorType.CCS2;
 
                 for (int i = 1; i <= 2; i++) {
