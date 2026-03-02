@@ -8,5 +8,5 @@ import java.util.List;
 
 @Repository
 public interface DispensaryRepository extends JpaRepository<Dispensary, Long> {
-    List<Dispensary> findByStationId(Long stationId);
+    List<Dispensary> findByStationIdOrderByIdAsc(Long stationId);
 }

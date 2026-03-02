@@ -240,6 +240,10 @@ function DispensersTab({ stationId }) {
     const [isAddingDispensary, setIsAddingDispensary] = useState(false);
     const [connectorTypes, setConnectorTypes] = useState([]);
     const [newDispenser, setNewDispenser] = useState({ name: '', totalPowerKw: 60, acceptsTrucks: false, connectorType: 'CCS2' });
+    
+    // Track uncommitted changes for connector types
+    const [pendingConnectorTypes, setPendingConnectorTypes] = useState({});
+    const [updatingConnectorId, setUpdatingConnectorId] = useState(null);
 
     const fetchData = useCallback(async () => {
         try {
@@ -252,6 +256,19 @@ function DispensersTab({ stationId }) {
             const slotArr = Array.isArray(slotRes.data) ? slotRes.data : (slotRes.data.data || []);
             setDispensers(dispArr);
             setSlots(slotArr);
+
+            // Re-sync pending connector types with fresh backend data 
+            // to clear any pending states if they match the backend now
+            setPendingConnectorTypes(prev => {
+                const newPending = {};
+                dispArr.forEach(disp => {
+                    if (prev[disp.id] && prev[disp.id] !== disp.connectorType) {
+                        newPending[disp.id] = prev[disp.id];
+                    }
+                });
+                return newPending;
+            });
+
         } catch (err) {
             console.error('Error fetching dispensers:', err);
         } finally {
@@ -279,7 +296,7 @@ function DispensersTab({ stationId }) {
             setIsAddingDispensary(true);
             await api.post(`/dispensaries/station/${stationId}`, newDispenser);
             toast.success(`Dispenser "${newDispenser.name}" added with 2 guns.`);
-            setNewDispenser({ name: '', totalPowerKw: 60, acceptsTrucks: false });
+            setNewDispenser({ name: '', totalPowerKw: 60, acceptsTrucks: false, connectorType: 'CCS2' });
             setAddingNew(false);
             fetchData();
         } catch (err) {
@@ -312,14 +329,35 @@ function DispensersTab({ stationId }) {
         }
     };
 
-    const handleChangeDispensaryConnectorType = async (dispensaryId, newType) => {
+    const handlePendingConnectorTypeChange = (dispensaryId, newType) => {
+        setPendingConnectorTypes(prev => ({
+            ...prev,
+            [dispensaryId]: newType
+        }));
+    };
+
+    const handleSubmitConnectorTypeChange = async (dispensaryId, originalType) => {
+        const newType = pendingConnectorTypes[dispensaryId];
+        if (!newType || newType === originalType) return;
+
+        setUpdatingConnectorId(dispensaryId);
         try {
             await api.put(`/dispensaries/${dispensaryId}/connectorType?connectorType=${newType}`);
             toast.success(`Connector type updated to ${newType.replace('_', ' ')} for all guns.`);
+            
+            // Clear pending status after successful update
+            setPendingConnectorTypes(prev => {
+                const updated = { ...prev };
+                delete updated[dispensaryId];
+                return updated;
+            });
+            
             fetchData();
         } catch (err) {
             console.error('Error changing connector type:', err);
             toast.error('Failed to update connector type.');
+        } finally {
+            setUpdatingConnectorId(null);
         }
     };
 
@@ -391,22 +429,54 @@ function DispensersTab({ stationId }) {
                             <div className="border-t border-slate-100 bg-slate-50/30 p-6 space-y-5">
                                 {/* Connector Type — reads from dispensary (source of truth) */}
                                 <div>
-                                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Connector Type (all guns)</p>
-                                    <div className="flex flex-wrap gap-2">
-                                        {connectorTypes.map(ct => (
+                                    <div className="flex items-center justify-between mb-3">
+                                        <p className="text-sm font-semibold text-slate-700">Connector Type</p>
+                                        
+                                        {/* Action Button - only shows if there are pending changes */}
+                                        {pendingConnectorTypes[disp.id] && pendingConnectorTypes[disp.id] !== disp.connectorType && (
                                             <button
-                                                key={ct}
-                                                onClick={() => disp.connectorType !== ct && handleChangeDispensaryConnectorType(disp.id, ct)}
-                                                className={`px-4 py-1.5 rounded-full text-xs font-semibold border transition-all ${
-                                                    disp.connectorType === ct
-                                                        ? 'bg-cyan-500 text-white border-cyan-500 shadow-sm shadow-cyan-200'
-                                                        : 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200'
-                                                }`}
+                                                onClick={() => handleSubmitConnectorTypeChange(disp.id, disp.connectorType)}
+                                                disabled={updatingConnectorId === disp.id}
+                                                className={`px-4 py-1.5 text-xs font-bold text-white rounded-lg transition-all shadow-sm flex items-center gap-2
+                                                    ${updatingConnectorId === disp.id 
+                                                        ? 'bg-cyan-400 cursor-not-allowed' 
+                                                        : 'bg-cyan-500 hover:bg-cyan-600 shadow-cyan-500/30 hover:shadow-cyan-500/40 transform hover:-translate-y-0.5'
+                                                    }`}
                                             >
-                                                {ct.replace('_', ' ')}
+                                                {updatingConnectorId === disp.id ? (
+                                                    <>
+                                                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                                        Saving...
+                                                    </>
+                                                ) : (
+                                                    'Update Connector'
+                                                )}
                                             </button>
-                                        ))}
+                                        )}
                                     </div>
+                                    <div className="flex flex-wrap gap-2">
+                                        {connectorTypes.map(ct => {
+                                            const activeType = pendingConnectorTypes[disp.id] || disp.connectorType;
+                                            return (
+                                                <button
+                                                    key={ct}
+                                                    onClick={() => activeType !== ct && handlePendingConnectorTypeChange(disp.id, ct)}
+                                                    className={`px-4 py-1.5 rounded-full text-xs font-semibold border transition-all ${
+                                                        activeType === ct
+                                                            ? 'bg-slate-800 text-white border-slate-800 shadow-sm shadow-slate-200'
+                                                            : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
+                                                    }`}
+                                                >
+                                                    {ct.replace('_', ' ')}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                    {pendingConnectorTypes[disp.id] && pendingConnectorTypes[disp.id] !== disp.connectorType && (
+                                        <p className="text-[11px] text-amber-600 mt-2 flex items-center gap-1 font-medium bg-amber-50 inline-block px-2 py-0.5 rounded-md">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block"></span> Unsaved changes for all guns
+                                        </p>
+                                    )}
                                 </div>
 
                                 {/* Gun List */}

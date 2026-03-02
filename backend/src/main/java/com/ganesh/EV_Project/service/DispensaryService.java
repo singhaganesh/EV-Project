@@ -29,7 +29,7 @@ public class DispensaryService {
     private ChargerSlotRepository chargerSlotRepository;
 
     public List<Dispensary> getByStation(Long stationId) {
-        return dispensaryRepository.findByStationId(stationId);
+        return dispensaryRepository.findByStationIdOrderByIdAsc(stationId);
     }
 
     @Transactional
