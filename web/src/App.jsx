@@ -9,6 +9,7 @@ import RoleRoute from './components/auth/RoleRoute';
 import DashboardOverview from './pages/admin/DashboardOverview';
 import PumpOwnerDashboard from './pages/owner/PumpOwnerDashboard';
 import MyStations from './pages/owner/MyStations';
+import ManageStationPage from './pages/owner/ManageStationPage';
 import StationsList from './pages/admin/StationsList';
 import LoginPage from './pages/auth/LoginPage';
 import RegisterPage from './pages/auth/RegisterPage';
@@ -61,6 +62,7 @@ function App() {
                         <Route element={<DashboardLayout navItems={ownerNav} sidebarTitle="Plugsy Partner" />}>
                             <Route path="/owner" element={<PumpOwnerDashboard />} />
                             <Route path="/owner/stations" element={<MyStations />} />
+                            <Route path="/owner/stations/:id" element={<ManageStationPage />} />
                             <Route path="/owner/earnings" element={<div className="p-8 text-slate-700 font-medium">Earnings Report — Coming Soon</div>} />
                             <Route path="/owner/settings" element={<div className="p-8 text-slate-700 font-medium">Owner Settings — Coming Soon</div>} />
                         </Route>

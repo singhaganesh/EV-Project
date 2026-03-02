@@ -1,5 +1,6 @@
 package com.ganesh.EV_Project.model;
 
+import com.ganesh.EV_Project.enums.ConnectorType;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -29,4 +30,10 @@ public class Dispensary {
 
     @Column(nullable = false, columnDefinition = "BOOLEAN DEFAULT false")
     private Boolean acceptsTrucks;
+
+    /** Source of truth for connector type. Stored in dispensaries table. */
+    @Column(nullable = false)
+    @Enumerated(EnumType.STRING)
+    @Builder.Default
+    private ConnectorType connectorType = ConnectorType.CCS2;
 }

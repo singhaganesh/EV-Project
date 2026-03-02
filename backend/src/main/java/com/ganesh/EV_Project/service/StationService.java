@@ -3,13 +3,15 @@ package com.ganesh.EV_Project.service;
 import com.ganesh.EV_Project.exception.APIException;
 import com.ganesh.EV_Project.model.Station;
 import com.ganesh.EV_Project.model.Dispensary;
+import com.ganesh.EV_Project.enums.ConnectorType;
+import com.ganesh.EV_Project.enums.SlotStatus;
+import com.ganesh.EV_Project.enums.SlotType;
 import com.ganesh.EV_Project.repository.StationRepository;
 import com.ganesh.EV_Project.repository.ChargerSlotRepository;
 import com.ganesh.EV_Project.repository.BookingRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Optional;
@@ -44,6 +46,10 @@ public class StationService {
         if (station.getDispensaries() != null) {
             for (Dispensary d : station.getDispensaries()) {
                 d.setStation(station);
+                // Ensure connectorType has a value before persisting 
+                if (d.getConnectorType() == null) {
+                    d.setConnectorType(ConnectorType.CCS2);
+                }
             }
         }
 
@@ -51,16 +57,17 @@ public class StationService {
 
         if (savedStation.getDispensaries() != null) {
             for (Dispensary d : savedStation.getDispensaries()) {
-                double powerPerGun = d.getTotalPowerKw() != null ? d.getTotalPowerKw() / 2.0 : 30.0;
+                double powerPerGun = d.getTotalPowerKw() != null ? d.getTotalPowerKw() : 30.0;
+                ConnectorType ct = d.getConnectorType() != null ? d.getConnectorType() : ConnectorType.CCS2;
 
                 for (int i = 1; i <= 2; i++) {
                     com.ganesh.EV_Project.model.ChargerSlot slot = com.ganesh.EV_Project.model.ChargerSlot.builder()
                             .station(savedStation)
                             .dispensary(d)
                             .slotLabel(d.getName() + " - Gun " + i)
-                            .slotType(com.ganesh.EV_Project.enums.SlotType.DC) // Defaulting to DC
-                            .status(com.ganesh.EV_Project.enums.SlotStatus.AVAILABLE)
-                            .connectorType(com.ganesh.EV_Project.enums.ConnectorType.CCS2) // Defaulting to CCS2
+                            .slotType(SlotType.DC)
+                            .status(SlotStatus.AVAILABLE)
+                            .connectorType(ct)
                             .powerKw(powerPerGun)
                             .build();
                     chargerSlotRepository.save(slot);
@@ -79,6 +86,9 @@ public class StationService {
                     existing.setLongitude(updatedStation.getLongitude());
                     existing.setAddress(updatedStation.getAddress());
                     existing.setMeta(updatedStation.getMeta());
+                    existing.setOperatingHours(updatedStation.getOperatingHours());
+                    existing.setPricePerKwh(updatedStation.getPricePerKwh());
+                    existing.setTruckPricePerKwh(updatedStation.getTruckPricePerKwh());
                     return stationRepository.save(existing);
                 })
                 .orElseThrow(() -> new RuntimeException("Station not found"));

@@ -16,6 +16,7 @@ const AMENITIES_LIST = [
 export default function AddStationModal({ isOpen, onClose, onSuccess }) {
     const [loading, setLoading] = useState(false);
     const [currentStep, setCurrentStep] = useState(1);
+    const [connectorTypes, setConnectorTypes] = useState([]);
     const totalSteps = 4;
 
     const [formData, setFormData] = useState({
@@ -30,7 +31,7 @@ export default function AddStationModal({ isOpen, onClose, onSuccess }) {
         truckPricePerKwh: '',
         amenities: [],
         dispensaries: [
-            { name: 'Dispenser 1', totalPowerKw: 60, acceptsTrucks: true }
+            { name: 'Dispenser 1', totalPowerKw: 60, acceptsTrucks: false, connectorType: 'CCS2' }
         ]
     });
 
@@ -49,9 +50,13 @@ export default function AddStationModal({ isOpen, onClose, onSuccess }) {
                 truckPricePerKwh: '',
                 amenities: [],
                 dispensaries: [
-                    { name: 'Dispenser 1', totalPowerKw: 60, acceptsTrucks: true }
+                    { name: 'Dispenser 1', totalPowerKw: 60, acceptsTrucks: false, connectorType: 'CCS2' }
                 ]
             });
+            // Fetch connector types dynamically from backend
+            api.get('/dispensaries/connector-types')
+                .then(res => setConnectorTypes(Array.isArray(res.data) ? res.data : []))
+                .catch(() => setConnectorTypes(['CCS2', 'TYPE_2', 'GB_T', 'MCS']));
         }
     }, [isOpen]);
 
@@ -86,7 +91,7 @@ export default function AddStationModal({ isOpen, onClose, onSuccess }) {
             ...prev,
             dispensaries: [
                 ...prev.dispensaries,
-                { name: `Dispenser ${prev.dispensaries.length + 1}`, totalPowerKw: 60, acceptsTrucks: true }
+                { name: `Dispenser ${prev.dispensaries.length + 1}`, totalPowerKw: 60, acceptsTrucks: false, connectorType: 'CCS2' }
             ]
         }));
     };
@@ -291,11 +296,11 @@ export default function AddStationModal({ isOpen, onClose, onSuccess }) {
                                 </div>
                                 <div>
                                     <label className="block text-sm font-semibold text-slate-700 mb-2">Latitude</label>
-                                    <input required type="number" step="any" name="latitude" value={formData.latitude} onChange={handleChange} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 focus:bg-white transition-all font-mono text-sm" placeholder="28.6139" />
+                                    <input onWheel={(e) => e.target.blur()} required type="number" step="any" name="latitude" value={formData.latitude} onChange={handleChange} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 focus:bg-white transition-all font-mono text-sm" placeholder="28.6139" />
                                 </div>
                                 <div>
                                     <label className="block text-sm font-semibold text-slate-700 mb-2">Longitude</label>
-                                    <input required type="number" step="any" name="longitude" value={formData.longitude} onChange={handleChange} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 focus:bg-white transition-all font-mono text-sm" placeholder="77.2090" />
+                                    <input onWheel={(e) => e.target.blur()} required type="number" step="any" name="longitude" value={formData.longitude} onChange={handleChange} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 focus:bg-white transition-all font-mono text-sm" placeholder="77.2090" />
                                 </div>
                             </div>
                         </div>
@@ -352,7 +357,7 @@ export default function AddStationModal({ isOpen, onClose, onSuccess }) {
                                     </label>
                                     <div className="flex items-center">
                                         <span className="text-xl font-medium text-slate-400 mr-2">Rs.</span>
-                                        <input autoFocus required type="number" step="0.5" name="pricePerKwh" value={formData.pricePerKwh} onChange={handleChange} className="w-full text-3xl font-bold bg-transparent border-0 focus:outline-none focus:ring-0 p-0 text-slate-900 placeholder:text-slate-300" placeholder="15.0" />
+                                        <input onWheel={(e) => e.target.blur()} autoFocus required type="number" step="0.5" name="pricePerKwh" value={formData.pricePerKwh} onChange={handleChange} className="w-full text-3xl font-bold bg-transparent border-0 focus:outline-none focus:ring-0 p-0 text-slate-900 placeholder:text-slate-300" placeholder="15.0" />
                                     </div>
                                     <div className="text-xs font-medium text-slate-400 uppercase tracking-wider mt-2">Per kWh</div>
                                 </div>
@@ -364,7 +369,7 @@ export default function AddStationModal({ isOpen, onClose, onSuccess }) {
                                     </label>
                                     <div className="flex items-center">
                                         <span className="text-xl font-medium text-slate-400 mr-2">Rs.</span>
-                                        <input required type="number" step="0.5" name="truckPricePerKwh" value={formData.truckPricePerKwh} onChange={handleChange} className="w-full text-3xl font-bold bg-transparent border-0 focus:outline-none focus:ring-0 p-0 text-slate-900 placeholder:text-slate-300" placeholder="20.0" />
+                                        <input onWheel={(e) => e.target.blur()} required type="number" step="0.5" name="truckPricePerKwh" value={formData.truckPricePerKwh} onChange={handleChange} className="w-full text-3xl font-bold bg-transparent border-0 focus:outline-none focus:ring-0 p-0 text-slate-900 placeholder:text-slate-300" placeholder="20.0" />
                                     </div>
                                     <div className="text-xs font-medium text-slate-400 uppercase tracking-wider mt-2">Per kWh</div>
                                 </div>
@@ -373,44 +378,71 @@ export default function AddStationModal({ isOpen, onClose, onSuccess }) {
 
                         {/* STEP 4: Dispensary Config */}
                         <div className={`transition-all duration-300 ${currentStep === 4 ? 'opacity-100 translate-x-0 block' : 'opacity-0 translate-x-4 hidden'}`}>
-                            <div className="flex items-center justify-between mb-6">
+                            <div className="mb-6">
                                 <p className="text-slate-500 text-sm max-w-md">Each dispensary unit physically splits its power into 2 charging slots.</p>
-
-                                <button type="button" onClick={addDispensary} className="flex items-center gap-1.5 text-sm font-bold text-slate-700 bg-white border border-slate-200 px-4 py-2 rounded-xl hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm">
-                                    <Plus className="w-4 h-4" /> Add Unit
-                                </button>
                             </div>
 
                             <div className="space-y-4">
                                 {formData.dispensaries.map((disp, index) => (
-                                    <div key={index} className="bg-white border-2 border-slate-100 p-5 rounded-2xl relative group transition-all hover:border-slate-200 shadow-sm hover:shadow-md">
+                                    <div key={index} className="bg-white rounded-[24px] p-6 shadow-[0_2px_12px_rgba(0,0,0,0.03)] border border-slate-200 relative group transition-all">
+                                        <div className="flex justify-between items-center mb-6">
+                                            <h4 className="font-bold text-[#1A2234]">Dispenser {index + 1}</h4>
+                                            {formData.dispensaries.length > 1 && (
+                                                <button type="button" onClick={() => removeDispensary(index)} className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors">
+                                                    <Trash2 className="w-5 h-5" />
+                                                </button>
+                                            )}
+                                        </div>
                                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                                             <div>
-                                                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Hardware Name</label>
-                                                <input required type="text" value={disp.name} onChange={(e) => handleDispensaryChange(index, 'name', e.target.value)} className="w-full px-0 py-2 text-base font-semibold border-0 border-b-2 border-slate-100 focus:outline-none focus:ring-0 focus:border-cyan-500 bg-transparent transition-colors shadow-none" placeholder="e.g. Dual-Gun C2" />
+                                                <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Dispenser Name</label>
+                                                <input required type="text" value={disp.name} onChange={(e) => handleDispensaryChange(index, 'name', e.target.value)} className="block w-full pl-4 pr-4 py-3 bg-white border border-slate-200 rounded-xl text-sm text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 transition-all" placeholder="e.g., Dispenser A" />
                                             </div>
                                             <div>
-                                                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Power Output (kW)</label>
-                                                <div className="relative">
-                                                    <input required type="number" step="1" value={disp.totalPowerKw} onChange={(e) => handleDispensaryChange(index, 'totalPowerKw', parseFloat(e.target.value))} className="w-full px-0 py-2 pl-6 font-mono text-lg font-bold border-0 border-b-2 border-slate-100 focus:outline-none focus:ring-0 focus:border-cyan-500 bg-transparent transition-colors shadow-none" placeholder="60" />
-                                                    <span className="absolute left-0 top-3 border-r border-transparent pr-2 text-slate-400 font-bold">kW</span>
-                                                </div>
+                                                <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Power (kW per gun)</label>
+                                                <input onWheel={(e) => e.target.blur()} required type="number" step="1" value={disp.totalPowerKw} onChange={(e) => handleDispensaryChange(index, 'totalPowerKw', parseFloat(e.target.value))} className="block w-full pl-4 pr-4 py-3 bg-white border border-slate-200 rounded-xl text-sm text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 transition-all" placeholder="60" />
                                             </div>
-                                            <div className="flex items-center md:justify-end pt-2 md:pt-6">
-                                                <label className="relative inline-flex items-center cursor-pointer">
+                                            <div className="flex flex-col justify-center">
+                                                <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Accepts Trucks</label>
+                                                <label className="relative inline-flex items-center cursor-pointer w-fit">
                                                     <input type="checkbox" className="sr-only peer" checked={disp.acceptsTrucks} onChange={(e) => handleDispensaryChange(index, 'acceptsTrucks', e.target.checked)} />
-                                                    <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-cyan-500"></div>
+                                                    <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
                                                     <span className="ml-3 text-sm font-bold text-slate-700">Accepts Trucks</span>
                                                 </label>
                                             </div>
                                         </div>
-                                        {formData.dispensaries.length > 1 && (
-                                            <button type="button" onClick={() => removeDispensary(index)} className="absolute -right-3 -top-3 bg-red-50 text-red-500 p-2 rounded-full border border-red-100 hover:bg-red-500 hover:text-white opacity-0 group-hover:opacity-100 transition-all shadow-sm">
-                                                <Trash2 className="w-4 h-4" />
-                                            </button>
-                                        )}
+                                        {/* Connector Type Selector */}
+                                        <div className="mt-5">
+                                            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Connector Type (applied to both guns)</label>
+                                            <div className="flex flex-wrap gap-2">
+                                                {connectorTypes.map(ct => (
+                                                    <button
+                                                        key={ct}
+                                                        type="button"
+                                                        onClick={() => handleDispensaryChange(index, 'connectorType', ct)}
+                                                        className={`px-4 py-2 rounded-full text-sm font-semibold border transition-all ${
+                                                            disp.connectorType === ct
+                                                                ? 'bg-cyan-500 text-white border-cyan-500 shadow-sm shadow-cyan-200'
+                                                                : 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200'
+                                                        }`}
+                                                    >
+                                                        {ct.replace('_', ' ')}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
                                     </div>
                                 ))}
+
+                                {/* Add Dispenser Button */}
+                                <button
+                                    type="button"
+                                    onClick={addDispensary}
+                                    className="w-full py-5 rounded-[24px] border-2 border-dashed border-slate-200 flex items-center justify-center gap-2 text-slate-500 font-semibold hover:border-cyan-300 hover:text-cyan-600 hover:bg-cyan-50/20 transition-all mt-4"
+                                >
+                                    <Plus className="w-5 h-5" />
+                                    Add Another Dispenser
+                                </button>
                             </div>
                         </div>
 

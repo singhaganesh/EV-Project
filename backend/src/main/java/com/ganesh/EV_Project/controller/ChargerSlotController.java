@@ -1,5 +1,6 @@
 package com.ganesh.EV_Project.controller;
 
+import com.ganesh.EV_Project.enums.ConnectorType;
 import com.ganesh.EV_Project.enums.SlotStatus;
 import com.ganesh.EV_Project.model.ChargerSlot;
 import com.ganesh.EV_Project.service.ChargerSlotService;
@@ -44,6 +45,12 @@ public class ChargerSlotController {
     @PutMapping("/{id}/status")
     public ResponseEntity<ChargerSlot> updateSlotStatus(@PathVariable Long id, @RequestParam SlotStatus status) {
         ChargerSlot updatedSlot = slotService.updateSlotStatus(id, status);
+        return new ResponseEntity<>(updatedSlot, HttpStatus.OK);
+    }
+
+    @PutMapping("/{id}/connectorType")
+    public ResponseEntity<ChargerSlot> updateSlotConnectorType(@PathVariable Long id, @RequestParam ConnectorType connectorType) {
+        ChargerSlot updatedSlot = slotService.updateSlotConnectorType(id, connectorType);
         return new ResponseEntity<>(updatedSlot, HttpStatus.OK);
     }
 

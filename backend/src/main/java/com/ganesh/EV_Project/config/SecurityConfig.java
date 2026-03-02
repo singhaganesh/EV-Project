@@ -63,6 +63,8 @@ public class SecurityConfig {
                     auth.requestMatchers("/api/auth/login", "/api/auth/register", "/api/auth/send-otp",
                             "/api/auth/validate-otp", "/api/auth/complete-profile").permitAll();
                     auth.requestMatchers("/api/stations/**").permitAll();
+                    auth.requestMatchers("/api/dispensaries/**").permitAll();
+                    auth.requestMatchers("/api/slots/**").permitAll();
                     auth.requestMatchers("/api/public/**").permitAll();
                     auth.requestMatchers("/ws/**").permitAll();
                     auth.requestMatchers("/api/payments/webhook").permitAll();

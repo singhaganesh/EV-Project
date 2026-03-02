@@ -1,5 +1,6 @@
 package com.ganesh.EV_Project.service;
 
+import com.ganesh.EV_Project.enums.ConnectorType;
 import com.ganesh.EV_Project.enums.SlotStatus;
 import com.ganesh.EV_Project.exception.APIException;
 import com.ganesh.EV_Project.model.ChargerSlot;
@@ -39,6 +40,13 @@ public class ChargerSlotService {
         ChargerSlot slot = slotRepository.findById(id)
                 .orElseThrow(() -> new APIException("Slot not found"));
         slot.setStatus(status);
+        return slotRepository.save(slot);
+    }
+
+    public ChargerSlot updateSlotConnectorType(Long id, ConnectorType connectorType) {
+        ChargerSlot slot = slotRepository.findById(id)
+                .orElseThrow(() -> new APIException("Slot not found"));
+        slot.setConnectorType(connectorType);
         return slotRepository.save(slot);
     }
 

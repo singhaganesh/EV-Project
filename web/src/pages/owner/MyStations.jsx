@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Search, Filter, Map, Zap, Activity, MoreHorizontal, ArrowRight, Plus, MapPin, AlertTriangle, Trash2 } from 'lucide-react';
 import StatusBadge from '../../components/common/StatusBadge';
 import api from '../../api/axios';
 import AddStationModal from '../../components/owner/AddStationModal';
+import { toast } from 'react-hot-toast';
 
 export default function MyStations() {
+    const navigate = useNavigate();
     const [stations, setStations] = useState([]);
     const [loading, setLoading] = useState(true);
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -42,6 +45,11 @@ export default function MyStations() {
             try {
                 await api.delete(`/stations/${stationId}`);
                 toast.success('Station deleted successfully.');
+
+                // Update state locally immediately to reflect change without re-fetching
+                setStations(prev => prev.filter(s => String(s.id) !== String(stationId)));
+
+                // Also trigger a background fetch to ensure alignment with DB
                 fetchStations();
             } catch (error) {
                 console.error('Error deleting station:', error);
@@ -87,7 +95,7 @@ export default function MyStations() {
                 <div className="bg-white rounded-[24px] p-6 shadow-[0_2px_12px_rgba(0,0,0,0.03)] border border-slate-100/50 flex items-center justify-between">
                     <div>
                         <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Total Stations</p>
-                        <h2 className="text-3xl font-bold text-[#1A2234]">124</h2>
+                        <h2 className="text-3xl font-bold text-[#1A2234]">{stations.length}</h2>
                     </div>
                     <div className="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center">
                         <MapPin className="w-5 h-5 text-blue-500" />
@@ -97,7 +105,9 @@ export default function MyStations() {
                 <div className="bg-white rounded-[24px] p-6 shadow-[0_2px_12px_rgba(0,0,0,0.03)] border border-slate-100/50 flex items-center justify-between">
                     <div>
                         <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Active Chargers</p>
-                        <h2 className="text-3xl font-bold text-[#1A2234]">892</h2>
+                        <h2 className="text-3xl font-bold text-[#1A2234]">
+                            {stations.reduce((acc, s) => acc + (s.dispensaries?.length || 0) * 2, 0)}
+                        </h2>
                     </div>
                     <div className="w-12 h-12 rounded-full bg-emerald-50 flex items-center justify-center">
                         <Zap className="w-5 h-5 text-emerald-500" />
@@ -180,7 +190,7 @@ export default function MyStations() {
                                     <button onClick={() => handleDeleteStation(station.id, station.name)} className="text-red-400 hover:text-red-600 transition-colors p-1.5 hover:bg-red-50 rounded-lg" title="Delete Station">
                                         <Trash2 className="w-4 h-4" />
                                     </button>
-                                    <button className="flex items-center gap-1.5 text-sm font-bold text-[#00B4DB] hover:text-[#00E5FF] transition-colors group-hover:translate-x-1 duration-300">
+                                    <button onClick={() => navigate(`/owner/stations/${station.id}`)} className="flex items-center gap-1.5 text-sm font-bold text-[#00B4DB] hover:text-[#00E5FF] transition-colors group-hover:translate-x-1 duration-300">
                                         Manage
                                         <ArrowRight className="w-4 h-4" />
                                     </button>
