@@ -18,7 +18,8 @@ android/nul
 .env
 .env.local
 .env.*.local
-application.properties
 
 # Git lock files
 .git/index.lock
+
+/backend/src/main/resources/application-dev.properties
