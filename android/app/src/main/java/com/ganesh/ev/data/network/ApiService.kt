@@ -41,7 +41,8 @@ interface ApiService {
         suspend fun completeProfile(@Body request: CompleteProfileRequest): Response<AuthResponse>
 
         // Station APIs
-        @GET("api/stations") suspend fun getAllStations(): Response<List<Station>>
+        @GET("api/stations") suspend fun getAllStations(): 
+        Response<List<Station>>
 
         @GET("api/stations/{id}")
         suspend fun getStationById(@Path("id") id: Long): Response<ApiResponse<Station>>
@@ -52,7 +53,7 @@ interface ApiService {
         @GET("api/slots/{id}") suspend fun getSlotById(@Path("id") id: Long): Response<ChargerSlot>
 
         @GET("api/slots/station/{stationId}")
-        suspend fun getSlotsByStation(
+        suspend fun getSlotsByStation(    
                 @Path("stationId") stationId: Long
         ): Response<ApiResponse<List<ChargerSlot>>>
 
