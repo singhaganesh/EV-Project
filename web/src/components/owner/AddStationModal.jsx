@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { X, Plus, Trash2, MapPin, Coffee, Wifi, Car, CreditCard, BatteryCharging, Check, ArrowRight, ArrowLeft } from 'lucide-react';
 import api from '../../api/axios';
 import toast from 'react-hot-toast';
+import LocationPicker from './LocationPicker';
 
 // Available Amenities (Icons map to logical features)
 const AMENITIES_LIST = [
@@ -59,6 +60,15 @@ export default function AddStationModal({ isOpen, onClose, onSuccess }) {
                 .catch(() => setConnectorTypes(['CCS2', 'TYPE_2', 'GB_T', 'MCS']));
         }
     }, [isOpen]);
+
+    const handleLocationChange = useCallback((lat, lng, addr) => {
+        setFormData(prev => ({
+            ...prev,
+            latitude: lat,
+            longitude: lng,
+            address: addr
+        }));
+    }, []);
 
     if (!isOpen) return null;
 
@@ -287,20 +297,15 @@ export default function AddStationModal({ isOpen, onClose, onSuccess }) {
                                         )}
                                     </div>
                                 </div>
+                                {/* Location Picker - replaces manual address/lat/lng */}
                                 <div className="md:col-span-2">
-                                    <label className="block text-sm font-semibold text-slate-700 mb-2">Full Address</label>
-                                    <div className="relative">
-                                        <MapPin className="absolute left-4 top-3.5 w-5 h-5 text-slate-400" />
-                                        <input required type="text" name="address" value={formData.address} onChange={handleChange} className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 focus:bg-white transition-all text-slate-900" placeholder="123 Energy Blvd, Tech District" />
-                                    </div>
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-semibold text-slate-700 mb-2">Latitude</label>
-                                    <input onWheel={(e) => e.target.blur()} required type="number" step="any" name="latitude" value={formData.latitude} onChange={handleChange} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 focus:bg-white transition-all font-mono text-sm" placeholder="28.6139" />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-semibold text-slate-700 mb-2">Longitude</label>
-                                    <input onWheel={(e) => e.target.blur()} required type="number" step="any" name="longitude" value={formData.longitude} onChange={handleChange} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 focus:bg-white transition-all font-mono text-sm" placeholder="77.2090" />
+                                    <label className="block text-sm font-semibold text-slate-700 mb-2">Station Location</label>
+                                    <LocationPicker
+                                        latitude={formData.latitude}
+                                        longitude={formData.longitude}
+                                        address={formData.address}
+                                        onLocationChange={handleLocationChange}
+                                    />
                                 </div>
                             </div>
                         </div>
