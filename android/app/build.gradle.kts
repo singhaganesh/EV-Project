@@ -8,7 +8,7 @@ plugins {
 val localProperties = Properties()
 val localPropertiesFile = rootProject.file("local.properties")
 if (localPropertiesFile.exists()) {
-    localProperties.inputStream().use { localProperties.load(it) }
+    localPropertiesFile.inputStream().use { localProperties.load(it) }
 }
 val mapsApiKey: String = localProperties.getProperty("MAPS_API_KEY") ?: ""
 

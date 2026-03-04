@@ -44,15 +44,15 @@ class BookingViewModel : ViewModel() {
                         )
                 val response = RetrofitClient.apiService.createBooking(request)
                 if (response.isSuccessful) {
-                    val booking = response.body()?.data
+                    val booking = response.body()
                     if (booking != null) {
                         _uiState.value = BookingUiState.BookingCreated(booking)
                     } else {
-                        _uiState.value = BookingUiState.Error("Failed to create booking")
+                        _uiState.value = BookingUiState.Error("Server returned empty response")
                     }
                 } else {
-                    _uiState.value =
-                            BookingUiState.Error("Failed to create booking: ${response.message()}")
+                    val errorBody = response.errorBody()?.string() ?: response.message()
+                    _uiState.value = BookingUiState.Error(errorBody)
                 }
             } catch (e: Exception) {
                 _uiState.value = BookingUiState.Error("Network error: ${e.message}")

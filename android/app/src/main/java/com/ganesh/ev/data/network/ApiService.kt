@@ -70,7 +70,7 @@ interface ApiService {
         ): Response<ApiResponse<List<Booking>>>
 
         @POST("api/bookings")
-        suspend fun createBooking(@Body request: BookingRequest): Response<ApiResponse<Booking>>
+        suspend fun createBooking(@Body request: BookingRequest): Response<Booking>
 
         @PUT("api/bookings/{bookingId}/cancel")
         suspend fun cancelBooking(@Path("bookingId") bookingId: Long): Response<ApiResponse<Void>>

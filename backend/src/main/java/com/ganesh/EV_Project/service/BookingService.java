@@ -79,18 +79,9 @@ public class BookingService {
             }
         }
 
-        // Calculate price estimate using station's actual price per kWh
-        double hours = java.time.Duration.between(request.getStartTime(), request.getEndTime()).toMinutes() / 60.0;
-        double pricePerKwh = slot.getStation() != null && slot.getStation().getPricePerKwh() != null
-                ? slot.getStation().getPricePerKwh()
-                : 15.0;
-
-        if (request.getVehicleType() == VehicleType.TRUCK && slot.getStation() != null
-                && slot.getStation().getTruckPricePerKwh() != null) {
-            pricePerKwh = slot.getStation().getTruckPricePerKwh();
-        }
-
-        double priceEstimate = hours * slot.getPowerKw() * pricePerKwh;
+        // Price is now calculated entirely after the charging session completes based on actual kWh consumed.
+        // We set the estimate to 0.0 to avoid confusing numbers in the database based on the 4-hour reservation window.
+        double priceEstimate = 0.0;
 
         // Create booking
         Booking booking = Booking.builder()

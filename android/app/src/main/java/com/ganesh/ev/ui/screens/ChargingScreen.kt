@@ -8,11 +8,15 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ganesh.ev.ui.theme.*
 import com.ganesh.ev.ui.viewmodel.ChargingUiState
 import com.ganesh.ev.ui.viewmodel.ChargingViewModel
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
 import java.util.Locale
 import kotlinx.coroutines.delay
 
@@ -30,7 +34,11 @@ fun ChargingScreen(
     var energyConsumed by remember { mutableStateOf(0.0) }
     var isCharging by remember { mutableStateOf(false) }
     var isCompleted by remember { mutableStateOf(false) }
-    val ratePerKwh = 15.0
+    // Derived from actual booking — fallback to ₹15 if unavailable
+    var ratePerKwh by remember { mutableStateOf(15.0) }
+    var vehicleType by remember { mutableStateOf("CAR") }
+    // Grace period countdown (minutes remaining to arrive)
+    var graceMinutesLeft by remember { mutableStateOf<Long?>(null) }
 
     LaunchedEffect(Unit) {
         if (sessionId != null && sessionId > 0) {
@@ -44,17 +52,31 @@ fun ChargingScreen(
         val state = uiState
         if (state is ChargingUiState.SessionStarted) {
             isCharging = true
-            state.session.booking?.slot?.station?.id?.let { stationId ->
+            graceMinutesLeft = null // charging started, no more grace countdown
+            // Extract actual rate from booking
+            val booking = state.session.booking
+            vehicleType = booking?.vehicleType ?: "CAR"
+            val station = booking?.slot?.station
+            ratePerKwh = if (vehicleType == "TRUCK" && station?.truckPricePerKwh != null)
+                station.truckPricePerKwh
+            else station?.pricePerKwh ?: 15.0
+            booking?.slot?.station?.id?.let { stationId ->
                 viewModel.startPollingPower(stationId)
             }
         } else if (state is ChargingUiState.SessionLoaded) {
-            // Check if session is active? For now assume valid if loaded here
+            val booking = state.session.booking
+            vehicleType = booking?.vehicleType ?: "CAR"
+            val station = booking?.slot?.station
+            ratePerKwh = if (vehicleType == "TRUCK" && station?.truckPricePerKwh != null)
+                station.truckPricePerKwh
+            else station?.pricePerKwh ?: 15.0
+
             if (state.session.endTime == null) {
                 isCharging = true
-                state.session.booking?.slot?.station?.id?.let { stationId ->
+                graceMinutesLeft = null
+                booking?.slot?.station?.id?.let { stationId ->
                     viewModel.startPollingPower(stationId)
                 }
-                // Resume energy consumed from server + local accumulation
                 energyConsumed = state.session.energyConsumed ?: 0.0
             } else {
                 isCompleted = true
@@ -174,7 +196,17 @@ fun ChargingScreen(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Text("Total Cost", style = MaterialTheme.typography.titleMedium)
+                                Text("Rate")
+                                Text("₹$ratePerKwh/kWh • ${if (vehicleType == "TRUCK") "🚛 Truck" else "🚗 Car"}",
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        style = MaterialTheme.typography.bodySmall)
+                            }
+                            Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("Total Cost", style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold)
                                 Text(
                                         "₹${String.format(Locale.US, "%.2f", energyConsumed * ratePerKwh)}",
                                         style = MaterialTheme.typography.titleMedium,

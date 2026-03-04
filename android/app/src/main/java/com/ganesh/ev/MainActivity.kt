@@ -316,6 +316,7 @@ fun EVChargingApp(userPreferencesRepository: UserPreferencesRepository) {
                         startTime = startTime,
                         endTime = endTime,
                         vehicleType = vehicleType,
+                        onBack = { navController.popBackStack() },
                         onViewBookings = {
                             currentUserId?.let { uid ->
                                 navController.navigate("bookings/$uid") { popUpTo("home") }

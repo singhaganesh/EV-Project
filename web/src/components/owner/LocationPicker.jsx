@@ -46,9 +46,35 @@ async function forwardGeocode(query) {
 // Sub-component: Fly the map to a new center when position changes
 function MapFlyTo({ position, zoom }) {
     const map = useMap();
+
+    // Fix leaflet grey tiles and sizing issues in animated modals
     useEffect(() => {
-        if (position) {
-            map.flyTo(position, zoom, { duration: 1.2 });
+        // Run invalidateSize several times during and just after the modal "zoom-in" animation (200ms)
+        const timeouts = [50, 200, 400].map(ms => 
+            setTimeout(() => map.invalidateSize(), ms)
+        );
+        return () => timeouts.forEach(clearTimeout);
+    }, [map]);
+
+    useEffect(() => {
+        if (position && Array.isArray(position)) {
+            const lat = parseFloat(position[0]);
+            const lng = parseFloat(position[1]);
+            // Only fly to valid coordinates
+            if (!isNaN(lat) && !isNaN(lng)) {
+                try {
+                    // Check if map container has a valid layout size before animating (prevents NaN error)
+                    const size = map.getSize();
+                    if (size.x > 0 && size.y > 0) {
+                        map.flyTo([lat, lng], zoom, { duration: 1.2 });
+                    } else {
+                        map.setView([lat, lng], zoom);
+                    }
+                } catch (e) {
+                    // Fallback to instant jump if animation fails
+                    map.setView([lat, lng], zoom);
+                }
+            }
         }
     }, [position, zoom, map]);
     return null;
@@ -101,9 +127,15 @@ export default function LocationPicker({ latitude, longitude, address, onLocatio
     const wrapperRef = useRef(null);
 
     // The marker position (from props or default)
-    const markerPosition = latitude && longitude
-        ? [parseFloat(latitude), parseFloat(longitude)]
-        : null;
+    // Validate that latitude and longitude are actually numbers, not empty strings
+    const markerPosition = useMemo(() => {
+        const lat = parseFloat(latitude);
+        const lng = parseFloat(longitude);
+        if (!isNaN(lat) && !isNaN(lng)) {
+            return [lat, lng];
+        }
+        return null;
+    }, [latitude, longitude]);
 
     // Auto-detect GPS on mount
     useEffect(() => {
