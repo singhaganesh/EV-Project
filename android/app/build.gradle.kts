@@ -11,6 +11,7 @@ if (localPropertiesFile.exists()) {
     localPropertiesFile.inputStream().use { localProperties.load(it) }
 }
 val mapsApiKey: String = localProperties.getProperty("MAPS_API_KEY") ?: ""
+val baseUrl: String = localProperties.getProperty("BASE_URL") ?: ""
 
 android {
     namespace = "com.ganesh.ev"
@@ -26,6 +27,7 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         
         manifestPlaceholders["MAPS_API_KEY"] = mapsApiKey
+        buildConfigField("String", "BASE_URL", "\"${baseUrl}\"")
     }
 
     buildTypes {
@@ -49,6 +51,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     composeOptions {

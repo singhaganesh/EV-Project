@@ -2,7 +2,7 @@ import axios from 'axios';
 import toast from 'react-hot-toast';
 
 const api = axios.create({
-    baseURL: 'http://ev-charging-backend-env.eba-bppan2jb.eu-north-1.elasticbeanstalk.com/api', // Adjust base URL as needed based on production/env
+    baseURL: import.meta.env.VITE_API_BASE_URL,
     headers: {
         'Content-Type': 'application/json',
     },
