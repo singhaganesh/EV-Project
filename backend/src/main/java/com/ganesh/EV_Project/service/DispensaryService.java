@@ -41,10 +41,15 @@ public class DispensaryService {
         if (dispensary.getConnectorType() == null) {
             dispensary.setConnectorType(ConnectorType.CCS2);
         }
+        
+        if (dispensary.getNumberOfGuns() == null) {
+            dispensary.setNumberOfGuns(2);
+        }
+
         Dispensary saved = dispensaryRepository.save(dispensary);
 
         // Create guns based on numberOfGuns (1 or 2)
-        int gunCount = saved.getNumberOfGuns() != null ? saved.getNumberOfGuns() : 2;
+        int gunCount = saved.getNumberOfGuns();
         double powerPerGun = saved.getTotalPowerKw() != null ? saved.getTotalPowerKw() / gunCount : 30.0;
         ConnectorType connectorType = saved.getConnectorType();
         // Derive SlotType from connector: CCS2 → DC, TYPE_2 → AC

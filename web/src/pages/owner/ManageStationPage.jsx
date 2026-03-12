@@ -239,7 +239,7 @@ function DispensersTab({ stationId }) {
     const [addingNew, setAddingNew] = useState(false);
     const [isAddingDispensary, setIsAddingDispensary] = useState(false);
     const [connectorTypes, setConnectorTypes] = useState([]);
-    const [newDispenser, setNewDispenser] = useState({ name: '', totalPowerKw: 60, acceptsTrucks: false, connectorType: 'CCS2' });
+    const [newDispenser, setNewDispenser] = useState({ name: '', totalPowerKw: 60, acceptsTrucks: false, connectorType: 'CCS2', numberOfGuns: 2 });
     
     // Track uncommitted changes for connector types and gun statuses
     const [pendingConnectorTypes, setPendingConnectorTypes] = useState({});
@@ -296,8 +296,8 @@ function DispensersTab({ stationId }) {
         try {
             setIsAddingDispensary(true);
             await api.post(`/dispensaries/station/${stationId}`, newDispenser);
-            toast.success(`Dispenser "${newDispenser.name}" added with 2 guns.`);
-            setNewDispenser({ name: '', totalPowerKw: 60, acceptsTrucks: false, connectorType: 'CCS2' });
+            toast.success(`Dispenser "${newDispenser.name}" added with ${newDispenser.numberOfGuns} gun(s).`);
+            setNewDispenser({ name: '', totalPowerKw: 60, acceptsTrucks: false, connectorType: 'CCS2', numberOfGuns: 2 });
             setAddingNew(false);
             fetchData();
         } catch (err) {
@@ -315,6 +315,8 @@ function DispensersTab({ stationId }) {
                 fetchData();
             } catch (err) {
                 console.error('Error deleting dispenser:', err);
+                // The global error handler (409 Conflict) will be automatically caught by our axios interceptor if one exists, 
+                // or we could show a fallback message here if needed. But assuming global error toasts handle this.
             }
         }
     };
@@ -587,24 +589,46 @@ function DispensersTab({ stationId }) {
                             </label>
                         </div>
                     </div>
-                    {/* Connector Type Selector */}
-                    <div>
-                        <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Connector Type (applied to both guns)</label>
-                        <div className="flex flex-wrap gap-2">
-                            {connectorTypes.map(ct => (
-                                <button
-                                    key={ct}
-                                    type="button"
-                                    onClick={() => setNewDispenser(prev => ({ ...prev, connectorType: ct }))}
-                                    className={`px-4 py-2 rounded-full text-sm font-semibold border transition-all ${
-                                        newDispenser.connectorType === ct
-                                            ? 'bg-cyan-500 text-white border-cyan-500 shadow-sm shadow-cyan-200'
-                                            : 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200'
-                                    }`}
-                                >
-                                    {ct.replace('_', ' ')}
-                                </button>
-                            ))}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {/* Connector Type Selector */}
+                        <div>
+                            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Connector Type</label>
+                            <div className="flex gap-3">
+                                {connectorTypes.map(ct => (
+                                    <button
+                                        key={ct}
+                                        type="button"
+                                        onClick={() => setNewDispenser(prev => ({ ...prev, connectorType: ct }))}
+                                        className={`py-2 px-6 rounded-full text-sm font-bold border transition-all ${
+                                            newDispenser.connectorType === ct
+                                                ? 'bg-[#00BCD4] text-white border-[#00BCD4] shadow-md shadow-cyan-500/20'
+                                                : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'
+                                        }`}
+                                    >
+                                        {ct.replace('_', ' ')}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                        {/* Number of Guns Selector */}
+                        <div>
+                            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Number of Guns</label>
+                            <div className="flex gap-3">
+                                {[1, 2].map((num) => (
+                                    <button
+                                        key={num}
+                                        type="button"
+                                        onClick={() => setNewDispenser(prev => ({ ...prev, numberOfGuns: num }))}
+                                        className={`py-2 px-6 rounded-full text-sm font-bold border transition-all ${
+                                            newDispenser.numberOfGuns === num
+                                                ? 'bg-[#00BCD4] text-white border-[#00BCD4] shadow-md shadow-cyan-500/20'
+                                                : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'
+                                            }`}
+                                    >
+                                        {num} {num === 1 ? 'Gun' : 'Guns'}
+                                    </button>
+                                ))}
+                            </div>
                         </div>
                     </div>
                     <div className="flex justify-end gap-3">
