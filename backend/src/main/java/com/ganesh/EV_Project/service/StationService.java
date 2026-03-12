@@ -42,8 +42,11 @@ public class StationService {
         return station;
     }
 
+    @Transactional
     public Station addStation(Station station) {
+        System.out.println("Adding station: " + station.getName());
         if (station.getDispensaries() != null) {
+            System.out.println("Contains " + station.getDispensaries().size() + " dispensaries");
             for (Dispensary d : station.getDispensaries()) {
                 d.setStation(station);
                 // Ensure connectorType has a value before persisting 
@@ -57,15 +60,18 @@ public class StationService {
 
         if (savedStation.getDispensaries() != null) {
             for (Dispensary d : savedStation.getDispensaries()) {
-                double powerPerGun = d.getTotalPowerKw() != null ? d.getTotalPowerKw() / 2.0 : 30.0;
+                int gunCount = d.getNumberOfGuns() != null ? d.getNumberOfGuns() : 2;
+                double powerPerGun = d.getTotalPowerKw() != null ? d.getTotalPowerKw() / gunCount : 30.0;
                 ConnectorType ct = d.getConnectorType() != null ? d.getConnectorType() : ConnectorType.CCS2;
+                // Derive SlotType from connector: CCS2 → DC, TYPE_2 → AC
+                SlotType slotType = (ct == ConnectorType.TYPE_2) ? SlotType.AC : SlotType.DC;
 
-                for (int i = 1; i <= 2; i++) {
+                for (int i = 1; i <= gunCount; i++) {
                     com.ganesh.EV_Project.model.ChargerSlot slot = com.ganesh.EV_Project.model.ChargerSlot.builder()
                             .station(savedStation)
                             .dispensary(d)
                             .slotLabel(d.getName() + " - Gun " + i)
-                            .slotType(SlotType.DC)
+                            .slotType(slotType)
                             .status(SlotStatus.AVAILABLE)
                             .connectorType(ct)
                             .powerKw(powerPerGun)

@@ -4,7 +4,7 @@ import StatusBadge from '../../components/common/StatusBadge';
 
 const stationsData = [
     { id: 'PLG-8821', name: 'Supercharger Downtown #A1', loc: 'Seattle, WA', status: 'Active', connect: 'CCS2 & Type 2', pwr: '150kW DC' },
-    { id: 'PLG-9932', name: 'Metro Center North #B2', loc: 'Portland, OR', status: 'Maintenance', connect: 'GB_T', pwr: '50kW DC' },
+    { id: 'PLG-9932', name: 'Metro Center North #B2', loc: 'Portland, OR', status: 'Maintenance', connect: 'TYPE_2', pwr: '50kW AC' },
     { id: 'PLG-1029', name: 'Westside Mall Parking #C1', loc: 'Bellevue, WA', status: 'Active', connect: 'CCS2', pwr: '350kW Ultra-Fast' },
     { id: 'PLG-3341', name: 'Airport Terminal 2 #D4', loc: 'SeaTac, WA', status: 'Offline', connect: 'Type 2', pwr: '22kW AC' },
     { id: 'PLG-5512', name: 'Tech Park South #E5', loc: 'Redmond, WA', status: 'Active', connect: 'CCS2', pwr: '150kW DC' },

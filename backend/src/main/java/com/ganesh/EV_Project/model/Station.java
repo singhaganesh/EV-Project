@@ -39,7 +39,7 @@ public class Station {
 
     @ManyToOne
     @JoinColumn(name = "owner_id")
-    @com.fasterxml.jackson.annotation.JsonIgnore
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     private User owner;
 
     @Column(columnDefinition = "TEXT")

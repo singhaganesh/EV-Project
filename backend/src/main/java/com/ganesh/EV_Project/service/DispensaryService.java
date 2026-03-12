@@ -43,15 +43,18 @@ public class DispensaryService {
         }
         Dispensary saved = dispensaryRepository.save(dispensary);
 
-        // Auto-create 2 guns; each gun gets half the dispenser's total power
-        double powerPerGun = saved.getTotalPowerKw() != null ? saved.getTotalPowerKw() / 2.0 : 30.0;
+        // Create guns based on numberOfGuns (1 or 2)
+        int gunCount = saved.getNumberOfGuns() != null ? saved.getNumberOfGuns() : 2;
+        double powerPerGun = saved.getTotalPowerKw() != null ? saved.getTotalPowerKw() / gunCount : 30.0;
         ConnectorType connectorType = saved.getConnectorType();
-        for (int i = 1; i <= 2; i++) {
+        // Derive SlotType from connector: CCS2 → DC, TYPE_2 → AC
+        SlotType slotType = (connectorType == ConnectorType.TYPE_2) ? SlotType.AC : SlotType.DC;
+        for (int i = 1; i <= gunCount; i++) {
             ChargerSlot slot = ChargerSlot.builder()
                     .station(station)
                     .dispensary(saved)
                     .slotLabel(saved.getName() + " - Gun " + i)
-                    .slotType(SlotType.DC)
+                    .slotType(slotType)
                     .status(SlotStatus.AVAILABLE)
                     .connectorType(connectorType)
                     .powerKw(powerPerGun)
@@ -88,10 +91,12 @@ public class DispensaryService {
         // Update source of truth on dispensary
         dispensary.setConnectorType(connectorType);
         dispensaryRepository.save(dispensary);
-        // Also sync the denormalized copy on each gun for backward compat
+        // Also sync connector type and slotType on each gun
+        SlotType slotType = (connectorType == ConnectorType.TYPE_2) ? SlotType.AC : SlotType.DC;
         List<ChargerSlot> guns = chargerSlotRepository.findByDispensary(dispensary);
         for (ChargerSlot gun : guns) {
             gun.setConnectorType(connectorType);
+            gun.setSlotType(slotType);
             chargerSlotRepository.save(gun);
         }
     }

@@ -19,7 +19,7 @@ public class Dispensary {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "station_id", nullable = false)
-    @com.fasterxml.jackson.annotation.JsonIgnore
+    @com.fasterxml.jackson.annotation.JsonBackReference
     private Station station;
 
     @Column(nullable = false)
@@ -36,4 +36,9 @@ public class Dispensary {
     @Enumerated(EnumType.STRING)
     @Builder.Default
     private ConnectorType connectorType = ConnectorType.CCS2;
+
+    /** Number of charging guns on this dispensary (1 or 2). */
+    @Column(nullable = false)
+    @Builder.Default
+    private Integer numberOfGuns = 2;
 }

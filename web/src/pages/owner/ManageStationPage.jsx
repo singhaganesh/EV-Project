@@ -241,8 +241,9 @@ function DispensersTab({ stationId }) {
     const [connectorTypes, setConnectorTypes] = useState([]);
     const [newDispenser, setNewDispenser] = useState({ name: '', totalPowerKw: 60, acceptsTrucks: false, connectorType: 'CCS2' });
     
-    // Track uncommitted changes for connector types
+    // Track uncommitted changes for connector types and gun statuses
     const [pendingConnectorTypes, setPendingConnectorTypes] = useState({});
+    const [pendingGunStatuses, setPendingGunStatuses] = useState({});
     const [updatingConnectorId, setUpdatingConnectorId] = useState(null);
 
     const fetchData = useCallback(async () => {
@@ -282,7 +283,7 @@ function DispensersTab({ stationId }) {
     useEffect(() => {
         api.get('/dispensaries/connector-types')
             .then(res => setConnectorTypes(Array.isArray(res.data) ? res.data : []))
-            .catch(() => setConnectorTypes(['CCS2', 'TYPE_2', 'GB_T', 'MCS']));
+            .catch(() => setConnectorTypes(['CCS2', 'TYPE_2']));
     }, []);
 
     const gunsForDispenser = (dispenserId) => slots.filter(s => s.dispensary?.id === dispenserId);
@@ -318,15 +319,21 @@ function DispensersTab({ stationId }) {
         }
     };
 
-    const handleToggleGunStatus = async (gunId, currentStatus) => {
-        const newStatus = currentStatus === 'MAINTENANCE' ? 'AVAILABLE' : 'MAINTENANCE';
-        try {
-            await api.put(`/slots/${gunId}/status?status=${newStatus}`);
-            toast.success(`Gun set to ${newStatus}.`);
-            fetchData();
-        } catch (err) {
-            console.error('Error toggling gun status:', err);
-        }
+    const handleToggleGunStatus = (gunId, originalStatus) => {
+        const currentPendingStatus = pendingGunStatuses[gunId];
+        const activeStatus = currentPendingStatus || originalStatus;
+        const newStatus = activeStatus === 'MAINTENANCE' ? 'AVAILABLE' : 'MAINTENANCE';
+        
+        setPendingGunStatuses(prev => {
+            const updated = { ...prev };
+            // If we revert to the original status, remove it from pending
+            if (newStatus === originalStatus) {
+                delete updated[gunId];
+            } else {
+                updated[gunId] = newStatus;
+            }
+            return updated;
+        });
     };
 
     const handlePendingConnectorTypeChange = (dispensaryId, newType) => {
@@ -336,26 +343,48 @@ function DispensersTab({ stationId }) {
         }));
     };
 
-    const handleSubmitConnectorTypeChange = async (dispensaryId, originalType) => {
+    const handleSaveChanges = async (dispensaryId, originalType, guns) => {
         const newType = pendingConnectorTypes[dispensaryId];
-        if (!newType || newType === originalType) return;
+        const hasConnectorChange = newType && newType !== originalType;
+        
+        // Find which guns in THIS dispenser have pending changes
+        const pendingGuns = guns.filter(g => pendingGunStatuses[g.id] && pendingGunStatuses[g.id] !== g.status);
+        
+        if (!hasConnectorChange && pendingGuns.length === 0) return;
 
         setUpdatingConnectorId(dispensaryId);
         try {
-            await api.put(`/dispensaries/${dispensaryId}/connectorType?connectorType=${newType}`);
-            toast.success(`Connector type updated to ${newType.replace('_', ' ')} for all guns.`);
+            // 1. Update connector type if changed
+            if (hasConnectorChange) {
+                await api.put(`/dispensaries/${dispensaryId}/connectorType?connectorType=${newType}`);
+            }
             
-            // Clear pending status after successful update
+            // 2. Update gun statuses
+            if (pendingGuns.length > 0) {
+                for (const gun of pendingGuns) {
+                    await api.put(`/slots/${gun.id}/status?status=${pendingGunStatuses[gun.id]}`);
+                }
+            }
+            
+            toast.success('Changes saved successfully.');
+            
+            // Clear pending states for this dispenser
             setPendingConnectorTypes(prev => {
                 const updated = { ...prev };
                 delete updated[dispensaryId];
                 return updated;
             });
             
+            setPendingGunStatuses(prev => {
+                const updated = { ...prev };
+                pendingGuns.forEach(g => delete updated[g.id]);
+                return updated;
+            });
+            
             fetchData();
         } catch (err) {
-            console.error('Error changing connector type:', err);
-            toast.error('Failed to update connector type.');
+            console.error('Error saving changes:', err);
+            toast.error('Failed to save some changes.');
         } finally {
             setUpdatingConnectorId(null);
         }
@@ -425,7 +454,12 @@ function DispensersTab({ stationId }) {
                         </div>
 
                         {/* Expanded Details */}
-                        {isExpanded && (
+                        {isExpanded && (() => {
+                            const hasConnectorChange = pendingConnectorTypes[disp.id] && pendingConnectorTypes[disp.id] !== disp.connectorType;
+                            const hasGunChanges = guns.some(g => pendingGunStatuses[g.id] && pendingGunStatuses[g.id] !== g.status);
+                            const hasAnyChange = hasConnectorChange || hasGunChanges;
+                            
+                            return (
                             <div className="border-t border-slate-100 bg-slate-50/30 p-6 space-y-5">
                                 {/* Connector Type — reads from dispensary (source of truth) */}
                                 <div>
@@ -433,9 +467,9 @@ function DispensersTab({ stationId }) {
                                         <p className="text-sm font-semibold text-slate-700">Connector Type</p>
                                         
                                         {/* Action Button - only shows if there are pending changes */}
-                                        {pendingConnectorTypes[disp.id] && pendingConnectorTypes[disp.id] !== disp.connectorType && (
+                                        {hasAnyChange && (
                                             <button
-                                                onClick={() => handleSubmitConnectorTypeChange(disp.id, disp.connectorType)}
+                                                onClick={() => handleSaveChanges(disp.id, disp.connectorType, guns)}
                                                 disabled={updatingConnectorId === disp.id}
                                                 className={`px-4 py-1.5 text-xs font-bold text-white rounded-lg transition-all shadow-sm flex items-center gap-2
                                                     ${updatingConnectorId === disp.id 
@@ -449,7 +483,7 @@ function DispensersTab({ stationId }) {
                                                         Saving...
                                                     </>
                                                 ) : (
-                                                    'Update Connector'
+                                                    'Save Changes'
                                                 )}
                                             </button>
                                         )}
@@ -483,36 +517,45 @@ function DispensersTab({ stationId }) {
                                 {guns.length === 0 && (
                                     <p className="text-sm text-slate-400 text-center py-4">No guns found for this dispenser.</p>
                                 )}
-                                {guns.map((gun) => (
-                                    <div key={gun.id} className="flex items-center justify-between bg-white rounded-2xl p-5 border border-slate-100">
+                                {guns.map((gun) => {
+                                    const activeStatus = pendingGunStatuses[gun.id] || gun.status;
+                                    const isPending = !!pendingGunStatuses[gun.id];
+
+                                    return (
+                                    <div key={gun.id} className={`flex items-center justify-between bg-white rounded-2xl p-5 border ${isPending ? 'border-amber-300 shadow-sm shadow-amber-500/10' : 'border-slate-100'}`}>
                                         <div className="flex items-center gap-4">
-                                            <div className={`w-3 h-3 rounded-full ${gun.status === 'AVAILABLE' ? 'bg-emerald-500' : gun.status === 'CHARGING' ? 'bg-amber-400' : 'bg-red-400'}`} />
+                                            <div className={`w-3 h-3 rounded-full ${activeStatus === 'AVAILABLE' ? 'bg-emerald-500' : activeStatus === 'CHARGING' ? 'bg-amber-400' : 'bg-red-400'}`} />
                                             <div>
-                                                <p className="font-semibold text-sm text-[#1A2234]">{gun.slotNumber || gun.slotLabel}</p>
+                                                <div className="flex items-center gap-2">
+                                                    <p className="font-semibold text-sm text-[#1A2234]">{gun.slotNumber || gun.slotLabel}</p>
+                                                    {isPending && <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 uppercase">Unsaved</span>}
+                                                </div>
                                                 <p className="text-xs text-slate-500 mt-0.5">
                                                     {gun.connectorType} · {gun.slotType} · {gun.powerRating || gun.powerKw} kW
                                                 </p>
                                             </div>
                                         </div>
                                         <div className="flex items-center gap-3">
-                                            <GunStatusBadge status={gun.status} />
-                                            {(gun.status === 'AVAILABLE' || gun.status === 'MAINTENANCE') && (
+                                            <GunStatusBadge status={activeStatus} />
+                                            {(activeStatus === 'AVAILABLE' || activeStatus === 'MAINTENANCE') && (
                                                 <button
                                                     onClick={() => handleToggleGunStatus(gun.id, gun.status)}
                                                     className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors
-                                                        ${gun.status === 'MAINTENANCE'
+                                                        ${activeStatus === 'MAINTENANCE'
                                                             ? 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100'
                                                             : 'bg-red-50 text-red-500 hover:bg-red-100'
                                                         }`}
                                                 >
-                                                    {gun.status === 'MAINTENANCE' ? 'Set Available' : 'Set Maintenance'}
+                                                    {activeStatus === 'MAINTENANCE' ? 'Set Available' : 'Set Maintenance'}
                                                 </button>
                                             )}
                                         </div>
                                     </div>
-                                ))}
+                                    );
+                                })}
                             </div>
-                        )}
+                            );
+                        })()}
                     </div>
                 );
             })}

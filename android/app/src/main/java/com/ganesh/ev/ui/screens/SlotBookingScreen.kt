@@ -136,27 +136,6 @@ fun SlotBookingScreen(
                                                         modifier = Modifier.weight(1f)
                                                 )
                                         }
-                                        Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                        ) {
-                                                ConnectorTypeChip(
-                                                        label = "GB/T",
-                                                        subLabel = "Fleet",
-                                                        emoji = "🏭",
-                                                        selected = selectedConnectorType == ConnectorType.GB_T,
-                                                        onClick = { selectedConnectorType = ConnectorType.GB_T },
-                                                        modifier = Modifier.weight(1f)
-                                                )
-                                                ConnectorTypeChip(
-                                                        label = "MCS",
-                                                        subLabel = "Megawatt",
-                                                        emoji = "🚛",
-                                                        selected = selectedConnectorType == ConnectorType.MCS,
-                                                        onClick = { selectedConnectorType = ConnectorType.MCS },
-                                                        modifier = Modifier.weight(1f)
-                                                )
-                                        }
                                 }
                         }
 

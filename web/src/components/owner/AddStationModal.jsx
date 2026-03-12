@@ -32,7 +32,7 @@ export default function AddStationModal({ isOpen, onClose, onSuccess }) {
         truckPricePerKwh: '',
         amenities: [],
         dispensaries: [
-            { name: 'Dispenser 1', totalPowerKw: 60, acceptsTrucks: false, connectorType: 'CCS2' }
+            { name: 'Dispenser 1', totalPowerKw: 60, acceptsTrucks: false, connectorType: 'CCS2', numberOfGuns: 2 }
         ]
     });
 
@@ -51,13 +51,13 @@ export default function AddStationModal({ isOpen, onClose, onSuccess }) {
                 truckPricePerKwh: '',
                 amenities: [],
                 dispensaries: [
-                    { name: 'Dispenser 1', totalPowerKw: 60, acceptsTrucks: false, connectorType: 'CCS2' }
+                    { name: 'Dispenser 1', totalPowerKw: 60, acceptsTrucks: false, connectorType: 'CCS2', numberOfGuns: 2 }
                 ]
             });
             // Fetch connector types dynamically from backend
             api.get('/dispensaries/connector-types')
                 .then(res => setConnectorTypes(Array.isArray(res.data) ? res.data : []))
-                .catch(() => setConnectorTypes(['CCS2', 'TYPE_2', 'GB_T', 'MCS']));
+                .catch(() => setConnectorTypes(['CCS2', 'TYPE_2']));
         }
     }, [isOpen]);
 
@@ -101,7 +101,7 @@ export default function AddStationModal({ isOpen, onClose, onSuccess }) {
             ...prev,
             dispensaries: [
                 ...prev.dispensaries,
-                { name: `Dispenser ${prev.dispensaries.length + 1}`, totalPowerKw: 60, acceptsTrucks: false, connectorType: 'CCS2' }
+                { name: `Dispenser ${prev.dispensaries.length + 1}`, totalPowerKw: 60, acceptsTrucks: false, connectorType: 'CCS2', numberOfGuns: 2 }
             ]
         }));
     };
@@ -144,8 +144,12 @@ export default function AddStationModal({ isOpen, onClose, onSuccess }) {
             // We will stringify amenities into the 'meta' column 
             const metaJson = JSON.stringify({ amenities: formData.amenities });
 
+            // Remove dispensaries from the station payload because the backend ignores them 
+            // to avoid infinite JSON recursion
+            const { dispensaries, ...stationPayload } = formData;
+
             const payload = {
-                ...formData,
+                ...stationPayload,
                 operatingHours: formData.is24Hours ? "24 Hours" : `${formData.openTime} - ${formData.closeTime}`,
                 meta: metaJson,      // Store JSON here as supported by backend
                 owner: user ? { id: user.id } : null,
@@ -155,12 +159,23 @@ export default function AddStationModal({ isOpen, onClose, onSuccess }) {
                 truckPricePerKwh: parseFloat(formData.truckPricePerKwh),
             };
 
-            await api.post('/stations', payload);
+            // 1. Create the Station
+            const response = await api.post('/stations', payload);
+            const newStationId = response.data.id;
+
+            // 2. Add each Dispensary individually to the new Station
+            if (dispensaries && dispensaries.length > 0) {
+                for (const disp of dispensaries) {
+                    await api.post(`/dispensaries/station/${newStationId}`, disp);
+                }
+            }
+
             toast.success('Station Registered & Launched successfully!');
             onSuccess();
             onClose();
         } catch (error) {
             console.error('Error adding station:', error);
+            toast.error('Failed to create station. Missing data or server error.');
         } finally {
             setLoading(false);
         }
@@ -384,7 +399,7 @@ export default function AddStationModal({ isOpen, onClose, onSuccess }) {
                         {/* STEP 4: Dispensary Config */}
                         <div className={`transition-all duration-300 ${currentStep === 4 ? 'opacity-100 translate-x-0 block' : 'opacity-0 translate-x-4 hidden'}`}>
                             <div className="mb-6">
-                                <p className="text-slate-500 text-sm max-w-md">Each dispensary unit physically splits its power into 2 charging slots.</p>
+                                <p className="text-slate-500 text-sm max-w-md">Each dispensary unit can have 1 or 2 charging guns.</p>
                             </div>
 
                             <div className="space-y-4">
@@ -416,24 +431,46 @@ export default function AddStationModal({ isOpen, onClose, onSuccess }) {
                                                 </label>
                                             </div>
                                         </div>
-                                        {/* Connector Type Selector */}
-                                        <div className="mt-5">
-                                            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Connector Type (applied to both guns)</label>
-                                            <div className="flex flex-wrap gap-2">
-                                                {connectorTypes.map(ct => (
-                                                    <button
-                                                        key={ct}
-                                                        type="button"
-                                                        onClick={() => handleDispensaryChange(index, 'connectorType', ct)}
-                                                        className={`px-4 py-2 rounded-full text-sm font-semibold border transition-all ${
-                                                            disp.connectorType === ct
-                                                                ? 'bg-cyan-500 text-white border-cyan-500 shadow-sm shadow-cyan-200'
-                                                                : 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200'
-                                                        }`}
-                                                    >
-                                                        {ct.replace('_', ' ')}
-                                                    </button>
-                                                ))}
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-5">
+                                            {/* Connector Type Selector */}
+                                            <div>
+                                                <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Connector Type</label>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {connectorTypes.map(ct => (
+                                                        <button
+                                                            key={ct}
+                                                            type="button"
+                                                            onClick={() => handleDispensaryChange(index, 'connectorType', ct)}
+                                                            className={`px-4 py-2 rounded-full text-sm font-semibold border transition-all ${
+                                                                disp.connectorType === ct
+                                                                    ? 'bg-cyan-500 text-white border-cyan-500 shadow-sm shadow-cyan-200'
+                                                                    : 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200'
+                                                            }`}
+                                                        >
+                                                            {ct.replace('_', ' ')}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                            {/* Number of Guns Selector */}
+                                            <div>
+                                                <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Number of Guns</label>
+                                                <div className="flex gap-2">
+                                                    {[1, 2].map(n => (
+                                                        <button
+                                                            key={n}
+                                                            type="button"
+                                                            onClick={() => handleDispensaryChange(index, 'numberOfGuns', n)}
+                                                            className={`px-5 py-2 rounded-full text-sm font-semibold border transition-all ${
+                                                                disp.numberOfGuns === n
+                                                                    ? 'bg-cyan-500 text-white border-cyan-500 shadow-sm shadow-cyan-200'
+                                                                    : 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200'
+                                                            }`}
+                                                        >
+                                                            {n} Gun{n > 1 ? 's' : ''}
+                                                        </button>
+                                                    ))}
+                                                </div>
                                             </div>
                                         </div>
                                     </div>

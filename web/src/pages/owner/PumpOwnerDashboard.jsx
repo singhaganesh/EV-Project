@@ -35,7 +35,7 @@ const ownerData = {
                     status: 'Active',
                     connectors: [
                         { id: 'C1-A', type: 'CCS2', maxPower: '150kW', status: 'Charging', currentSession: '32m remaining' },
-                        { id: 'C1-B', type: 'GB_T', maxPower: '50kW', status: 'Idle', currentSession: null }
+                        { id: 'C1-B', type: 'CCS2', maxPower: '50kW', status: 'Idle', currentSession: null }
                     ]
                 },
                 {

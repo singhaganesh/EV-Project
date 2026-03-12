@@ -815,7 +815,5 @@ private fun formatConnectorType(type: ConnectorType): String {
     return when (type) {
         ConnectorType.CCS2 -> "CCS-2"
         ConnectorType.TYPE_2 -> "Type 2"
-        ConnectorType.GB_T -> "GB/T"
-        ConnectorType.MCS -> "MCS (Megawatt)"
     }
 }
