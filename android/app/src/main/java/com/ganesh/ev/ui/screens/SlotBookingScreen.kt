@@ -28,11 +28,33 @@ import com.ganesh.ev.ui.theme.*
 @Composable
 fun SlotBookingScreen(
         stationId: Long,
+        userId: Long?,
+        viewModel: com.ganesh.ev.ui.viewmodel.BookingViewModel,
         onBackClick: () -> Unit,
-        onConfirmBooking: (Long, String, String) -> Unit // (stationId, connectorType, vehicleType)
+        onBookingSuccess: () -> Unit
 ) {
         var selectedConnectorType by remember { mutableStateOf(ConnectorType.CCS2) }
         var selectedVehicle by remember { mutableStateOf("CAR") }
+        val uiState by viewModel.uiState.collectAsState()
+
+        LaunchedEffect(uiState) {
+                if (uiState is com.ganesh.ev.ui.viewmodel.BookingUiState.BookingCreated) {
+                        onBookingSuccess()
+                }
+        }
+
+        if (uiState is com.ganesh.ev.ui.viewmodel.BookingUiState.Error) {
+                AlertDialog(
+                        onDismissRequest = { viewModel.resetState() },
+                        title = { Text("Booking Failed", fontWeight = FontWeight.Bold) },
+                        text = { Text((uiState as com.ganesh.ev.ui.viewmodel.BookingUiState.Error).message) },
+                        confirmButton = {
+                                TextButton(onClick = { viewModel.resetState() }) {
+                                        Text("OK")
+                                }
+                        }
+                )
+        }
 
         Scaffold(
                 topBar = {
@@ -199,14 +221,29 @@ fun SlotBookingScreen(
                         // ── Book Now Button ───────────────────────────────────────────
                         ClayButton(
                                 onClick = {
-                                        onConfirmBooking(
-                                                stationId,
-                                                selectedConnectorType.name,
-                                                selectedVehicle
-                                        )
+                                        if (uiState !is com.ganesh.ev.ui.viewmodel.BookingUiState.Loading) {
+                                                userId?.let { uid ->
+                                                        viewModel.createBooking(
+                                                                uid,
+                                                                stationId,
+                                                                selectedConnectorType.name,
+                                                                selectedVehicle
+                                                        )
+                                                }
+                                        }
                                 },
                                 modifier = Modifier.fillMaxWidth()
-                        ) { Text("⚡ Book Now") }
+                        ) {
+                                if (uiState is com.ganesh.ev.ui.viewmodel.BookingUiState.Loading) {
+                                        CircularProgressIndicator(
+                                                modifier = Modifier.size(24.dp),
+                                                color = MaterialTheme.colorScheme.onPrimary,
+                                                strokeWidth = 2.dp
+                                        )
+                                } else {
+                                        Text("⚡ Book Now")
+                                }
+                        }
 
                         Spacer(modifier = Modifier.height(24.dp))
                 }

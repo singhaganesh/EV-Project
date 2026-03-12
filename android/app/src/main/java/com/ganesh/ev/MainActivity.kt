@@ -15,6 +15,9 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.ganesh.ev.ui.viewmodel.BookingViewModel
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -105,6 +108,9 @@ fun EVChargingApp(userPreferencesRepository: UserPreferencesRepository) {
     var currentUserId by remember { mutableStateOf<Long?>(null) }
     var currentUser by remember { mutableStateOf<User?>(null) }
     val coroutineScope = rememberCoroutineScope()
+    
+    // Shared ViewModel for Booking flow
+    val bookingViewModel: BookingViewModel = viewModel()
 
     val bottomNavItems =
             listOf(
@@ -259,6 +265,7 @@ fun EVChargingApp(userPreferencesRepository: UserPreferencesRepository) {
                         stationId = stationId,
                         onBackClick = { navController.popBackStack() },
                         onBookSlot = { sId ->
+                            bookingViewModel.resetState()
                             navController.navigate(Screen.SlotBooking.createRoute(sId))
                         }
                 )
@@ -271,22 +278,29 @@ fun EVChargingApp(userPreferencesRepository: UserPreferencesRepository) {
                 val stationId = backStackEntry.arguments?.getLong("stationId") ?: return@composable
                 SlotBookingScreen(
                         stationId = stationId,
+                        userId = currentUserId,
+                        viewModel = bookingViewModel,
                         onBackClick = { navController.popBackStack() },
-                        onConfirmBooking = { sId, connectorType, vehicleType ->
+                        onBookingSuccess = { 
+                            // When booking succeeds, navigate to confirmation
+                            // Since they share the ViewModel, we don't need to pass all args in the URL anymore,
+                            // but we'll leave the route structure mostly intact to avoid refactoring the entire Nav wrapper
                             currentUserId?.let { userId ->
                                 navController.navigate(
                                         Screen.BookingConfirmation.createRoute(
                                                 userId,
-                                                sId,
-                                                connectorType,
-                                                vehicleType
+                                                stationId,
+                                                "any", // connectorType no longer needed by confirmation API 
+                                                "any"  // vehicleType no longer needed
                                         )
-                                )
+                                ) {
+                                        // Once confirmed, clear SlotBooking from backstack so back button doesn't go back to checkout
+                                        popUpTo(Screen.SlotBooking.route) { inclusive = true }
+                                }
                             }
                         }
                 )
             }
-
             composable(
                     route = Screen.BookingConfirmation.route,
                     arguments =
@@ -299,23 +313,22 @@ fun EVChargingApp(userPreferencesRepository: UserPreferencesRepository) {
             ) { backStackEntry ->
                 val userId = backStackEntry.arguments?.getLong("userId") ?: return@composable
                 val stationId = backStackEntry.arguments?.getLong("stationId") ?: return@composable
-                val connectorType = backStackEntry.arguments?.getString("connectorType") ?: return@composable
-                val vehicleType = backStackEntry.arguments?.getString("vehicleType") ?: "CAR"
+                val connectorType =
+                        backStackEntry.arguments?.getString("connectorType") ?: return@composable
+                val vehicleType =
+                        backStackEntry.arguments?.getString("vehicleType") ?: return@composable
 
                 BookingConfirmationScreen(
                         userId = userId,
                         stationId = stationId,
                         connectorType = connectorType,
                         vehicleType = vehicleType,
+                        viewModel = bookingViewModel, // Pass the shared viewModel
                         onBack = { navController.popBackStack() },
                         onViewBookings = {
-                            currentUserId?.let { uid ->
-                                navController.navigate("bookings/$uid") { popUpTo("home") }
-                            }
+                            navController.navigate("bookings") { popUpTo("home") }
                         },
-                        onGoHome = {
-                            navController.navigate("home") { popUpTo("home") { inclusive = true } }
-                        }
+                        onGoHome = { navController.navigate("home") { popUpTo("home") } }
                 )
             }
 

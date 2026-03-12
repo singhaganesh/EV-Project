@@ -57,9 +57,15 @@ class BookingViewModel : ViewModel() {
                         _uiState.value = BookingUiState.Error("Server returned empty response")
                     }
                 } else {
-                    val errorBody = response.errorBody()?.string() ?: response.message()
-                    android.util.Log.e("BookingVM", "Error response: code=${response.code()}, body=$errorBody")
-                    _uiState.value = BookingUiState.Error(errorBody)
+                    val rawErrorBody = response.errorBody()?.string() ?: response.message()
+                    val cleanMessage = try {
+                        val json = org.json.JSONObject(rawErrorBody)
+                        json.optString("message", rawErrorBody)
+                    } catch (e: Exception) {
+                        rawErrorBody
+                    }
+                    android.util.Log.e("BookingVM", "Error response: code=${response.code()}, cleanMessage=$cleanMessage")
+                    _uiState.value = BookingUiState.Error(cleanMessage)
                 }
             } catch (e: Exception) {
                 android.util.Log.e("BookingVM", "Exception during booking", e)

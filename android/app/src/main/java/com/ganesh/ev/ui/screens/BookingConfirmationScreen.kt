@@ -35,9 +35,9 @@ fun BookingConfirmationScreen(
 ) {
         val uiState by viewModel.uiState.collectAsState()
 
-        LaunchedEffect(Unit) {
-                viewModel.createBooking(userId, stationId, connectorType, vehicleType)
-        }
+                // We observe uiState which already holds BookingCreated(booking) 
+                // because SlotBookingScreen called viewModel.createBooking() using the shared ViewModel
+
 
         Box(
                 modifier =
