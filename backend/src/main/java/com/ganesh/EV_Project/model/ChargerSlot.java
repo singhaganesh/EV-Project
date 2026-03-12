@@ -26,10 +26,12 @@ public class ChargerSlot {
     // Many slots belong to one station
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "station_id", nullable = false)
+    @com.fasterxml.jackson.annotation.JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "dispensaries", "owner"})
     private Station station;
 
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "dispensary_id")
+    @com.fasterxml.jackson.annotation.JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "station"})
     private Dispensary dispensary;
 
     @Column(nullable = false)

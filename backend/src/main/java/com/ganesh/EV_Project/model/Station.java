@@ -39,6 +39,7 @@ public class Station {
 
     @ManyToOne
     @JoinColumn(name = "owner_id")
+    @com.fasterxml.jackson.annotation.JsonIgnore
     private User owner;
 
     @Column(columnDefinition = "TEXT")
@@ -108,5 +109,6 @@ public class Station {
     }
 
     @OneToMany(mappedBy = "station", cascade = CascadeType.ALL, orphanRemoval = true)
+    @com.fasterxml.jackson.annotation.JsonIgnore
     private java.util.List<Dispensary> dispensaries = new java.util.ArrayList<>();
 }

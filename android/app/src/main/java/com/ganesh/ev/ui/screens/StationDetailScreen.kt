@@ -98,7 +98,7 @@ fun StationDetailScreen(
                         station = state.station,
                         slots = state.slots,
                         powerData = state.powerData,
-                        onSlotClick = { slotId -> onBookSlot(slotId) },
+                        onBookStation = { onBookSlot(stationId) },
                         modifier = Modifier.padding(paddingValues)
                 )
             }
@@ -112,7 +112,7 @@ fun ClayStationDetailContent(
         station: Station,
         slots: List<ChargerSlot>,
         powerData: LivePowerData?,
-        onSlotClick: (Long) -> Unit,
+        onBookStation: () -> Unit,
         modifier: Modifier = Modifier
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
@@ -150,7 +150,7 @@ fun ClayStationDetailContent(
 
         // ── Tab Content ──
         when (selectedTab) {
-            0 -> ChargerTabContent(slots = slots, onSlotClick = onSlotClick)
+            0 -> ChargerTabContent(slots = slots, onBookStation = onBookStation)
             1 -> DetailsTabContent(station = station, powerData = powerData)
             2 -> ReviewsTabContent()
         }
@@ -315,18 +315,17 @@ private fun convertTo24Hour(hour: Int, period: String): Int {
 //  Charger Tab — Filter Chips + Connector Cards
 // ═══════════════════════════════════════════════════════════════
 @Composable
-private fun ChargerTabContent(slots: List<ChargerSlot>, onSlotClick: (Long) -> Unit) {
+private fun ChargerTabContent(slots: List<ChargerSlot>, onBookStation: () -> Unit) {
     var filterAvailable by remember { mutableStateOf(false) }
     var filterAC by remember { mutableStateOf(false) }
     var filterDC by remember { mutableStateOf(false) }
-    var selectedSlotId by remember { mutableStateOf<Long?>(null) }
 
     val filteredSlots =
             slots.filter { slot ->
                 val passAvailable = !filterAvailable || slot.status == SlotStatus.AVAILABLE
                 val passType =
                         when {
-                            filterAC && filterDC -> true // both selected = no filter
+                            filterAC && filterDC -> true
                             filterAC -> slot.slotType == SlotType.AC
                             filterDC -> slot.slotType == SlotType.DC
                             else -> true
@@ -334,10 +333,8 @@ private fun ChargerTabContent(slots: List<ChargerSlot>, onSlotClick: (Long) -> U
                 passAvailable && passType
             }
 
-    // Clear selection if selected slot is no longer in filtered list
-    if (selectedSlotId != null && filteredSlots.none { it.id == selectedSlotId }) {
-        selectedSlotId = null
-    }
+    // Group connectors by connector type
+    val groupedSlots = filteredSlots.groupBy { it.connectorType }
 
     Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
@@ -346,7 +343,7 @@ private fun ChargerTabContent(slots: List<ChargerSlot>, onSlotClick: (Long) -> U
                                 start = 16.dp,
                                 end = 16.dp,
                                 top = 16.dp,
-                                bottom = if (selectedSlotId != null) 80.dp else 16.dp
+                                bottom = 80.dp // space for sticky button
                         ),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
@@ -381,7 +378,7 @@ private fun ChargerTabContent(slots: List<ChargerSlot>, onSlotClick: (Long) -> U
                 }
             }
 
-            // Connector cards
+            // Grouped connectors by type
             if (filteredSlots.isEmpty()) {
                 item {
                     ClayCard(
@@ -396,44 +393,53 @@ private fun ChargerTabContent(slots: List<ChargerSlot>, onSlotClick: (Long) -> U
                     }
                 }
             } else {
-                items(filteredSlots) { slot ->
-                    val isAvailable = slot.status == SlotStatus.AVAILABLE
-                    ConnectorCard(
-                            slot = slot,
-                            isSelected = selectedSlotId == slot.id,
-                            onClick = {
-                                if (isAvailable) {
-                                    selectedSlotId =
-                                            if (selectedSlotId == slot.id) null else slot.id
-                                }
-                            }
-                    )
+                groupedSlots.forEach { (connectorType, slotsOfType) ->
+                    // Section header
+                    item {
+                        Row(
+                                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                    text = "${formatConnectorType(connectorType)} Connectors (${slotsOfType.size})",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                            )
+                            val availCount = slotsOfType.count { it.status == SlotStatus.AVAILABLE }
+                            Text(
+                                    text = "$availCount available",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (availCount > 0) Color(0xFF2E7D32) else MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
+
+                    // Connector cards (read-only)
+                    items(slotsOfType) { slot ->
+                        ConnectorCard(slot = slot)
+                    }
                 }
             }
         }
 
-        // Sticky "Book Slot" button at bottom
-        AnimatedVisibility(
-                visible = selectedSlotId != null,
-                enter = slideInVertically { it } + fadeIn(),
-                exit = slideOutVertically { it } + fadeOut(),
-                modifier =
-                        Modifier.align(Alignment.BottomCenter)
-                                .padding(horizontal = 16.dp, vertical = 12.dp)
+        // Sticky "Book a Slot" button at bottom (always visible)
+        ClayButton(
+                onClick = onBookStation,
+                modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(horizontal = 16.dp, vertical = 12.dp)
+                        .fillMaxWidth(),
+                containerColor = MaterialTheme.colorScheme.primary
         ) {
-            ClayButton(
-                    onClick = { selectedSlotId?.let { onSlotClick(it) } },
-                    modifier = Modifier.fillMaxWidth(),
-                    containerColor = MaterialTheme.colorScheme.primary
-            ) {
-                Icon(
-                        Icons.Default.ElectricBolt,
-                        contentDescription = null,
-                        modifier = Modifier.size(20.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(text = "Book This Slot", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-            }
+            Icon(
+                    Icons.Default.ElectricBolt,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(text = "⚡ Book a Slot", fontWeight = FontWeight.Bold, fontSize = 16.sp)
         }
     }
 }
@@ -458,27 +464,10 @@ private fun FilterChipItem(label: String, selected: Boolean, onClick: () -> Unit
 //  Connector Card — HP Charge Style
 // ═══════════════════════════════════════════════════════════════
 @Composable
-private fun ConnectorCard(slot: ChargerSlot, isSelected: Boolean = false, onClick: () -> Unit) {
-    val isAvailable = slot.status == SlotStatus.AVAILABLE
-    val borderColor =
-            when {
-                isSelected -> Color(0xFF2E7D32) // Green border for selected
-                else -> Color.Transparent
-            }
+private fun ConnectorCard(slot: ChargerSlot) {
 
-    ClayClickableCard(
-            onClick = onClick,
-            modifier =
-                    Modifier.fillMaxWidth()
-                            .then(
-                                    if (isSelected)
-                                            Modifier.border(
-                                                    width = 2.dp,
-                                                    color = borderColor,
-                                                    shape = RoundedCornerShape(16.dp)
-                                            )
-                                    else Modifier
-                            )
+    ClayCard(
+            modifier = Modifier.fillMaxWidth()
     ) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             // Connector icon
@@ -487,21 +476,16 @@ private fun ConnectorCard(slot: ChargerSlot, isSelected: Boolean = false, onClic
                             Modifier.size(48.dp)
                                     .claySurface(cornerRadius = 14.dp, shadowElevation = 2.dp)
                                     .background(
-                                            if (isSelected) Color(0xFFE8F5E9)
-                                            else MaterialTheme.colorScheme.primaryContainer,
+                                            MaterialTheme.colorScheme.primaryContainer,
                                             shape = RoundedCornerShape(14.dp)
                                     ),
                     contentAlignment = Alignment.Center
             ) {
                 Icon(
-                        imageVector =
-                                if (isSelected) Icons.Default.CheckCircle
-                                else Icons.Default.EvStation,
+                        imageVector = Icons.Default.EvStation,
                         contentDescription = null,
                         modifier = Modifier.size(24.dp),
-                        tint =
-                                if (isSelected) Color(0xFF2E7D32)
-                                else MaterialTheme.colorScheme.primary
+                        tint = MaterialTheme.colorScheme.primary
                 )
             }
 
@@ -510,7 +494,7 @@ private fun ConnectorCard(slot: ChargerSlot, isSelected: Boolean = false, onClic
             // Middle section: label + connector type
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                        text = "Connector ${slot.slotNumber ?: slot.id}",
+                        text = "Connector #${slot.slotNumber ?: slot.id}",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                 )
@@ -531,19 +515,18 @@ private fun ConnectorCard(slot: ChargerSlot, isSelected: Boolean = false, onClic
                 }
             }
 
-            // Selection indicator for available slots
-            if (isAvailable) {
-                Icon(
-                        imageVector =
-                                if (isSelected) Icons.Default.RadioButtonChecked
-                                else Icons.Default.RadioButtonUnchecked,
-                        contentDescription = if (isSelected) "Selected" else "Tap to select",
-                        modifier = Modifier.size(24.dp),
-                        tint =
-                                if (isSelected) Color(0xFF2E7D32)
-                                else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-                )
-            }
+            // Status emoji indicator (read-only)
+            Text(
+                    text = when (slot.status) {
+                        SlotStatus.AVAILABLE -> "🟢"
+                        SlotStatus.BOOKED -> "🟣"
+                        SlotStatus.CHARGING -> "🔵"
+                        SlotStatus.RESERVED -> "🟡"
+                        SlotStatus.MAINTENANCE -> "🔴"
+                        SlotStatus.OCCUPIED -> "🟠"
+                    },
+                    fontSize = 20.sp
+            )
         }
     }
 }

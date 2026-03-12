@@ -58,21 +58,20 @@ sealed class Screen(val route: String) {
     object StationDetail : Screen("station/{stationId}") {
         fun createRoute(stationId: Long) = "station/$stationId"
     }
-    object SlotBooking : Screen("booking/slot/{slotId}") {
-        fun createRoute(slotId: Long) = "booking/slot/$slotId"
+    object SlotBooking : Screen("booking/station/{stationId}") {
+        fun createRoute(stationId: Long) = "booking/station/$stationId"
     }
     object BookingConfirmation :
             Screen(
-                    "booking/confirm/user/{userId}/slot/{slotId}/start/{startTime}/end/{endTime}/vehicle/{vehicleType}"
+                    "booking/confirm/user/{userId}/station/{stationId}/connector/{connectorType}/vehicle/{vehicleType}"
             ) {
         fun createRoute(
                 userId: Long,
-                slotId: Long,
-                startTime: String,
-                endTime: String,
+                stationId: Long,
+                connectorType: String,
                 vehicleType: String
         ) =
-                "booking/confirm/user/$userId/slot/$slotId/start/${startTime.replace(":", "%3A")}/end/${endTime.replace(":", "%3A")}/vehicle/$vehicleType"
+                "booking/confirm/user/$userId/station/$stationId/connector/$connectorType/vehicle/$vehicleType"
     }
     object MyBookings : Screen("bookings/{userId}") {
         fun createRoute(userId: Long) = "bookings/$userId"
@@ -259,28 +258,27 @@ fun EVChargingApp(userPreferencesRepository: UserPreferencesRepository) {
                 StationDetailScreen(
                         stationId = stationId,
                         onBackClick = { navController.popBackStack() },
-                        onBookSlot = { slotId ->
-                            navController.navigate(Screen.SlotBooking.createRoute(slotId))
+                        onBookSlot = { sId ->
+                            navController.navigate(Screen.SlotBooking.createRoute(sId))
                         }
                 )
             }
 
             composable(
                     route = Screen.SlotBooking.route,
-                    arguments = listOf(navArgument("slotId") { type = NavType.LongType })
+                    arguments = listOf(navArgument("stationId") { type = NavType.LongType })
             ) { backStackEntry ->
-                val slotId = backStackEntry.arguments?.getLong("slotId") ?: return@composable
+                val stationId = backStackEntry.arguments?.getLong("stationId") ?: return@composable
                 SlotBookingScreen(
-                        slotId = slotId,
+                        stationId = stationId,
                         onBackClick = { navController.popBackStack() },
-                        onConfirmBooking = { sId, startTime, endTime, vehicleType ->
+                        onConfirmBooking = { sId, connectorType, vehicleType ->
                             currentUserId?.let { userId ->
                                 navController.navigate(
                                         Screen.BookingConfirmation.createRoute(
                                                 userId,
                                                 sId,
-                                                startTime,
-                                                endTime,
+                                                connectorType,
                                                 vehicleType
                                         )
                                 )
@@ -294,27 +292,20 @@ fun EVChargingApp(userPreferencesRepository: UserPreferencesRepository) {
                     arguments =
                             listOf(
                                     navArgument("userId") { type = NavType.LongType },
-                                    navArgument("slotId") { type = NavType.LongType },
-                                    navArgument("startTime") { type = NavType.StringType },
-                                    navArgument("endTime") { type = NavType.StringType },
+                                    navArgument("stationId") { type = NavType.LongType },
+                                    navArgument("connectorType") { type = NavType.StringType },
                                     navArgument("vehicleType") { type = NavType.StringType }
                             )
             ) { backStackEntry ->
                 val userId = backStackEntry.arguments?.getLong("userId") ?: return@composable
-                val slotId = backStackEntry.arguments?.getLong("slotId") ?: return@composable
-                val startTime =
-                        backStackEntry.arguments?.getString("startTime")?.replace("%3A", ":")
-                                ?: return@composable
-                val endTime =
-                        backStackEntry.arguments?.getString("endTime")?.replace("%3A", ":")
-                                ?: return@composable
+                val stationId = backStackEntry.arguments?.getLong("stationId") ?: return@composable
+                val connectorType = backStackEntry.arguments?.getString("connectorType") ?: return@composable
                 val vehicleType = backStackEntry.arguments?.getString("vehicleType") ?: "CAR"
 
                 BookingConfirmationScreen(
                         userId = userId,
-                        slotId = slotId,
-                        startTime = startTime,
-                        endTime = endTime,
+                        stationId = stationId,
+                        connectorType = connectorType,
                         vehicleType = vehicleType,
                         onBack = { navController.popBackStack() },
                         onViewBookings = {

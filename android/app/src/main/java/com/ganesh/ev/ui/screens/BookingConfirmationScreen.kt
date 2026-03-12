@@ -25,9 +25,8 @@ import kotlinx.coroutines.delay
 @Composable
 fun BookingConfirmationScreen(
         userId: Long,
-        slotId: Long,
-        startTime: String,
-        endTime: String,
+        stationId: Long,
+        connectorType: String,
         vehicleType: String,
         onBack: () -> Unit,
         onViewBookings: () -> Unit,
@@ -37,7 +36,7 @@ fun BookingConfirmationScreen(
         val uiState by viewModel.uiState.collectAsState()
 
         LaunchedEffect(Unit) {
-                viewModel.createBooking(userId, slotId, startTime, endTime, vehicleType)
+                viewModel.createBooking(userId, stationId, connectorType, vehicleType)
         }
 
         Box(
@@ -64,7 +63,7 @@ fun BookingConfirmationScreen(
                                         ClayProgressIndicator()
                                         Spacer(modifier = Modifier.height(16.dp))
                                         Text(
-                                                text = "Creating your booking...",
+                                                text = "Finding the best connector for you...",
                                                 style = MaterialTheme.typography.bodyLarge
                                         )
                                 }
@@ -79,9 +78,18 @@ fun BookingConfirmationScreen(
                                         // Grace period countdown — updates every second
                                         var graceSecondsLeft by remember { mutableStateOf<Long?>(null) }
                                         LaunchedEffect(booking.expiresAt) {
-                                                val fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")
-                                                val expiry = booking.expiresAt?.let {
-                                                        try { LocalDateTime.parse(it, fmt) } catch (e: Exception) { null }
+                                                val expiry = booking.expiresAt?.let { raw ->
+                                                        try {
+                                                                // Handle fractional seconds of any length
+                                                                val clean = raw.replace(Regex("\\.\\d+$"), "")
+                                                                LocalDateTime.parse(clean, DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"))
+                                                        } catch (e: Exception) {
+                                                                try {
+                                                                        // Fallback: space-separated
+                                                                        val clean = raw.replace(Regex("\\.\\d+$"), "")
+                                                                        LocalDateTime.parse(clean, DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
+                                                                } catch (e2: Exception) { null }
+                                                        }
                                                 }
                                                 if (expiry != null) {
                                                         while (true) {
@@ -174,17 +182,43 @@ fun BookingConfirmationScreen(
 
                                         ClayCard {
                                                 val booking = state.booking
+
+                                                // Assigned connector info from the response
+                                                val assignedSlot = booking.slot
+                                                if (assignedSlot != null) {
+                                                        Row(
+                                                                modifier = Modifier.fillMaxWidth(),
+                                                                horizontalArrangement = Arrangement.SpaceBetween
+                                                        ) {
+                                                                Text("Assigned Connector")
+                                                                Text(
+                                                                        "#${assignedSlot.id} (${assignedSlot.connectorType})",
+                                                                        style = MaterialTheme.typography.titleMedium,
+                                                                        fontWeight = FontWeight.Bold
+                                                                )
+                                                        }
+                                                        Row(
+                                                                modifier = Modifier.fillMaxWidth(),
+                                                                horizontalArrangement = Arrangement.SpaceBetween
+                                                        ) {
+                                                                Text("Power")
+                                                                Text(
+                                                                        "${assignedSlot.powerRating} kW",
+                                                                        style = MaterialTheme.typography.titleSmall,
+                                                                        fontWeight = FontWeight.SemiBold
+                                                                )
+                                                        }
+                                                        ClayDivider()
+                                                }
+
                                                 Row(
                                                         modifier = Modifier.fillMaxWidth(),
-                                                        horizontalArrangement =
-                                                                Arrangement.SpaceBetween
+                                                        horizontalArrangement = Arrangement.SpaceBetween
                                                 ) {
                                                         Text("Booking ID")
                                                         Text(
                                                                 "#${booking.id}",
-                                                                style =
-                                                                        MaterialTheme.typography
-                                                                                .titleMedium,
+                                                                style = MaterialTheme.typography.titleMedium,
                                                                 fontWeight = FontWeight.Bold
                                                         )
                                                 }
@@ -201,19 +235,25 @@ fun BookingConfirmationScreen(
                                                 }
                                                 ClayDivider()
                                                 // Arrival time — formatted nicely
-                                                val isoFmt = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")
-                                                val displayFmt = DateTimeFormatter.ofPattern("h:mm a, EEE dd MMM")
+                                                val displayFmt = DateTimeFormatter.ofPattern("dd MMM yyyy, h:mm a")
                                                 val arrivalDisplay = try {
-                                                        LocalDateTime.parse(booking.startTime, isoFmt)
+                                                        val clean = (booking.startTime ?: "").replace(Regex("\\.\\d+$"), "")
+                                                        LocalDateTime.parse(clean, DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"))
                                                                 .format(displayFmt)
-                                                } catch (e: DateTimeParseException) {
-                                                        booking.startTime.replace("T", " ")
+                                                } catch (e: Exception) {
+                                                        try {
+                                                                val clean = (booking.startTime ?: "").replace(Regex("\\.\\d+$"), "")
+                                                                LocalDateTime.parse(clean, DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
+                                                                        .format(displayFmt)
+                                                        } catch (e2: Exception) {
+                                                                "Just now"
+                                                        }
                                                 }
                                                 Row(
                                                         modifier = Modifier.fillMaxWidth(),
                                                         horizontalArrangement = Arrangement.SpaceBetween
                                                 ) {
-                                                        Text("Arrive by",
+                                                        Text("Booked at",
                                                                 style = MaterialTheme.typography.bodyMedium)
                                                         Text(arrivalDisplay,
                                                                 style = MaterialTheme.typography.bodyMedium,
@@ -267,9 +307,8 @@ fun BookingConfirmationScreen(
                                                 onClick = {
                                                         viewModel.createBooking(
                                                                 userId,
-                                                                slotId,
-                                                                startTime,
-                                                                endTime,
+                                                                stationId,
+                                                                connectorType,
                                                                 vehicleType
                                                         )
                                                 }

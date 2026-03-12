@@ -24,11 +24,14 @@ class BookingViewModel : ViewModel() {
     private val _uiState = MutableStateFlow<BookingUiState>(BookingUiState.Initial)
     val uiState: StateFlow<BookingUiState> = _uiState.asStateFlow()
 
+    /**
+     * "Book Now" — sends stationId + connectorType + vehicleType.
+     * Backend handles: timestamp, slot assignment, grace period.
+     */
     fun createBooking(
             userId: Long,
-            slotId: Long,
-            startTime: String,
-            endTime: String,
+            stationId: Long,
+            connectorType: String,
             vehicleType: String
     ) {
         viewModelScope.launch {
@@ -37,14 +40,17 @@ class BookingViewModel : ViewModel() {
                 val request =
                         BookingRequest(
                                 userId = userId,
-                                slotId = slotId,
-                                startTime = startTime,
-                                endTime = endTime,
+                                stationId = stationId,
+                                connectorType = connectorType,
                                 vehicleType = vehicleType
                         )
+                android.util.Log.d("BookingVM", "Sending booking request: $request")
                 val response = RetrofitClient.apiService.createBooking(request)
+                android.util.Log.d("BookingVM", "Response code: ${response.code()}")
+                android.util.Log.d("BookingVM", "Response successful: ${response.isSuccessful}")
                 if (response.isSuccessful) {
                     val booking = response.body()
+                    android.util.Log.d("BookingVM", "Response body: $booking")
                     if (booking != null) {
                         _uiState.value = BookingUiState.BookingCreated(booking)
                     } else {
@@ -52,9 +58,11 @@ class BookingViewModel : ViewModel() {
                     }
                 } else {
                     val errorBody = response.errorBody()?.string() ?: response.message()
+                    android.util.Log.e("BookingVM", "Error response: code=${response.code()}, body=$errorBody")
                     _uiState.value = BookingUiState.Error(errorBody)
                 }
             } catch (e: Exception) {
+                android.util.Log.e("BookingVM", "Exception during booking", e)
                 _uiState.value = BookingUiState.Error("Network error: ${e.message}")
             }
         }

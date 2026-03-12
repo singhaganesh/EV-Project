@@ -69,10 +69,10 @@ data class Booking(
         val id: Long,
         val user: User?,
         val slot: ChargerSlot?,
-        @SerializedName("startTime") val startTime: String,
-        @SerializedName("endTime") val endTime: String,
+        @SerializedName("startTime") val startTime: String?,
+        @SerializedName("endTime") val endTime: String?,
         val status: BookingStatus,
-        @SerializedName("priceEstimate") val priceEstimate: Double,
+        @SerializedName("priceEstimate") val priceEstimate: Double?,
         @SerializedName("vehicleType") val vehicleType: String?,
         @SerializedName("expiresAt") val expiresAt: String?,
         @SerializedName("createdAt") val createdAt: String?
@@ -131,9 +131,8 @@ data class CompleteProfileRequest(
 
 data class BookingRequest(
         @SerializedName("userId") val userId: Long,
-        @SerializedName("slotId") val slotId: Long,
-        @SerializedName("startTime") val startTime: String,
-        @SerializedName("endTime") val endTime: String,
+        @SerializedName("stationId") val stationId: Long,
+        @SerializedName("connectorType") val connectorType: String,
         @SerializedName("vehicleType") val vehicleType: String
 )
 
