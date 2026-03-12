@@ -69,6 +69,7 @@ public class SecurityConfig {
                     auth.requestMatchers("/ws/**").permitAll();
                     auth.requestMatchers("/api/payments/webhook").permitAll();
                     auth.requestMatchers("/h2-console/**").permitAll();
+                    auth.requestMatchers("/error").permitAll();
                     auth.anyRequest().authenticated();
                 });
 

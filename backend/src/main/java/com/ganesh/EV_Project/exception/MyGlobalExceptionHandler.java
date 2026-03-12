@@ -41,4 +41,10 @@ public class MyGlobalExceptionHandler {
         return new ResponseEntity<>(apiResponse,HttpStatus.BAD_REQUEST);
 
     }
+
+    @ExceptionHandler(org.springframework.dao.DataIntegrityViolationException.class)
+    public ResponseEntity<APIResponse> handleDataIntegrityViolationException(org.springframework.dao.DataIntegrityViolationException e){
+        APIResponse apiResponse = new APIResponse("This dispenser has past or active bookings, so it cannot be deleted. You can set it to 'Maintenance' instead.", false);
+        return new ResponseEntity<>(apiResponse, HttpStatus.CONFLICT);
+    }
 }
