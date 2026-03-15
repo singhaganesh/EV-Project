@@ -80,18 +80,41 @@ public class BookingService {
 
             // Filter for truck support if needed
             if (request.getVehicleType() == VehicleType.TRUCK) {
+                // Trucks must ONLY use truck-capable slots
                 candidates = candidates.stream()
                         .filter(s -> s.getDispensary() != null
                                 && Boolean.TRUE.equals(s.getDispensary().getAcceptsTrucks()))
                         .collect(Collectors.toList());
-            }
 
-            // No available connectors? Suggest next available time
-            if (candidates.isEmpty()) {
-                String nextAvailable = getNextAvailableTime(
-                        request.getStationId(), request.getConnectorType());
-                throw new APIException(
-                        "No " + request.getConnectorType() + " connectors available. " + nextAvailable);
+                if (candidates.isEmpty()) {
+                    String nextAvailable = getNextAvailableTime(request.getStationId(), request.getConnectorType());
+                    throw new APIException("No " + request.getConnectorType() + " truck connectors available. " + nextAvailable);
+                }
+            } else if (request.getVehicleType() == VehicleType.CAR) {
+                // Cars preferably use car-only slots, but CAN use truck slots if allowed
+                List<ChargerSlot> carSlots = candidates.stream()
+                        .filter(s -> s.getDispensary() == null || !Boolean.TRUE.equals(s.getDispensary().getAcceptsTrucks()))
+                        .collect(Collectors.toList());
+
+                List<ChargerSlot> truckSlots = candidates.stream()
+                        .filter(s -> s.getDispensary() != null && Boolean.TRUE.equals(s.getDispensary().getAcceptsTrucks()))
+                        .collect(Collectors.toList());
+
+                if (!carSlots.isEmpty()) {
+                    // Car slots are available! Pick one of these first.
+                    candidates = carSlots;
+                } else if (!truckSlots.isEmpty()) {
+                    // No car slots, but truck slots are available.
+                    if (request.isAllowTruckSlotFallback()) {
+                        candidates = truckSlots; // User opted-in to the truck slot
+                    } else {
+                        throw new APIException("PROMPT_TRUCK_FALLBACK"); // Frontend must catch this exact string
+                    }
+                } else {
+                    // Truly no slots left
+                    String nextAvailable = getNextAvailableTime(request.getStationId(), request.getConnectorType());
+                    throw new APIException("No " + request.getConnectorType() + " connectors available. " + nextAvailable);
+                }
             }
 
             // Random pick

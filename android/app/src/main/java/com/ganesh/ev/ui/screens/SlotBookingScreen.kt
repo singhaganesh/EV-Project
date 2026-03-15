@@ -56,6 +56,36 @@ fun SlotBookingScreen(
                 )
         }
 
+        if (uiState is com.ganesh.ev.ui.viewmodel.BookingUiState.PromptTruckFallback) {
+                val truckPrice = viewModel.truckPrice.value
+                
+                AlertDialog(
+                        onDismissRequest = { viewModel.resetState() },
+                        title = { Text("Only Truck Slots Available", fontWeight = FontWeight.Bold) },
+                        text = { Text("Unfortunately, all standard car slots are currently occupied. However, a truck slot is available. Would you like to book the truck slot instead? Please note that truck slots are priced at ₹ $truckPrice/kWh.") },
+                        confirmButton = {
+                                TextButton(onClick = { 
+                                        userId?.let { uid ->
+                                                viewModel.createBooking(
+                                                        uid,
+                                                        stationId,
+                                                        selectedConnectorType.name,
+                                                        selectedVehicle,
+                                                        allowTruckSlotFallback = true
+                                                )
+                                        }
+                                }) {
+                                        Text("Book Truck Slot")
+                                }
+                        },
+                        dismissButton = {
+                                TextButton(onClick = { viewModel.resetState() }) {
+                                        Text("Cancel", color = MaterialTheme.colorScheme.error)
+                                }
+                        }
+                )
+        }
+
         Scaffold(
                 topBar = {
                         ClayTopBar(

@@ -5,6 +5,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -13,6 +14,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -44,7 +46,7 @@ import java.util.Locale
 fun StationDetailScreen(
         stationId: Long,
         onBackClick: () -> Unit,
-        onBookSlot: (Long) -> Unit,
+        onBookSlot: (Long, Double?) -> Unit,
         viewModel: StationViewModel = viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -98,7 +100,7 @@ fun StationDetailScreen(
                         station = state.station,
                         slots = state.slots,
                         powerData = state.powerData,
-                        onBookStation = { onBookSlot(stationId) },
+                        onBookStation = { onBookSlot(stationId, state.station.truckPricePerKwh) },
                         modifier = Modifier.padding(paddingValues)
                 )
             }
@@ -333,8 +335,8 @@ private fun ChargerTabContent(slots: List<ChargerSlot>, onBookStation: () -> Uni
                 passAvailable && passType
             }
 
-    // Group connectors by connector type
-    val groupedSlots = filteredSlots.groupBy { it.connectorType }
+    // Group connectors by dispensary (physical machine)
+    val groupedSlots = filteredSlots.groupBy { it.dispensary }
 
     Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
@@ -345,7 +347,7 @@ private fun ChargerTabContent(slots: List<ChargerSlot>, onBookStation: () -> Uni
                                 top = 16.dp,
                                 bottom = 80.dp // space for sticky button
                         ),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // Filter chips
             item {
@@ -378,7 +380,7 @@ private fun ChargerTabContent(slots: List<ChargerSlot>, onBookStation: () -> Uni
                 }
             }
 
-            // Grouped connectors by type
+            // Grouped by Dispensary (Machine Level)
             if (filteredSlots.isEmpty()) {
                 item {
                     ClayCard(
@@ -393,32 +395,13 @@ private fun ChargerTabContent(slots: List<ChargerSlot>, onBookStation: () -> Uni
                     }
                 }
             } else {
-                groupedSlots.forEach { (connectorType, slotsOfType) ->
-                    // Section header
+                groupedSlots.forEach { (dispensary, slotsForMachine) ->
                     item {
-                        Row(
-                                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(
-                                    text = "${formatConnectorType(connectorType)} Connectors (${slotsOfType.size})",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary
-                            )
-                            val availCount = slotsOfType.count { it.status == SlotStatus.AVAILABLE }
-                            Text(
-                                    text = "$availCount available",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = if (availCount > 0) Color(0xFF2E7D32) else MaterialTheme.colorScheme.error
-                            )
-                        }
-                    }
-
-                    // Connector cards (read-only)
-                    items(slotsOfType) { slot ->
-                        ConnectorCard(slot = slot)
+                        DispensaryCard(
+                                dispensary = dispensary,
+                                slots = slotsForMachine,
+                                station = slotsForMachine.firstOrNull()?.station
+                        )
                     }
                 }
             }
@@ -461,72 +444,226 @@ private fun FilterChipItem(label: String, selected: Boolean, onClick: () -> Unit
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  Connector Card — HP Charge Style
+//  Dispensary Card (Machine Level) + Child Connectors
 // ═══════════════════════════════════════════════════════════════
 @Composable
-private fun ConnectorCard(slot: ChargerSlot) {
+private fun DispensaryCard(dispensary: Dispensary?, slots: List<ChargerSlot>, station: Station?) {
+    val machineName = dispensary?.name ?: "Main Charger Unit"
+    val isAc = slots.any { it.slotType == SlotType.AC }
+    val isDc = slots.any { it.slotType == SlotType.DC }
+    val typeLabel = if (isDc) "DC" else if (isAc) "AC" else "Unknown"
+    val powerRating = dispensary?.totalPowerKw ?: slots.sumOf { it.powerRating }
+    val priceText = if (dispensary?.acceptsTrucks == true) {
+        station?.truckPricePerKwh?.let { "₹ $it/kWh" } ?: station?.pricePerKwh?.let { "₹ $it/kWh" } ?: ""
+    } else {
+        station?.pricePerKwh?.let { "₹ $it/kWh" } ?: ""
+    }
 
     ClayCard(
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp), 
+            cornerRadius = 24.dp
     ) {
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            // Connector icon
-            Box(
-                    modifier =
-                            Modifier.size(48.dp)
-                                    .claySurface(cornerRadius = 14.dp, shadowElevation = 2.dp)
-                                    .background(
-                                            MaterialTheme.colorScheme.primaryContainer,
-                                            shape = RoundedCornerShape(14.dp)
-                                    ),
-                    contentAlignment = Alignment.Center
+        Column(modifier = Modifier.padding(16.dp)) {
+            // Header Row: Name
+            Text(
+                    text = machineName,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onBackground
+            )
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            // Sub-header Row: Type | Power | Price
+            Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                        text = "$typeLabel | ${powerRating.toInt()}kW",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                        text = "Last used recently",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                )
+            }
+
+            if (priceText.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                        text = priceText,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onBackground
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Analytics Section
+            Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color(0xFFFFF8E1).copy(alpha = 0.6f)
+            ) {
+                Row(
+                        modifier = Modifier.fillMaxWidth().padding(12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                                text = "Charger Analytics",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onBackground
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                    Icons.Default.Bolt,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(12.dp),
+                                    tint = Color(0xFFE65100)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                    text = "100+ charging sessions done so far",
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    Icon(
+                            Icons.AutoMirrored.Filled.ArrowForward,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // List of guns/connectors
+            slots.forEachIndexed { index, slot ->
+                ConnectorRow(slot = slot, index = index + 1)
+                if (index < slots.size - 1) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+            }
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  Nested Connector Row (Child of Dispensary)
+// ═══════════════════════════════════════════════════════════════
+@Composable
+private fun ConnectorRow(slot: ChargerSlot, index: Int) {
+    Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+    ) {
+        Row(
+                modifier = Modifier.fillMaxWidth().padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Connector icon based on type (simulated visual distinction)
+            Column(
+                    modifier = Modifier.width(60.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Icon(
                         imageVector = Icons.Default.EvStation,
                         contentDescription = null,
-                        modifier = Modifier.size(24.dp),
-                        tint = MaterialTheme.colorScheme.primary
-                )
-            }
-
-            Spacer(modifier = Modifier.width(12.dp))
-
-            // Middle section: label + connector type
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                        text = "Connector #${slot.slotNumber ?: slot.id}",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
+                        modifier = Modifier.size(32.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                         text = formatConnectorType(slot.connectorType),
-                        style = MaterialTheme.typography.bodySmall,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            Spacer(modifier = Modifier.width(16.dp))
+
+            // Details
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                        text = "Connector $index",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
                 )
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Badges row
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    // Availability badge
-                    SlotStatusBadge(status = slot.status)
-                    // Power badge
-                    PowerBadge(powerKw = slot.powerRating, slotType = slot.slotType)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // Availability badge (design matching the screenshot green outline)
+                    Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = Color.Transparent,
+                            border = BorderStroke(
+                                    1.dp,
+                                    if (slot.status == SlotStatus.AVAILABLE) Color(0xFF4CAF50)
+                                    else Color(0xFF9E9E9E)
+                            )
+                    ) {
+                        Row(
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (slot.status == SlotStatus.AVAILABLE) {
+                                Icon(
+                                        Icons.Default.CheckCircle,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(10.dp),
+                                        tint = Color(0xFF4CAF50)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                            }
+                            Text(
+                                    text = if (slot.status == SlotStatus.AVAILABLE) "Available" else slot.status.name.lowercase().replaceFirstChar { it.uppercase() },
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (slot.status == SlotStatus.AVAILABLE) Color(0xFF4CAF50) else Color(0xFF9E9E9E)
+                            )
+                        }
+                    }
+
+                    // Power Rating Badge (gray outline)
+                    Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = Color.Transparent,
+                            border = BorderStroke(1.dp, Color(0xFFE0E0E0))
+                    ) {
+                        Row(
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                    Icons.Default.ElectricBolt,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(10.dp),
+                                    tint = Color(0xFF757575)
+                            )
+                            Spacer(modifier = Modifier.width(2.dp))
+                            Text(
+                                    text = "Upto ${slot.powerRating.toInt()}kW",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color(0xFF757575)
+                            )
+                        }
+                    }
                 }
             }
-
-            // Status emoji indicator (read-only)
-            Text(
-                    text = when (slot.status) {
-                        SlotStatus.AVAILABLE -> "🟢"
-                        SlotStatus.BOOKED -> "🟣"
-                        SlotStatus.CHARGING -> "🔵"
-                        SlotStatus.RESERVED -> "🟡"
-                        SlotStatus.MAINTENANCE -> "🔴"
-                        SlotStatus.OCCUPIED -> "🟠"
-                    },
-                    fontSize = 20.sp
-            )
         }
     }
 }

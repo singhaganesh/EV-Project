@@ -24,4 +24,7 @@ public class BookingRequest {
 
     // Optional: admin override to force a specific slot
     private Long slotId;
+
+    // Optional: If true, allows booking a truck slot for a car if car slots are full
+    private boolean allowTruckSlotFallback = false;
 }

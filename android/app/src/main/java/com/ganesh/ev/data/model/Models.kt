@@ -131,7 +131,8 @@ data class BookingRequest(
         @SerializedName("userId") val userId: Long,
         @SerializedName("stationId") val stationId: Long,
         @SerializedName("connectorType") val connectorType: String,
-        @SerializedName("vehicleType") val vehicleType: String
+        @SerializedName("vehicleType") val vehicleType: String,
+        @SerializedName("allowTruckSlotFallback") val allowTruckSlotFallback: Boolean = false
 )
 
 data class StartChargingRequest(@SerializedName("bookingId") val bookingId: Long)

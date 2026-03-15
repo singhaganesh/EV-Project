@@ -347,6 +347,30 @@ fun ClayChip(text: String, color: Color, modifier: Modifier = Modifier) {
         ) { Text(text = text, color = color, style = MaterialTheme.typography.labelMedium) }
 }
 
+// Simple Status Chip - cleaner look without card background
+@Composable
+fun StatusChip(text: String, color: Color, modifier: Modifier = Modifier) {
+        val shape = RoundedCornerShape(50.dp)
+        Box(
+                modifier =
+                        modifier.clip(shape)
+                                .background(color.copy(alpha = 0.08f))
+                                .border(
+                                        width = 1.dp,
+                                        color = color.copy(alpha = 0.3f),
+                                        shape = shape
+                                )
+                                .padding(horizontal = 14.dp, vertical = 6.dp)
+        ) {
+                Text(
+                        text = text,
+                        color = color,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
+                )
+        }
+}
+
 // ═══════════════════════════════════════════════════════════════
 //  ClayIconButton — circular clay button
 // ═══════════════════════════════════════════════════════════════

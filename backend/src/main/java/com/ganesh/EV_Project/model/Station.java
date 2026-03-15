@@ -109,6 +109,7 @@ public class Station {
     }
 
     @OneToMany(mappedBy = "station", cascade = CascadeType.ALL, orphanRemoval = true)
-    @com.fasterxml.jackson.annotation.JsonIgnore
+    @com.fasterxml.jackson.annotation.JsonManagedReference
+    @Builder.Default
     private java.util.List<Dispensary> dispensaries = new java.util.ArrayList<>();
 }

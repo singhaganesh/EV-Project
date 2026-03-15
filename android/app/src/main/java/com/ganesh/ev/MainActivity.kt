@@ -15,9 +15,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.ganesh.ev.ui.viewmodel.BookingViewModel
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -31,6 +29,7 @@ import com.ganesh.ev.data.repository.UserPreferencesRepository
 import com.ganesh.ev.ui.screens.*
 import com.ganesh.ev.ui.theme.ClayBottomBar
 import com.ganesh.ev.ui.theme.EvTheme
+import com.ganesh.ev.ui.viewmodel.BookingViewModel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -68,12 +67,7 @@ sealed class Screen(val route: String) {
             Screen(
                     "booking/confirm/user/{userId}/station/{stationId}/connector/{connectorType}/vehicle/{vehicleType}"
             ) {
-        fun createRoute(
-                userId: Long,
-                stationId: Long,
-                connectorType: String,
-                vehicleType: String
-        ) =
+        fun createRoute(userId: Long, stationId: Long, connectorType: String, vehicleType: String) =
                 "booking/confirm/user/$userId/station/$stationId/connector/$connectorType/vehicle/$vehicleType"
     }
     object MyBookings : Screen("bookings/{userId}") {
@@ -108,7 +102,7 @@ fun EVChargingApp(userPreferencesRepository: UserPreferencesRepository) {
     var currentUserId by remember { mutableStateOf<Long?>(null) }
     var currentUser by remember { mutableStateOf<User?>(null) }
     val coroutineScope = rememberCoroutineScope()
-    
+
     // Shared ViewModel for Booking flow
     val bookingViewModel: BookingViewModel = viewModel()
 
@@ -125,7 +119,8 @@ fun EVChargingApp(userPreferencesRepository: UserPreferencesRepository) {
 
     val showBottomBar =
             currentDestination?.route in
-                    listOf("home", "bottom_bookings", "bottom_history", "profile")
+                    listOf("home", "bottom_bookings", "bottom_history", "profile") ||
+                    currentDestination?.route?.startsWith("bookings/") == true
 
     Scaffold(
             modifier = Modifier.fillMaxSize(),
@@ -134,13 +129,23 @@ fun EVChargingApp(userPreferencesRepository: UserPreferencesRepository) {
                 if (showBottomBar && currentUserId != null) {
                     ClayBottomBar {
                         bottomNavItems.forEach { item ->
+                            val isSelected =
+                                    when (item) {
+                                        BottomNavItem.Bookings ->
+                                                currentDestination?.route?.startsWith("bookings") ==
+                                                        true
+                                        BottomNavItem.History ->
+                                                currentDestination?.route?.startsWith("history") ==
+                                                        true
+                                        else ->
+                                                currentDestination?.hierarchy?.any {
+                                                    it.route == item.route
+                                                } == true
+                                    }
                             NavigationBarItem(
                                     icon = { Icon(item.icon, contentDescription = item.label) },
                                     label = { Text(item.label) },
-                                    selected =
-                                            currentDestination?.hierarchy?.any {
-                                                it.route == item.route
-                                            } == true,
+                                    selected = isSelected,
                                     colors =
                                             NavigationBarItemDefaults.colors(
                                                     selectedIconColor =
@@ -264,8 +269,9 @@ fun EVChargingApp(userPreferencesRepository: UserPreferencesRepository) {
                 StationDetailScreen(
                         stationId = stationId,
                         onBackClick = { navController.popBackStack() },
-                        onBookSlot = { sId ->
+                        onBookSlot = { sId, truckPrice ->
                             bookingViewModel.resetState()
+                            bookingViewModel.setTruckPrice(truckPrice)
                             navController.navigate(Screen.SlotBooking.createRoute(sId))
                         }
                 )
@@ -281,21 +287,25 @@ fun EVChargingApp(userPreferencesRepository: UserPreferencesRepository) {
                         userId = currentUserId,
                         viewModel = bookingViewModel,
                         onBackClick = { navController.popBackStack() },
-                        onBookingSuccess = { 
+                        onBookingSuccess = {
                             // When booking succeeds, navigate to confirmation
-                            // Since they share the ViewModel, we don't need to pass all args in the URL anymore,
-                            // but we'll leave the route structure mostly intact to avoid refactoring the entire Nav wrapper
+                            // Since they share the ViewModel, we don't need to pass all args in the
+                            // URL anymore,
+                            // but we'll leave the route structure mostly intact to avoid
+                            // refactoring the entire Nav wrapper
                             currentUserId?.let { userId ->
                                 navController.navigate(
                                         Screen.BookingConfirmation.createRoute(
                                                 userId,
                                                 stationId,
-                                                "any", // connectorType no longer needed by confirmation API 
-                                                "any"  // vehicleType no longer needed
+                                                "any", // connectorType no longer needed by
+                                                // confirmation API
+                                                "any" // vehicleType no longer needed
                                         )
                                 ) {
-                                        // Once confirmed, clear SlotBooking from backstack so back button doesn't go back to checkout
-                                        popUpTo(Screen.SlotBooking.route) { inclusive = true }
+                                    // Once confirmed, clear SlotBooking from backstack so back
+                                    // button doesn't go back to checkout
+                                    popUpTo(Screen.SlotBooking.route) { inclusive = true }
                                 }
                             }
                         }
@@ -325,9 +335,7 @@ fun EVChargingApp(userPreferencesRepository: UserPreferencesRepository) {
                         vehicleType = vehicleType,
                         viewModel = bookingViewModel, // Pass the shared viewModel
                         onBack = { navController.popBackStack() },
-                        onViewBookings = {
-                            navController.navigate("bookings") { popUpTo("home") }
-                        },
+                        onViewBookings = { navController.navigate("bookings") { popUpTo("home") } },
                         onGoHome = { navController.navigate("home") { popUpTo("home") } }
                 )
             }

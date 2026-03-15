@@ -10,6 +10,7 @@ import java.util.List;
 public interface StationRepository extends JpaRepository<Station, Long> {
         boolean existsByName(String name);
 
+        @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"dispensaries"})
         List<Station> findByOwnerId(Long ownerId);
 
         // Bounding box query — returns only stations visible in the current map
