@@ -113,7 +113,11 @@ fun SlotBookingScreen(
                         Spacer(modifier = Modifier.height(4.dp))
 
                         // ── Book Now Info Banner ──────────────────────────────────────
-                        ClayCard(containerColor = MaterialTheme.colorScheme.secondaryContainer) {
+                        Column(
+                                modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 8.dp)
+                        ) {
                                 Row(
                                         modifier = Modifier.fillMaxWidth(),
                                         verticalAlignment = Alignment.CenterVertically,
@@ -125,52 +129,55 @@ fun SlotBookingScreen(
                                                         "Instant Booking",
                                                         style = MaterialTheme.typography.titleSmall,
                                                         fontWeight = FontWeight.Bold,
-                                                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                                                        color = MaterialTheme.colorScheme.primary
                                                 )
                                                 Text(
                                                         "Book now & arrive within 20 minutes. The system will find the best available connector for you.",
                                                         style = MaterialTheme.typography.bodySmall,
-                                                        color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f)
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                                 )
                                         }
                                 }
                         }
 
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
                         // ── Connector Type Selector ───────────────────────────────────
-                        ClayCard {
+                        Column(modifier = Modifier.fillMaxWidth()) {
                                 Text(
                                         "Select Connector Type",
                                         style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.Bold
                                 )
                                 Spacer(modifier = Modifier.height(12.dp))
-                                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                        Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                        ) {
-                                                ConnectorTypeChip(
-                                                        label = "CCS2",
-                                                        subLabel = "DC Fast",
-                                                        emoji = "🔌",
-                                                        selected = selectedConnectorType == ConnectorType.CCS2,
-                                                        onClick = { selectedConnectorType = ConnectorType.CCS2 },
-                                                        modifier = Modifier.weight(1f)
-                                                )
-                                                ConnectorTypeChip(
-                                                        label = "Type 2",
-                                                        subLabel = "AC",
-                                                        emoji = "🔋",
-                                                        selected = selectedConnectorType == ConnectorType.TYPE_2,
-                                                        onClick = { selectedConnectorType = ConnectorType.TYPE_2 },
-                                                        modifier = Modifier.weight(1f)
-                                                )
-                                        }
+                                Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                        ConnectorTypeChip(
+                                                label = "CCS2",
+                                                subLabel = "DC Fast",
+                                                emoji = "🔌",
+                                                selected = selectedConnectorType == ConnectorType.CCS2,
+                                                onClick = { selectedConnectorType = ConnectorType.CCS2 },
+                                                modifier = Modifier.weight(1f)
+                                        )
+                                        ConnectorTypeChip(
+                                                label = "Type 2",
+                                                subLabel = "AC",
+                                                emoji = "🔋",
+                                                selected = selectedConnectorType == ConnectorType.TYPE_2,
+                                                onClick = { selectedConnectorType = ConnectorType.TYPE_2 },
+                                                modifier = Modifier.weight(1f)
+                                        )
                                 }
                         }
 
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
                         // ── Vehicle Selector ──────────────────────────────────────────
-                        ClayCard {
+                        Column(modifier = Modifier.fillMaxWidth()) {
                                 Text(
                                         "Select Vehicle",
                                         style = MaterialTheme.typography.titleMedium,
@@ -198,8 +205,14 @@ fun SlotBookingScreen(
                                 }
                         }
 
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
                         // ── Booking Summary ───────────────────────────────────────────
-                        ClayCard(containerColor = MaterialTheme.colorScheme.primaryContainer) {
+                        Column(
+                                modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 4.dp)
+                        ) {
                                 Text(
                                         "Summary",
                                         style = MaterialTheme.typography.titleMedium,
@@ -209,7 +222,9 @@ fun SlotBookingScreen(
                                 SummaryRow("Connector", "${selectedConnectorType.name.replace("_", " ")}")
                                 SummaryRow("Vehicle", if (selectedVehicle == "CAR") "🚗 Car" else "🚛 Truck")
                                 SummaryRow("Grace Period", "20 minutes to arrive")
-                                ClayDivider()
+                                
+                                Spacer(modifier = Modifier.height(8.dp))
+                                
                                 Row(
                                         modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.SpaceBetween

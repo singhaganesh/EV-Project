@@ -177,7 +177,7 @@ private fun StationHeader(station: Station) {
             ) {
                 Text(
                         text = station.name,
-                        style = MaterialTheme.typography.titleLarge,
+                        style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.weight(1f),
                         maxLines = 2,
@@ -408,21 +408,40 @@ private fun ChargerTabContent(slots: List<ChargerSlot>, onBookStation: () -> Uni
         }
 
         // Sticky "Book a Slot" button at bottom (always visible)
+        val isOpen = isStationCurrentlyOpen(slots.firstOrNull()?.station?.operatingHours)
+        
         ClayButton(
-                onClick = onBookStation,
+                onClick = { if (isOpen) onBookStation() },
+                enabled = isOpen,
                 modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .padding(horizontal = 16.dp, vertical = 12.dp)
                         .fillMaxWidth(),
-                containerColor = MaterialTheme.colorScheme.primary
+                containerColor = if (isOpen) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
         ) {
-            Icon(
-                    Icons.Default.ElectricBolt,
-                    contentDescription = null,
-                    modifier = Modifier.size(20.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(text = "⚡ Book a Slot", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                if (isOpen) {
+                        Icon(
+                                Icons.Default.ElectricBolt,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(text = "⚡ Book a Slot", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                } else {
+                        Icon(
+                                Icons.Default.Lock,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                                text = "Station Closed", 
+                                fontWeight = FontWeight.Bold, 
+                                fontSize = 16.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                }
         }
     }
 }
@@ -467,7 +486,7 @@ private fun DispensaryCard(dispensary: Dispensary?, slots: List<ChargerSlot>, st
             // Header Row: Name
             Text(
                     text = machineName,
-                    style = MaterialTheme.typography.titleLarge,
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onBackground
             )
@@ -599,7 +618,7 @@ private fun ConnectorRow(slot: ChargerSlot, index: Int) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                         text = "Connector $index",
-                        style = MaterialTheme.typography.titleMedium,
+                        style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Bold
                 )
                 Spacer(modifier = Modifier.height(8.dp))

@@ -16,6 +16,7 @@ import com.ganesh.ev.data.model.BookingStatus
 import com.ganesh.ev.ui.theme.*
 import com.ganesh.ev.ui.viewmodel.BookingUiState
 import com.ganesh.ev.ui.viewmodel.BookingViewModel
+import com.ganesh.ev.util.formatBookingDateTime
 import java.text.SimpleDateFormat
 import java.util.Locale
 import kotlinx.coroutines.delay
@@ -593,11 +594,9 @@ fun BookingDetailScreen(
                                                         ) {
                                                                 Text("Start")
                                                                 Text(
-                                                                        booking.startTime?.replace(
-                                                                                "T",
-                                                                                " "
+                                                                        formatBookingDateTime(
+                                                                                booking.startTime
                                                                         )
-                                                                                ?: "-"
                                                                 )
                                                         }
                                                         Row(
@@ -607,11 +606,9 @@ fun BookingDetailScreen(
                                                         ) {
                                                                 Text("End")
                                                                 Text(
-                                                                        booking.endTime?.replace(
-                                                                                "T",
-                                                                                " "
+                                                                        formatBookingDateTime(
+                                                                                booking.endTime
                                                                         )
-                                                                                ?: "-"
                                                                 )
                                                         }
                                                         HorizontalDivider(

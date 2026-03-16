@@ -19,6 +19,7 @@ import com.ganesh.ev.data.model.BookingStatus
 import com.ganesh.ev.ui.theme.*
 import com.ganesh.ev.ui.viewmodel.BookingUiState
 import com.ganesh.ev.ui.viewmodel.BookingViewModel
+import com.ganesh.ev.util.formatBookingDateTime
 import java.text.SimpleDateFormat
 import java.util.Locale
 import kotlinx.coroutines.delay
@@ -293,7 +294,7 @@ fun ClayBookingCard(booking: Booking, onClick: () -> Unit) {
         // Time and price row
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(
-                    text = booking.startTime?.replace("T", " ")?.take(16) ?: "-",
+                    text = formatBookingDateTime(booking.startTime),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -385,7 +386,7 @@ fun BookingListItem(booking: Booking, onClick: () -> Unit) {
         // Time and price
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(
-                    text = booking.startTime?.replace("T", " ")?.take(16) ?: "-",
+                    text = formatBookingDateTime(booking.startTime),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
             )

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { X, Plus, Trash2, MapPin, Coffee, Wifi, Car, CreditCard, BatteryCharging, Check, ArrowRight, ArrowLeft } from 'lucide-react';
+import { X, Plus, Trash2, MapPin, Coffee, Wifi, Car, CreditCard, BatteryCharging, Check, ArrowRight, ArrowLeft, Toilet } from 'lucide-react';
 import api from '../../api/axios';
 import toast from 'react-hot-toast';
 import LocationPicker from './LocationPicker';
@@ -8,7 +8,7 @@ import LocationPicker from './LocationPicker';
 const AMENITIES_LIST = [
     { id: 'Cafe', label: 'Cafe & Snacks', icon: Coffee },
     { id: 'WiFi', label: 'Free WiFi', icon: Wifi },
-    { id: 'Restroom', label: 'Restrooms', icon: Car },
+    { id: 'Restroom', label: 'Restrooms', icon: Toilet },
     { id: 'CCTV', label: '24/7 CCTV', icon: BatteryCharging },
     { id: 'Shopping', label: 'Shopping Area', icon: CreditCard },
     { id: 'Lounge', label: 'Waiting Lounge', icon: Coffee }
