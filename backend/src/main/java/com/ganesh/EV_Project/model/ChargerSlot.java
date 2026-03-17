@@ -3,6 +3,7 @@ package com.ganesh.EV_Project.model;
 import com.ganesh.EV_Project.enums.ConnectorType;
 import com.ganesh.EV_Project.enums.SlotStatus;
 import com.ganesh.EV_Project.enums.SlotType;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -17,6 +18,7 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class ChargerSlot {
 
     @Id

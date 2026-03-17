@@ -90,9 +90,11 @@ data class ChargingSession(
         val booking: Booking?,
         @SerializedName("startTime") val startTime: String,
         @SerializedName("endTime") val endTime: String?,
-        @SerializedName("energyConsumed") val energyConsumed: Double?,
-        val cost: Double?
+        @SerializedName("energyKwh") val energyKwh: Double?,
+        @SerializedName("totalCost") val totalCost: Double?
 )
+
+data class SimpleChargingSession(val id: Long)
 
 data class Payment(
         val id: Long,
@@ -151,4 +153,21 @@ data class AuthData(
 data class PaymentIntentResponse(
         @SerializedName("clientSecret") val clientSecret: String,
         @SerializedName("paymentIntentId") val paymentIntentId: String
+)
+
+data class SimulatedSession(
+    val bookingId: Long,
+    val slotId: Long,
+    val stationId: Long,
+    val powerKw: Double,
+    val energyDispensedKwh: Double,
+    val socPercentage: Double,
+    val voltageV: Double,
+    val currentA: Double,
+    val connectorTempC: Double,
+    val totalCost: Double,
+    val minutesRemaining: Double,
+    val maxPowerKw: Double,
+    val batteryCapacityKwh: Double,
+    val pricePerKwh: Double
 )

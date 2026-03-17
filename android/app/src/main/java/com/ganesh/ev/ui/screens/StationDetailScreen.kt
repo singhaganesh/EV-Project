@@ -45,20 +45,29 @@ import java.util.Locale
 @Composable
 fun StationDetailScreen(
         stationId: Long,
-        onBackClick: () -> Unit,
-        onBookSlot: (Long, Double?) -> Unit,
+        onBack: () -> Unit,
+        onBookStation: () -> Unit,
         viewModel: StationViewModel = viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val slotUpdates by viewModel.slotUpdates.collectAsState()
 
-    LaunchedEffect(stationId) { viewModel.loadStationDetail(stationId) }
+    LaunchedEffect(stationId) { 
+        viewModel.loadStationDetail(stationId)
+        viewModel.subscribeToStation(stationId)
+    }
+
+    DisposableEffect(stationId) {
+        onDispose { viewModel.disconnectStation() }
+    }
+
 
     Scaffold(
             topBar = {
                 ClayTopBar(
                         title = "Station Details",
                         navigationIcon = {
-                            IconButton(onClick = onBackClick) {
+                            IconButton(onClick = onBack) {
                                 Icon(
                                         Icons.AutoMirrored.Filled.ArrowBack,
                                         contentDescription = "Back"
@@ -99,8 +108,9 @@ fun StationDetailScreen(
                 ClayStationDetailContent(
                         station = state.station,
                         slots = state.slots,
+                        slotUpdates = slotUpdates,
                         powerData = state.powerData,
-                        onBookStation = { onBookSlot(stationId, state.station.truckPricePerKwh) },
+                        onBookStation = { onBookStation() },
                         modifier = Modifier.padding(paddingValues)
                 )
             }
@@ -113,6 +123,7 @@ fun StationDetailScreen(
 fun ClayStationDetailContent(
         station: Station,
         slots: List<ChargerSlot>,
+        slotUpdates: Map<Long, SimulatedSession>,
         powerData: LivePowerData?,
         onBookStation: () -> Unit,
         modifier: Modifier = Modifier
@@ -152,7 +163,7 @@ fun ClayStationDetailContent(
 
         // ── Tab Content ──
         when (selectedTab) {
-            0 -> ChargerTabContent(slots = slots, onBookStation = onBookStation)
+            0 -> ChargerTabContent(slots = slots, slotUpdates = slotUpdates, onBookStation = onBookStation)
             1 -> DetailsTabContent(station = station, powerData = powerData)
             2 -> ReviewsTabContent()
         }
@@ -317,7 +328,11 @@ private fun convertTo24Hour(hour: Int, period: String): Int {
 //  Charger Tab — Filter Chips + Connector Cards
 // ═══════════════════════════════════════════════════════════════
 @Composable
-private fun ChargerTabContent(slots: List<ChargerSlot>, onBookStation: () -> Unit) {
+private fun ChargerTabContent(
+    slots: List<ChargerSlot>, 
+    slotUpdates: Map<Long, SimulatedSession>,
+    onBookStation: () -> Unit
+) {
     var filterAvailable by remember { mutableStateOf(false) }
     var filterAC by remember { mutableStateOf(false) }
     var filterDC by remember { mutableStateOf(false) }
@@ -349,7 +364,7 @@ private fun ChargerTabContent(slots: List<ChargerSlot>, onBookStation: () -> Uni
                         ),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Filter chips
+            // ... (Filter chips code) ...
             item {
                 Row(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -400,14 +415,15 @@ private fun ChargerTabContent(slots: List<ChargerSlot>, onBookStation: () -> Uni
                         DispensaryCard(
                                 dispensary = dispensary,
                                 slots = slotsForMachine,
+                                slotUpdates = slotUpdates,
                                 station = slotsForMachine.firstOrNull()?.station
                         )
                     }
                 }
             }
         }
-
-        // Sticky "Book a Slot" button at bottom (always visible)
+        
+        // ... (Sticky button code) ...
         val isOpen = isStationCurrentlyOpen(slots.firstOrNull()?.station?.operatingHours)
         
         ClayButton(
@@ -466,7 +482,12 @@ private fun FilterChipItem(label: String, selected: Boolean, onClick: () -> Unit
 //  Dispensary Card (Machine Level) + Child Connectors
 // ═══════════════════════════════════════════════════════════════
 @Composable
-private fun DispensaryCard(dispensary: Dispensary?, slots: List<ChargerSlot>, station: Station?) {
+private fun DispensaryCard(
+    dispensary: Dispensary?, 
+    slots: List<ChargerSlot>, 
+    slotUpdates: Map<Long, SimulatedSession>,
+    station: Station?
+) {
     val machineName = dispensary?.name ?: "Main Charger Unit"
     val isAc = slots.any { it.slotType == SlotType.AC }
     val isDc = slots.any { it.slotType == SlotType.DC }
@@ -569,7 +590,8 @@ private fun DispensaryCard(dispensary: Dispensary?, slots: List<ChargerSlot>, st
 
             // List of guns/connectors
             slots.forEachIndexed { index, slot ->
-                ConnectorRow(slot = slot, index = index + 1)
+                val liveData = slotUpdates[slot.id]
+                ConnectorRow(slot = slot, index = index + 1, liveData = liveData)
                 if (index < slots.size - 1) {
                     Spacer(modifier = Modifier.height(12.dp))
                 }
@@ -582,7 +604,9 @@ private fun DispensaryCard(dispensary: Dispensary?, slots: List<ChargerSlot>, st
 //  Nested Connector Row (Child of Dispensary)
 // ═══════════════════════════════════════════════════════════════
 @Composable
-private fun ConnectorRow(slot: ChargerSlot, index: Int) {
+private fun ConnectorRow(slot: ChargerSlot, index: Int, liveData: SimulatedSession?) {
+    val status = if (liveData != null) SlotStatus.CHARGING else slot.status
+    
     Surface(
             shape = RoundedCornerShape(16.dp),
             color = MaterialTheme.colorScheme.surface,
@@ -592,7 +616,7 @@ private fun ConnectorRow(slot: ChargerSlot, index: Int) {
                 modifier = Modifier.fillMaxWidth().padding(12.dp),
                 verticalAlignment = Alignment.CenterVertically
         ) {
-            // Connector icon based on type (simulated visual distinction)
+            // Connector icon
             Column(
                     modifier = Modifier.width(60.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
@@ -601,7 +625,7 @@ private fun ConnectorRow(slot: ChargerSlot, index: Int) {
                         imageVector = Icons.Default.EvStation,
                         contentDescription = null,
                         modifier = Modifier.size(32.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        tint = if (status == SlotStatus.AVAILABLE) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
@@ -621,24 +645,42 @@ private fun ConnectorRow(slot: ChargerSlot, index: Int) {
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Bold
                 )
+                
+                if (liveData != null) {
+                    Text(
+                        text = "⚡ Charging at ${String.format("%.1f", liveData.powerKw)}kW",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                }
+                
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    // Availability badge (design matching the screenshot green outline)
+                    // Availability / Live Status badge
                     Surface(
                             shape = RoundedCornerShape(4.dp),
                             color = Color.Transparent,
                             border = BorderStroke(
                                     1.dp,
-                                    if (slot.status == SlotStatus.AVAILABLE) Color(0xFF4CAF50)
-                                    else Color(0xFF9E9E9E)
+                                    when (status) {
+                                        SlotStatus.AVAILABLE -> Color(0xFF4CAF50)
+                                        SlotStatus.CHARGING -> MaterialTheme.colorScheme.secondary
+                                        else -> Color(0xFF9E9E9E)
+                                    }
                             )
                     ) {
                         Row(
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                                 verticalAlignment = Alignment.CenterVertically
                         ) {
-                            if (slot.status == SlotStatus.AVAILABLE) {
+                            val badgeText = when {
+                                liveData != null -> "Busy (${liveData.socPercentage.toInt()}%)"
+                                status == SlotStatus.AVAILABLE -> "Available"
+                                else -> status.name.lowercase().replaceFirstChar { it.uppercase() }
+                            }
+                            
+                            if (status == SlotStatus.AVAILABLE) {
                                 Icon(
                                         Icons.Default.CheckCircle,
                                         contentDescription = null,
@@ -646,39 +688,68 @@ private fun ConnectorRow(slot: ChargerSlot, index: Int) {
                                         tint = Color(0xFF4CAF50)
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
+                            } else if (liveData != null) {
+                                Icon(
+                                    Icons.Default.HourglassTop,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(10.dp),
+                                    tint = MaterialTheme.colorScheme.secondary
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
                             }
+                            
                             Text(
-                                    text = if (slot.status == SlotStatus.AVAILABLE) "Available" else slot.status.name.lowercase().replaceFirstChar { it.uppercase() },
+                                    text = badgeText,
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.SemiBold,
-                                    color = if (slot.status == SlotStatus.AVAILABLE) Color(0xFF4CAF50) else Color(0xFF9E9E9E)
+                                    color = when (status) {
+                                        SlotStatus.AVAILABLE -> Color(0xFF4CAF50)
+                                        SlotStatus.CHARGING -> MaterialTheme.colorScheme.secondary
+                                        else -> Color(0xFF9E9E9E)
+                                    }
                             )
                         }
                     }
 
-                    // Power Rating Badge (gray outline)
-                    Surface(
+                    // ETC Badge if charging
+                    if (liveData != null && liveData.minutesRemaining > 0) {
+                        Surface(
                             shape = RoundedCornerShape(4.dp),
-                            color = Color.Transparent,
-                            border = BorderStroke(1.dp, Color(0xFFE0E0E0))
-                    ) {
-                        Row(
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                            color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f)
                         ) {
-                            Icon(
-                                    Icons.Default.ElectricBolt,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(10.dp),
-                                    tint = Color(0xFF757575)
-                            )
-                            Spacer(modifier = Modifier.width(2.dp))
                             Text(
-                                    text = "Upto ${slot.powerRating.toInt()}kW",
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = Color(0xFF757575)
+                                text = "Free in ~${liveData.minutesRemaining.toInt()}m",
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
                             )
+                        }
+                    } else {
+                        // Power Rating Badge (gray outline)
+                        Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = Color.Transparent,
+                                border = BorderStroke(1.dp, Color(0xFFE0E0E0))
+                        ) {
+                            Row(
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                        Icons.Default.ElectricBolt,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(10.dp),
+                                        tint = Color(0xFF757575)
+                                )
+                                Spacer(modifier = Modifier.width(2.dp))
+                                Text(
+                                        text = "Upto ${slot.powerRating.toInt()}kW",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = Color(0xFF757575)
+                                )
+                            }
                         }
                     }
                 }

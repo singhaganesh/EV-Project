@@ -1,5 +1,6 @@
 package com.ganesh.EV_Project.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -12,6 +13,7 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class ChargingSession {
 
     @Id
@@ -21,6 +23,13 @@ public class ChargingSession {
     // Link to booking
     @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "booking_id", nullable = false)
+    @com.fasterxml.jackson.annotation.JsonIgnoreProperties({
+        "hibernateLazyInitializer", 
+        "handler", 
+        "chargingSession",
+        "user",
+        "slot"
+    })
     private Booking booking;
 
     @Column(nullable = false)

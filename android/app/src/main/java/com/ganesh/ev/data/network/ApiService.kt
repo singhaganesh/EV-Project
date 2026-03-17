@@ -10,6 +10,7 @@ import com.ganesh.ev.data.model.CompleteProfileRequest
 import com.ganesh.ev.data.model.LivePowerData
 import com.ganesh.ev.data.model.Payment
 import com.ganesh.ev.data.model.PaymentIntentResponse
+import com.ganesh.ev.data.model.SimpleChargingSession
 import com.ganesh.ev.data.model.StartChargingRequest
 import com.ganesh.ev.data.model.Station
 import com.ganesh.ev.data.model.StationMarker
@@ -77,7 +78,7 @@ interface ApiService {
         @POST("api/charging/start")
         suspend fun startCharging(
                 @Body request: StartChargingRequest
-        ): Response<ApiResponse<ChargingSession>>
+        ): Response<ApiResponse<SimpleChargingSession>>
 
         @POST("api/charging/stop/{sessionId}")
         suspend fun stopCharging(

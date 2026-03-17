@@ -3,8 +3,12 @@ package com.ganesh.ev.ui.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ganesh.ev.data.model.ChargingSession
+import com.ganesh.ev.data.model.SimpleChargingSession
+import com.ganesh.ev.data.model.SimulatedSession
 import com.ganesh.ev.data.model.StartChargingRequest
 import com.ganesh.ev.data.network.RetrofitClient
+import com.ganesh.ev.data.network.StompClient
+import com.google.gson.Gson
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -27,25 +31,69 @@ class ChargingViewModel : ViewModel() {
     private val _uiState = MutableStateFlow<ChargingUiState>(ChargingUiState.Initial)
     val uiState: StateFlow<ChargingUiState> = _uiState.asStateFlow()
 
+    private val _telemetryData = MutableStateFlow<SimulatedSession?>(null)
+    val telemetryData: StateFlow<SimulatedSession?> = _telemetryData.asStateFlow()
+
+    private var stompClient: StompClient? = null
+    private val gson = Gson()
+
     fun startCharging(bookingId: Long) {
         viewModelScope.launch {
             _uiState.value = ChargingUiState.Loading
             try {
                 val request = StartChargingRequest(bookingId = bookingId)
                 val response = RetrofitClient.apiService.startCharging(request)
+                android.util.Log.d("ChargingVM", "Start charging response: ${response.code()}")
+                android.util.Log.d("ChargingVM", "Response body: ${response.body()}")
+                
                 if (response.isSuccessful) {
-                    val session = response.body()?.data
-                    if (session != null) {
-                        _uiState.value = ChargingUiState.SessionStarted(session)
+                    val apiResponse = response.body()
+                    android.util.Log.d("ChargingVM", "API Response success: ${apiResponse?.success}")
+                    android.util.Log.d("ChargingVM", "API Response data: ${apiResponse?.data}")
+                    
+                    // Check if backend returned success=false
+                    if (apiResponse?.success == false) {
+                        _uiState.value = ChargingUiState.Error(apiResponse.message ?: "Failed to start charging")
+                        return@launch
+                    }
+                    
+                    // Handle both SimpleChargingSession and Map responses
+                    val sessionId = when (val data = apiResponse?.data) {
+                        is SimpleChargingSession -> data.id
+                        is Map<*, *> -> (data["id"] as? Number)?.toLong() ?: -1L
+                        else -> -1L
+                    }
+                    
+                    if (sessionId > 0) {
+                        // Immediately load the full session details
+                        loadSession(sessionId)
+                        startWebSocketTelemetry(bookingId)
                     } else {
-                        _uiState.value = ChargingUiState.Error("Failed to start charging session")
+                        _uiState.value = ChargingUiState.Error("Failed to start charging session: ${apiResponse?.message}")
                     }
                 } else {
                     _uiState.value =
                             ChargingUiState.Error("Failed to start charging: ${response.message()}")
                 }
             } catch (e: Exception) {
+                android.util.Log.e("ChargingVM", "Exception during start charging", e)
                 _uiState.value = ChargingUiState.Error("Network error: ${e.message}")
+            }
+        }
+    }
+
+    private fun startWebSocketTelemetry(bookingId: Long) {
+        val baseUrl = com.ganesh.ev.BuildConfig.BASE_URL
+        val wsUrl = baseUrl.replace("http://", "ws://").replace("https://", "wss://") + "ws/websocket"
+        
+        stompClient = StompClient(wsUrl)
+        stompClient?.connect()
+        stompClient?.subscribe("/topic/session/$bookingId") { json ->
+            try {
+                val data = gson.fromJson(json, SimulatedSession::class.java)
+                _telemetryData.value = data
+            } catch (e: Exception) {
+                android.util.Log.e("STOMP", "Error parsing telemetry: ${e.message}")
             }
         }
     }
@@ -59,6 +107,7 @@ class ChargingViewModel : ViewModel() {
                     val session = response.body()?.data
                     if (session != null) {
                         _uiState.value = ChargingUiState.SessionStopped(session)
+                        stopWebSocketTelemetry()
                     } else {
                         _uiState.value = ChargingUiState.Error("Failed to stop charging session")
                     }
@@ -72,6 +121,11 @@ class ChargingViewModel : ViewModel() {
         }
     }
 
+    private fun stopWebSocketTelemetry() {
+        stompClient?.disconnect()
+        stompClient = null
+    }
+
     fun loadSession(sessionId: Long) {
         viewModelScope.launch {
             _uiState.value = ChargingUiState.Loading
@@ -81,6 +135,9 @@ class ChargingViewModel : ViewModel() {
                     val session = response.body()?.data
                     if (session != null) {
                         _uiState.value = ChargingUiState.SessionLoaded(session)
+                        if (session.endTime == null) {
+                            session.booking?.id?.let { startWebSocketTelemetry(it) }
+                        }
                     } else {
                         _uiState.value = ChargingUiState.Error("Session not found")
                     }

@@ -11,12 +11,14 @@ import com.ganesh.EV_Project.repository.BookingRepository;
 import com.ganesh.EV_Project.repository.ChargerSlotRepository;
 import com.ganesh.EV_Project.repository.ChargingSessionRepository;
 import com.ganesh.EV_Project.controller.WebSocketController;
+import com.ganesh.EV_Project.service.ChargingSimulatorService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/charging")
@@ -33,6 +35,9 @@ public class ChargingSessionController {
 
     @Autowired
     private WebSocketController webSocketController;
+
+    @Autowired
+    private ChargingSimulatorService simulatorService;
 
     @PostMapping("/start")
     public ResponseEntity<?> startCharging(@RequestBody ChargingSessionRequest request) {
@@ -76,6 +81,9 @@ public class ChargingSessionController {
 
             ChargingSession savedSession = chargingSessionRepository.save(session);
 
+            // ── TRIGGER SMART SIMULATION ──
+            simulatorService.startSimulation(booking.getId());
+
             // Notify via WebSocket
             webSocketController.notifySlotStatusChange(slot.getStation().getId(), slot);
             webSocketController.notifyUserBookingUpdate(booking.getUser().getId(), booking);
@@ -83,7 +91,7 @@ public class ChargingSessionController {
             return ResponseEntity.ok(APIResponse.builder()
                     .success(true)
                     .message("Charging started successfully")
-                    .data(savedSession)
+                    .data(Map.of("id", savedSession.getId()))
                     .build());
 
         } catch (Exception e) {
@@ -107,25 +115,14 @@ public class ChargingSessionController {
                         .build());
             }
 
+            // ── HALT SMART SIMULATION ──
+            ChargingSimulatorService.SimulatedSession finalVitals = simulatorService.stopSimulation(session.getBooking().getId());
+
             // Calculate energy and cost
             LocalDateTime endTime = LocalDateTime.now();
             double hours = java.time.Duration.between(session.getStartTime(), endTime).toMinutes() / 60.0;
-            double powerRating = session.getBooking().getSlot().getPowerKw();
-            double energyConsumed = hours * powerRating; // kWh
-
-            Booking booking = session.getBooking();
-            double pricePerKwh = booking.getSlot().getStation() != null
-                    && booking.getSlot().getStation().getPricePerKwh() != null
-                            ? booking.getSlot().getStation().getPricePerKwh()
-                            : 15.0;
-
-            if (booking.getVehicleType() == com.ganesh.EV_Project.enums.VehicleType.TRUCK
-                    && booking.getSlot().getStation() != null
-                    && booking.getSlot().getStation().getTruckPricePerKwh() != null) {
-                pricePerKwh = booking.getSlot().getStation().getTruckPricePerKwh();
-            }
-
-            double cost = energyConsumed * pricePerKwh;
+            double energyConsumed = (finalVitals != null) ? finalVitals.getEnergyDispensedKwh() : (hours * session.getBooking().getSlot().getPowerKw());
+            double cost = (finalVitals != null) ? finalVitals.getTotalCost() : (energyConsumed * 15.0);
 
             session.setEndTime(endTime);
             session.setEnergyKwh(energyConsumed);
@@ -134,6 +131,7 @@ public class ChargingSessionController {
             ChargingSession savedSession = chargingSessionRepository.save(session);
 
             // Update booking status
+            Booking booking = session.getBooking();
             booking.setStatus(BookingStatus.COMPLETED);
             booking.setActualEndTime(endTime);
             bookingRepository.save(booking);

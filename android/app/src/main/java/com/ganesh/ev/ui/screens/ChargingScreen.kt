@@ -29,16 +29,14 @@ fun ChargingScreen(
         viewModel: ChargingViewModel = viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val powerData by viewModel.powerDataState.collectAsState()
+    val telemetry by viewModel.telemetryData.collectAsState()
 
-    var energyConsumed by remember { mutableStateOf(0.0) }
     var isCharging by remember { mutableStateOf(false) }
     var isCompleted by remember { mutableStateOf(false) }
-    // Derived from actual booking — fallback to ₹15 if unavailable
+
+    // Derived from actual booking
     var ratePerKwh by remember { mutableStateOf(15.0) }
     var vehicleType by remember { mutableStateOf("CAR") }
-    // Grace period countdown (minutes remaining to arrive)
-    var graceMinutesLeft by remember { mutableStateOf<Long?>(null) }
 
     LaunchedEffect(Unit) {
         if (sessionId != null && sessionId > 0) {
@@ -52,59 +50,22 @@ fun ChargingScreen(
         val state = uiState
         if (state is ChargingUiState.SessionStarted) {
             isCharging = true
-            graceMinutesLeft = null // charging started, no more grace countdown
-            // Extract actual rate from booking
             val booking = state.session.booking
             vehicleType = booking?.vehicleType ?: "CAR"
-            val station = booking?.slot?.station
-            ratePerKwh = if (vehicleType == "TRUCK" && station?.truckPricePerKwh != null)
-                station.truckPricePerKwh
-            else station?.pricePerKwh ?: 15.0
-            booking?.slot?.station?.id?.let { stationId ->
-                viewModel.startPollingPower(stationId)
-            }
+            ratePerKwh = booking?.slot?.station?.pricePerKwh ?: 15.0
         } else if (state is ChargingUiState.SessionLoaded) {
             val booking = state.session.booking
             vehicleType = booking?.vehicleType ?: "CAR"
-            val station = booking?.slot?.station
-            ratePerKwh = if (vehicleType == "TRUCK" && station?.truckPricePerKwh != null)
-                station.truckPricePerKwh
-            else station?.pricePerKwh ?: 15.0
+            ratePerKwh = booking?.slot?.station?.pricePerKwh ?: 15.0
 
             if (state.session.endTime == null) {
                 isCharging = true
-                graceMinutesLeft = null
-                booking?.slot?.station?.id?.let { stationId ->
-                    viewModel.startPollingPower(stationId)
-                }
-                energyConsumed = state.session.energyConsumed ?: 0.0
             } else {
                 isCompleted = true
-                energyConsumed = state.session.energyConsumed ?: 0.0
             }
         } else if (state is ChargingUiState.SessionStopped) {
             isCompleted = true
             isCharging = false
-            viewModel.stopPolling()
-        }
-    }
-
-    // Stop polling on dispose
-    DisposableEffect(Unit) { onDispose { viewModel.stopPolling() } }
-
-    // Accumulate energy based on real power if available, otherwise simulate
-    LaunchedEffect(isCharging, powerData) {
-        while (isCharging) {
-            delay(1000)
-            if (powerData != null) {
-                // Energy (kWh) += Power (kW) * (1 second / 3600)
-                energyConsumed += (powerData!!.power / 3600.0)
-            } else {
-                // Fallback simulation if no sensor data
-                if (energyConsumed < 50.0) {
-                    energyConsumed += 0.005 // Slower simulation
-                }
-            }
         }
     }
 
@@ -132,7 +93,7 @@ fun ChargingScreen(
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     ClayProgressIndicator()
                     Spacer(modifier = Modifier.height(16.dp))
-                    Text("Starting charging session...", style = MaterialTheme.typography.bodyLarge)
+                    Text("Connecting to charger...", style = MaterialTheme.typography.bodyLarge)
                 }
             }
             is ChargingUiState.Error -> {
@@ -148,10 +109,11 @@ fun ChargingScreen(
                 }
             }
             else -> {
-                // Handle success states (SessionStarted, Loaded, Stopped, PowerDataLoaded handled
-                // via separate flow)
                 if (isCompleted) {
                     // Completion state
+                    val session = (uiState as? ChargingUiState.SessionStopped)?.session 
+                                ?: (uiState as? ChargingUiState.SessionLoaded)?.session
+
                     Column(
                             modifier = Modifier.padding(24.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
@@ -187,7 +149,7 @@ fun ChargingScreen(
                             ) {
                                 Text("Energy Consumed")
                                 Text(
-                                        "${String.format(Locale.US, "%.2f", energyConsumed)} kWh",
+                                        "${String.format(Locale.US, "%.2f", session?.energyKwh ?: 0.0)} kWh",
                                         style = MaterialTheme.typography.titleMedium
                                 )
                             }
@@ -196,19 +158,10 @@ fun ChargingScreen(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Text("Rate")
-                                Text("₹$ratePerKwh/kWh • ${if (vehicleType == "TRUCK") "🚛 Truck" else "🚗 Car"}",
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        style = MaterialTheme.typography.bodySmall)
-                            }
-                            Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
                                 Text("Total Cost", style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.Bold)
                                 Text(
-                                        "₹${String.format(Locale.US, "%.2f", energyConsumed * ratePerKwh)}",
+                                        "₹${String.format(Locale.US, "%.2f", session?.totalCost ?: 0.0)}",
                                         style = MaterialTheme.typography.titleMedium,
                                         color = MaterialTheme.colorScheme.primary
                                 )
@@ -222,137 +175,108 @@ fun ChargingScreen(
                         }
                     }
                 } else {
-                    // Active charging state (or loaded active session)
-                    if (state is ChargingUiState.SessionStarted ||
-                                    state is ChargingUiState.SessionLoaded ||
-                                    state is ChargingUiState.PowerDataLoaded
+                    // ── ACTIVE CHARGING STATE ──
+                    Column(
+                            modifier = Modifier.padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Column(
-                                modifier = Modifier.padding(24.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
+                        Text(
+                                text = "⚡ Charging in Progress",
+                                style = MaterialTheme.typography.headlineSmall,
+                                color = MaterialTheme.colorScheme.primary
+                        )
+
+                        Spacer(modifier = Modifier.height(24.dp))
+
+                        // SoC / Power Dashboard
+                        ClayCard(
+                                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                cornerRadius = 32.dp
                         ) {
-                            Text(
-                                    text = "⚡ Charging in Progress",
-                                    style = MaterialTheme.typography.headlineSmall,
-                                    color = MaterialTheme.colorScheme.primary
-                            )
-
-                            Spacer(modifier = Modifier.height(32.dp))
-
-                            ClayCard(
-                                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                                    cornerRadius = 32.dp
+                            Column(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalAlignment = Alignment.CenterHorizontally
                             ) {
-                                Column(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalAlignment = Alignment.CenterHorizontally
-                                ) {
-                                    Text(
-                                            text =
-                                                    "${String.format(Locale.US, "%.3f", energyConsumed)}",
-                                            style = MaterialTheme.typography.displayLarge,
-                                            color = MaterialTheme.colorScheme.primary
-                                    )
-                                    Text(
-                                            text = "kWh Delivered",
-                                            style = MaterialTheme.typography.titleLarge,
-                                            color =
-                                                    MaterialTheme.colorScheme.primary.copy(
-                                                            alpha = 0.7f
-                                                    )
-                                    )
-                                }
+                                Text(
+                                        text = "${telemetry?.socPercentage?.toInt() ?: "--"}%",
+                                        style = MaterialTheme.typography.displayLarge,
+                                        color = MaterialTheme.colorScheme.primary
+                                )
+                                Text(
+                                        text = "State of Charge",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                                )
                             }
-
-                            Spacer(modifier = Modifier.height(16.dp))
-
-                            // Live Power Data Card
-                            if (powerData != null) {
-                                ClayCard(
-                                        containerColor =
-                                                MaterialTheme.colorScheme.secondaryContainer.copy(
-                                                        alpha = 0.2f
-                                                )
-                                ) {
-                                    Column(
-                                            horizontalAlignment = Alignment.CenterHorizontally,
-                                            modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Text(
-                                                "Live Station Output",
-                                                style = MaterialTheme.typography.labelMedium,
-                                                color = MaterialTheme.colorScheme.secondary
-                                        )
-                                        Spacer(modifier = Modifier.height(8.dp))
-                                        Text(
-                                                text =
-                                                        "${String.format(Locale.US, "%.1f", powerData!!.power)} kW",
-                                                style = MaterialTheme.typography.headlineMedium,
-                                                color = MaterialTheme.colorScheme.secondary
-                                        )
-                                        Spacer(modifier = Modifier.height(4.dp))
-                                        Text(
-                                                text =
-                                                        "${String.format(Locale.US, "%.1f", powerData!!.voltage)}V • ${String.format(Locale.US, "%.1f", powerData!!.current)}A",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                }
-                                Spacer(modifier = Modifier.height(16.dp))
-                            }
-
-                            ClayCard {
-                                Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text("Rate")
-                                    Text("₹$ratePerKwh/kWh")
-                                }
-                                Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text("Estimated Cost")
-                                    Text(
-                                            "₹${String.format(Locale.US, "%.2f", energyConsumed * ratePerKwh)}",
-                                            style = MaterialTheme.typography.titleMedium,
-                                            color = MaterialTheme.colorScheme.primary
-                                    )
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(32.dp))
-
-                            ClayButton(
-                                    onClick = {
-                                        // Stop Charging
-                                        val currentSessionId =
-                                                when (state) {
-                                                    is ChargingUiState.SessionStarted ->
-                                                            state.session.id
-                                                    is ChargingUiState.SessionLoaded ->
-                                                            state.session.id
-                                                    else -> 0L
-                                                }
-                                        if (currentSessionId > 0) {
-                                            viewModel.stopCharging(currentSessionId)
-                                        } else {
-                                            // Fallback cleanup if session ID lost?
-                                            isCompleted = true
-                                            isCharging = false
-                                            viewModel.stopPolling()
-                                        }
-                                    },
-                                    containerColor = MaterialTheme.colorScheme.error,
-                                    contentColor = MaterialTheme.colorScheme.onError,
-                                    modifier = Modifier.fillMaxWidth()
-                            ) { Text("Stop Charging") }
                         }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Real-time Power & Cost
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            ClayCard(modifier = Modifier.weight(1f)) {
+                                Text("Power", style = MaterialTheme.typography.labelSmall)
+                                Text("${String.format("%.1f", telemetry?.powerKw ?: 0.0)} kW", 
+                                     style = MaterialTheme.typography.titleMedium,
+                                     color = MaterialTheme.colorScheme.secondary)
+                            }
+                            ClayCard(modifier = Modifier.weight(1f)) {
+                                Text("Cost", style = MaterialTheme.typography.labelSmall)
+                                Text("₹${String.format("%.2f", telemetry?.totalCost ?: 0.0)}", 
+                                     style = MaterialTheme.typography.titleMedium,
+                                     color = MaterialTheme.colorScheme.primary)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Detailed Vitals
+                        ClayCard {
+                            VitalsRow("Energy", "${String.format("%.3f", telemetry?.energyDispensedKwh ?: 0.0)} kWh")
+                            ClayDivider()
+                            VitalsRow("Voltage", "${telemetry?.voltageV?.toInt() ?: "--"} V")
+                            VitalsRow("Current", "${String.format("%.1f", telemetry?.currentA ?: 0.0)} A")
+                            VitalsRow("Temp", "${String.format("%.1f", telemetry?.connectorTempC ?: 0.0)}°C")
+                            ClayDivider()
+                            VitalsRow("Time Left", "~${telemetry?.minutesRemaining?.toInt() ?: "--"} mins")
+                        }
+
+                        Spacer(modifier = Modifier.height(32.dp))
+
+                        ClayButton(
+                                onClick = {
+                                    val currentSessionId = when (val s = uiState) {
+                                        is ChargingUiState.SessionStarted -> s.session.id
+                                        is ChargingUiState.SessionLoaded -> s.session.id
+                                        else -> sessionId ?: 0L
+                                    }
+                                    if (currentSessionId > 0) {
+                                        viewModel.stopCharging(currentSessionId)
+                                    }
+                                },
+                                containerColor = MaterialTheme.colorScheme.error,
+                                contentColor = MaterialTheme.colorScheme.onError,
+                                modifier = Modifier.fillMaxWidth()
+                        ) { Text("Stop Charging") }
                     }
                 }
             }
         }
     }
 }
+
+@Composable
+fun VitalsRow(label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+    }
+}
+

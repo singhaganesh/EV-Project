@@ -7,7 +7,10 @@ import com.ganesh.ev.data.model.LivePowerData
 import com.ganesh.ev.data.model.Station
 import com.ganesh.ev.data.model.StationPin
 import com.ganesh.ev.data.model.StationWithScore
+import com.ganesh.ev.data.model.SimulatedSession
 import com.ganesh.ev.data.network.RetrofitClient
+import com.ganesh.ev.data.network.StompClient
+import com.google.gson.Gson
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -30,6 +33,13 @@ class StationViewModel : ViewModel() {
 
     private val _uiState = MutableStateFlow<StationUiState>(StationUiState.Initial)
     val uiState: StateFlow<StationUiState> = _uiState.asStateFlow()
+
+    // Real-time slot status updates from WebSocket
+    private val _slotUpdates = MutableStateFlow<Map<Long, SimulatedSession>>(emptyMap())
+    val slotUpdates: StateFlow<Map<Long, SimulatedSession>> = _slotUpdates.asStateFlow()
+
+    private var stompClient: StompClient? = null
+    private val gson = Gson()
 
     // Separate loading flag — does NOT block the map
     private val _isLoadingStations = MutableStateFlow(false)
@@ -321,6 +331,35 @@ class StationViewModel : ViewModel() {
                 // Silent fail for power data updates
             }
         }
+    }
+
+    fun subscribeToStation(stationId: Long) {
+        val baseUrl = com.ganesh.ev.BuildConfig.BASE_URL
+        val wsUrl = baseUrl.replace("http://", "ws://").replace("https://", "wss://") + "ws/websocket"
+        
+        stompClient = StompClient(wsUrl)
+        stompClient?.connect()
+        stompClient?.subscribe("/topic/station/$stationId") { json ->
+            try {
+                val data = gson.fromJson(json, SimulatedSession::class.java)
+                val current = _slotUpdates.value.toMutableMap()
+                current[data.slotId] = data
+                _slotUpdates.value = current
+            } catch (e: Exception) {
+                // Ignore parse errors
+            }
+        }
+    }
+
+    fun disconnectStation() {
+        stompClient?.disconnect()
+        stompClient = null
+        _slotUpdates.value = emptyMap()
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        disconnectStation()
     }
 
     fun resetState() {

@@ -129,7 +129,7 @@ fun ClayHistoryCard(session: ChargingSession) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                        text = "${session.energyConsumed ?: 0.0} kWh",
+                        text = "${session.energyKwh ?: 0.0} kWh",
                         style = MaterialTheme.typography.titleMedium
                 )
             }
@@ -140,7 +140,7 @@ fun ClayHistoryCard(session: ChargingSession) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                        text = "₹${String.format("%.2f", session.cost ?: 0.0)}",
+                        text = "₹${String.format("%.2f", session.totalCost ?: 0.0)}",
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.primary
                 )

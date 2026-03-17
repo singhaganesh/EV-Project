@@ -268,11 +268,10 @@ fun EVChargingApp(userPreferencesRepository: UserPreferencesRepository) {
                 val stationId = backStackEntry.arguments?.getLong("stationId") ?: return@composable
                 StationDetailScreen(
                         stationId = stationId,
-                        onBackClick = { navController.popBackStack() },
-                        onBookSlot = { sId, truckPrice ->
+                        onBack = { navController.popBackStack() },
+                        onBookStation = {
                             bookingViewModel.resetState()
-                            bookingViewModel.setTruckPrice(truckPrice)
-                            navController.navigate(Screen.SlotBooking.createRoute(sId))
+                            navController.navigate(Screen.SlotBooking.createRoute(stationId))
                         }
                 )
             }

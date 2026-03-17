@@ -16,10 +16,12 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ganesh.ev.ui.theme.*
 import com.ganesh.ev.ui.viewmodel.BookingUiState
 import com.ganesh.ev.ui.viewmodel.BookingViewModel
+import com.ganesh.ev.util.formatBookingDateTime
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
 import java.time.temporal.ChronoUnit
+import java.util.Locale
 import kotlinx.coroutines.delay
 
 @Composable
@@ -75,30 +77,36 @@ fun BookingConfirmationScreen(
                                 ) {
                                         val booking = state.booking
 
-                                        // Grace period countdown — updates every second
+                                        // ── GRACE PERIOD CALCULATION ──
+                                        // To avoid timezone/mismatch errors, we calculate the TOTAL duration 
+                                        // (e.g., 20 mins) from the server response and count down locally 
+                                        // from the moment the booking was received.
                                         var graceSecondsLeft by remember { mutableStateOf<Long?>(null) }
-                                        LaunchedEffect(booking.expiresAt) {
-                                                val expiry = booking.expiresAt?.let { raw ->
-                                                        try {
-                                                                // Handle fractional seconds of any length
-                                                                val clean = raw.replace(Regex("\\.\\d+$"), "")
-                                                                LocalDateTime.parse(clean, DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"))
-                                                        } catch (e: Exception) {
-                                                                try {
-                                                                        // Fallback: space-separated
-                                                                        val clean = raw.replace(Regex("\\.\\d+$"), "")
-                                                                        LocalDateTime.parse(clean, DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
-                                                                } catch (e2: Exception) { null }
-                                                        }
+                                        
+                                        LaunchedEffect(booking.id) {
+                                            val start = parseServerDateTime(booking.startTime)
+                                            val expiry = parseServerDateTime(booking.expiresAt)
+                                            
+                                            if (start != null && expiry != null) {
+                                                // Calculate total allowed seconds (usually 1200 for 20 mins)
+                                                val totalGraceSeconds = ChronoUnit.SECONDS.between(start, expiry)
+                                                
+                                                // Start countdown from totalGraceSeconds
+                                                var current = totalGraceSeconds
+                                                while (current >= 0) {
+                                                    graceSecondsLeft = current
+                                                    delay(1000)
+                                                    current--
                                                 }
-                                                if (expiry != null) {
-                                                        while (true) {
-                                                                val secsLeft = ChronoUnit.SECONDS.between(LocalDateTime.now(), expiry)
-                                                                graceSecondsLeft = secsLeft.coerceAtLeast(0)
-                                                                if (secsLeft <= 0) break
-                                                                delay(1000)
-                                                        }
+                                            } else {
+                                                // Fallback if parsing fails: assume 20 minutes
+                                                var current = 20 * 60L
+                                                while (current >= 0) {
+                                                    graceSecondsLeft = current
+                                                    delay(1000)
+                                                    current--
                                                 }
+                                            }
                                         }
 
                                         Box(
@@ -235,29 +243,17 @@ fun BookingConfirmationScreen(
                                                 }
                                                 ClayDivider()
                                                 // Arrival time — formatted nicely
-                                                val displayFmt = DateTimeFormatter.ofPattern("dd MMM yyyy, h:mm a")
-                                                val arrivalDisplay = try {
-                                                        val clean = (booking.startTime ?: "").replace(Regex("\\.\\d+$"), "")
-                                                        LocalDateTime.parse(clean, DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"))
-                                                                .format(displayFmt)
-                                                } catch (e: Exception) {
-                                                        try {
-                                                                val clean = (booking.startTime ?: "").replace(Regex("\\.\\d+$"), "")
-                                                                LocalDateTime.parse(clean, DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
-                                                                        .format(displayFmt)
-                                                        } catch (e2: Exception) {
-                                                                "Just now"
-                                                        }
-                                                }
                                                 Row(
                                                         modifier = Modifier.fillMaxWidth(),
                                                         horizontalArrangement = Arrangement.SpaceBetween
                                                 ) {
                                                         Text("Booked at",
                                                                 style = MaterialTheme.typography.bodyMedium)
-                                                        Text(arrivalDisplay,
+                                                        Text(
+                                                                formatBookingDateTime(booking.startTime),
                                                                 style = MaterialTheme.typography.bodyMedium,
-                                                                fontWeight = FontWeight.SemiBold)
+                                                                fontWeight = FontWeight.SemiBold
+                                                        )
                                                 }
                                                 ClayDivider()
                                                 Row(
@@ -320,4 +316,22 @@ fun BookingConfirmationScreen(
                         else -> {}
                 }
         }
+}
+
+/**
+ * Robust date parser for server timestamps
+ */
+fun parseServerDateTime(raw: String?): LocalDateTime? {
+    if (raw == null) return null
+    return try {
+        // Handle common variations (T-separator or space, with/without fractional seconds)
+        val clean = raw.replace(Regex("\\.\\d+$"), "")
+        if (clean.contains("T")) {
+            LocalDateTime.parse(clean, DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"))
+        } else {
+            LocalDateTime.parse(clean, DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
+        }
+    } catch (e: Exception) {
+        null
+    }
 }
