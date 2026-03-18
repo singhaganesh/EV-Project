@@ -76,8 +76,9 @@ sealed class Screen(val route: String) {
     object BookingDetail : Screen("booking/{bookingId}/user/{userId}") {
         fun createRoute(bookingId: Long, userId: Long) = "booking/$bookingId/user/$userId"
     }
-    object Charging : Screen("charging/booking/{bookingId}") {
-        fun createRoute(bookingId: Long) = "charging/booking/$bookingId"
+    object Charging : Screen("charging/booking/{bookingId}?isNewSession={isNewSession}") {
+        fun createRoute(bookingId: Long, isNewSession: Boolean = true) = 
+            "charging/booking/$bookingId?isNewSession=$isNewSession"
     }
     object ChargingSession : Screen("charging/session/{sessionId}") {
         fun createRoute(sessionId: Long) = "charging/session/$sessionId"
@@ -382,24 +383,29 @@ fun EVChargingApp(userPreferencesRepository: UserPreferencesRepository) {
                         bookingId = bookingId,
                         userId = userId,
                         onBackClick = { navController.popBackStack() },
-                        onStartCharging = { bId ->
-                            navController.navigate(Screen.Charging.createRoute(bId))
+                        onStartCharging = { bId, isNew ->
+                            navController.navigate(Screen.Charging.createRoute(bId, isNew))
                         },
-                        onGoToCharging = { bId ->
-                            navController.navigate(Screen.Charging.createRoute(bId))
+                        onGoToCharging = { bId, isNew ->
+                            navController.navigate(Screen.Charging.createRoute(bId, isNew))
                         }
                 )
             }
 
             composable(
                     route = Screen.Charging.route,
-                    arguments = listOf(navArgument("bookingId") { type = NavType.LongType })
+                    arguments = listOf(
+                        navArgument("bookingId") { type = NavType.LongType },
+                        navArgument("isNewSession") { type = NavType.BoolType; defaultValue = true }
+                    )
             ) { backStackEntry ->
                 val bookingId = backStackEntry.arguments?.getLong("bookingId") ?: return@composable
+                val isNewSession = backStackEntry.arguments?.getBoolean("isNewSession") ?: true
 
                 ChargingScreen(
                         bookingId = bookingId,
                         sessionId = null,
+                        isNewSession = isNewSession,
                         onBackClick = { navController.popBackStack() },
                         onComplete = {
                             currentUserId?.let { uid ->

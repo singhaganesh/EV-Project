@@ -150,6 +150,30 @@ class ChargingViewModel : ViewModel() {
         }
     }
 
+    fun loadSessionByBooking(bookingId: Long) {
+        viewModelScope.launch {
+            _uiState.value = ChargingUiState.Loading
+            try {
+                val response = RetrofitClient.apiService.getSessionByBooking(bookingId)
+                if (response.isSuccessful) {
+                    val session = response.body()?.data
+                    if (session != null) {
+                        _uiState.value = ChargingUiState.SessionLoaded(session)
+                        if (session.endTime == null) {
+                            startWebSocketTelemetry(bookingId)
+                        }
+                    } else {
+                        _uiState.value = ChargingUiState.Error("Session not found for this booking")
+                    }
+                } else {
+                    _uiState.value = ChargingUiState.Error("Failed to fetch active session")
+                }
+            } catch (e: Exception) {
+                _uiState.value = ChargingUiState.Error("Network error: ${e.message}")
+            }
+        }
+    }
+
     fun loadUserHistory(userId: Long) {
         viewModelScope.launch {
             _uiState.value = ChargingUiState.Loading

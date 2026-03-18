@@ -27,8 +27,8 @@ fun BookingDetailScreen(
         bookingId: Long,
         userId: Long,
         onBackClick: () -> Unit,
-        onStartCharging: (Long) -> Unit,
-        onGoToCharging: (Long) -> Unit,
+        onStartCharging: (Long, Boolean) -> Unit,
+        onGoToCharging: (Long, Boolean) -> Unit,
         viewModel: BookingViewModel = viewModel()
 ) {
         val uiState by viewModel.uiState.collectAsState()
@@ -651,7 +651,8 @@ fun BookingDetailScreen(
                                                                 ClayButton(
                                                                         onClick = {
                                                                                 onStartCharging(
-                                                                                        booking.id
+                                                                                        booking.id,
+                                                                                        true
                                                                                 )
                                                                         },
                                                                         modifier =
@@ -684,7 +685,8 @@ fun BookingDetailScreen(
                                                                 ClayButton(
                                                                         onClick = {
                                                                                 onGoToCharging(
-                                                                                        booking.id
+                                                                                        booking.id,
+                                                                                        false
                                                                                 )
                                                                         },
                                                                         modifier =

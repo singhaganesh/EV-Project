@@ -67,19 +67,20 @@ public class ChargingSimulatorService {
     }
 
     private void updateSessionVitals(SimulatedSession session, int carsAtStation) {
-        // 1. Load Balancing Logic: Split power if multiple cars are charging
-        double availablePower = session.maxPowerKw / Math.max(1, carsAtStation);
+        // Use the full power of the specific gun (maxPowerKw)
+        // In real hardware, guns are often rated for half the dispensary's total (e.g. 240kW dispensary has two 120kW guns)
+        double availablePower = session.maxPowerKw;
         
-        // 2. SoC Tapering Logic: Slow down after 80% to protect battery
+        // SoC Tapering Logic: Slow down after 80% to protect battery
         if (session.socPercentage >= 80.0) {
             double taperFactor = 1.0 - ((session.socPercentage - 80.0) / 20.0); // Drops to 0 at 100%
             availablePower *= Math.max(0.1, taperFactor);
         }
 
-        // 3. V-I Relationship Math
-        // Power (kW) = (Voltage * Current) / 1000
-        session.voltageV = 380.0 + ThreadLocalRandom.current().nextDouble(-2.0, 5.0); // Slight grid noise
-        session.currentA = (availablePower * 1000.0) / session.voltageV;
+        // 3. V-I Relationship Math with grid noise
+        double noise = ThreadLocalRandom.current().nextDouble(0.98, 1.02);
+        session.voltageV = 380.0 + ThreadLocalRandom.current().nextDouble(-2.0, 5.0); 
+        session.currentA = (availablePower * noise * 1000.0) / session.voltageV;
         session.powerKw = (session.voltageV * session.currentA) / 1000.0;
 
         // 4. Energy Accumulation (kWh)
@@ -106,8 +107,21 @@ public class ChargingSimulatorService {
     }
 
     private void broadcastTelemetry(SimulatedSession session) {
-        // Topic 1: Private (Full detail for the charging user)
-        messagingTemplate.convertAndSend("/topic/session/" + session.bookingId, session);
+        // Topic 1: Private (Slimmed down for the mobile user)
+        Map<String, Object> userUpdate = new java.util.HashMap<>();
+        userUpdate.put("bookingId", session.bookingId);
+        userUpdate.put("slotId", session.slotId);
+        userUpdate.put("stationId", session.stationId);
+        userUpdate.put("powerKw", session.powerKw);
+        userUpdate.put("energyDispensedKwh", session.energyDispensedKwh);
+        userUpdate.put("socPercentage", session.socPercentage);
+        userUpdate.put("totalCost", session.totalCost);
+        userUpdate.put("minutesRemaining", session.minutesRemaining);
+        userUpdate.put("maxPowerKw", session.maxPowerKw);
+        userUpdate.put("batteryCapacityKwh", session.batteryCapacityKwh);
+        userUpdate.put("pricePerKwh", session.pricePerKwh);
+        
+        messagingTemplate.convertAndSend("/topic/session/" + session.bookingId, userUpdate);
 
         // Topic 2: Public (Aggregated for station searchers)
         Map<String, Object> publicUpdate = Map.of(
@@ -118,12 +132,14 @@ public class ChargingSimulatorService {
         );
         messagingTemplate.convertAndSend("/topic/station/" + session.stationId, publicUpdate);
 
-        // Topic 3: Owner (Health metrics for the dashboard)
+        // Topic 3: Owner (Full health metrics for the dashboard)
         Map<String, Object> healthUpdate = Map.of(
             "slotId", session.slotId,
             "temp", String.format("%.1f°C", session.connectorTempC),
             "voltage", Math.round(session.voltageV),
             "current", Math.round(session.currentA),
+            "power", session.powerKw,
+            "energy", session.energyDispensedKwh,
             "status", session.connectorTempC > 85 ? "CRITICAL_HEAT" : "OPERATIONAL"
         );
         messagingTemplate.convertAndSend("/topic/owner/station/" + session.stationId, healthUpdate);
