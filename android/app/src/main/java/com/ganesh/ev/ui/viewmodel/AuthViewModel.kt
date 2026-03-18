@@ -96,11 +96,14 @@ class AuthViewModel(
         viewModelScope.launch {
             _uiState.value = AuthUiState.Loading
             
+            // Treat blank email as null
+            val finalEmail = if (email.isNullOrBlank()) null else email.trim()
+            
             try {
                 val request = CompleteProfileRequest(
                     mobileNumber = currentMobileNumber,
                     name = name,
-                    email = email
+                    email = finalEmail
                 )
                 
                 val response = RetrofitClient.apiService.completeProfile(request)
@@ -123,7 +126,7 @@ class AuthViewModel(
                                 id = 0,
                                 mobileNumber = currentMobileNumber,
                                 name = name,
-                                email = email,
+                                email = finalEmail,
                                 isFirstTimeUser = false,
                                 role = "CUSTOMER",
                                 createdAt = null,
