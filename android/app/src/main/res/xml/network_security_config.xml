@@ -6,6 +6,7 @@
         <domain includeSubdomains="true">192.168.0.248</domain>
         <domain includeSubdomains="true">192.168.0.137</domain>
         <domain includeSubdomains="true">10.136.227.45</domain>
+        <domain includeSubdomains="true">192.168.0.18</domain>
         <domain includeSubdomains="true">EV-Charging-Backend-env.eba-bppan2jb.eu-north-1.elasticbeanstalk.com</domain>
     </domain-config>
 </network-security-config>

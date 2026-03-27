@@ -9,6 +9,12 @@ import { toast } from 'react-hot-toast';
 export default function MyStations() {
     const navigate = useNavigate();
     const [stations, setStations] = useState([]);
+    const [stats, setStats] = useState({
+        totalStations: 0,
+        activeChargers: 0,
+        inUseChargers: 0,
+        utilizationRate: 0,
+    });
     const [loading, setLoading] = useState(true);
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
@@ -18,19 +24,33 @@ export default function MyStations() {
             const userStr = localStorage.getItem('user');
             if (!userStr) {
                 setStations([]);
+                setStats({ totalStations: 0, activeChargers: 0, inUseChargers: 0, utilizationRate: 0 });
                 setLoading(false);
                 return;
             }
             const user = JSON.parse(userStr);
 
-            const response = await api.get(`/stations/owner/${user.id}`);
-            const data = response.data;
+            const [stationsResponse, statsResponse] = await Promise.all([
+                api.get(`/stations/owner/${user.id}`),
+                api.get(`/stations/owner/${user.id}/stats`),
+            ]);
+
+            const data = stationsResponse.data;
             // Handle if the response structure is { data: [...] } or just an array
             const arr = Array.isArray(data) ? data : (data.data || []);
             setStations(arr);
+
+            const statsData = statsResponse.data?.data || statsResponse.data || {};
+            setStats({
+                totalStations: Number(statsData.totalStations) || 0,
+                activeChargers: Number(statsData.activeChargers) || 0,
+                inUseChargers: Number(statsData.inUseChargers) || 0,
+                utilizationRate: Number(statsData.utilizationRate) || 0,
+            });
         } catch (error) {
             console.error('Error fetching stations:', error);
             setStations([]);
+            setStats({ totalStations: 0, activeChargers: 0, inUseChargers: 0, utilizationRate: 0 });
         } finally {
             setLoading(false);
         }
@@ -95,7 +115,7 @@ export default function MyStations() {
                 <div className="bg-white rounded-[24px] p-6 shadow-[0_2px_12px_rgba(0,0,0,0.03)] border border-slate-100/50 flex items-center justify-between">
                     <div>
                         <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Total Stations</p>
-                        <h2 className="text-3xl font-bold text-[#1A2234]">{stations.length}</h2>
+                        <h2 className="text-3xl font-bold text-[#1A2234]">{stats.totalStations}</h2>
                     </div>
                     <div className="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center">
                         <MapPin className="w-5 h-5 text-blue-500" />
@@ -105,9 +125,7 @@ export default function MyStations() {
                 <div className="bg-white rounded-[24px] p-6 shadow-[0_2px_12px_rgba(0,0,0,0.03)] border border-slate-100/50 flex items-center justify-between">
                     <div>
                         <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Active Chargers</p>
-                        <h2 className="text-3xl font-bold text-[#1A2234]">
-                            {stations.reduce((acc, s) => acc + (s.dispensaries?.length || 0) * 2, 0)}
-                        </h2>
+                        <h2 className="text-3xl font-bold text-[#1A2234]">{stats.activeChargers}</h2>
                     </div>
                     <div className="w-12 h-12 rounded-full bg-emerald-50 flex items-center justify-center">
                         <Zap className="w-5 h-5 text-emerald-500" />
@@ -117,7 +135,7 @@ export default function MyStations() {
                 <div className="bg-white rounded-[24px] p-6 shadow-[0_2px_12px_rgba(0,0,0,0.03)] border border-slate-100/50 flex items-center justify-between">
                     <div>
                         <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Utilization Rate</p>
-                        <h2 className="text-3xl font-bold text-[#1A2234]">78%</h2>
+                        <h2 className="text-3xl font-bold text-[#1A2234]">{stats.utilizationRate.toFixed(1)}%</h2>
                     </div>
                     <div className="w-12 h-12 rounded-full bg-purple-50 flex items-center justify-center">
                         <Activity className="w-5 h-5 text-purple-500" />

@@ -1,11 +1,12 @@
 package com.ganesh.EV_Project.service;
 
+import com.ganesh.EV_Project.dto.OwnerStationStatsDTO;
 import com.ganesh.EV_Project.exception.APIException;
-import com.ganesh.EV_Project.model.Station;
-import com.ganesh.EV_Project.model.Dispensary;
 import com.ganesh.EV_Project.enums.ConnectorType;
 import com.ganesh.EV_Project.enums.SlotStatus;
 import com.ganesh.EV_Project.enums.SlotType;
+import com.ganesh.EV_Project.model.Dispensary;
+import com.ganesh.EV_Project.model.Station;
 import com.ganesh.EV_Project.repository.StationRepository;
 import com.ganesh.EV_Project.repository.ChargerSlotRepository;
 import com.ganesh.EV_Project.repository.BookingRepository;
@@ -14,7 +15,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
-import java.util.Optional;
 
 @Service
 public class StationService {
@@ -34,6 +34,33 @@ public class StationService {
 
     public List<Station> getStationsByOwnerId(Long ownerId) {
         return stationRepository.findByOwnerId(ownerId);
+    }
+
+    @Transactional(readOnly = true)
+    public OwnerStationStatsDTO getOwnerRealtimeStats(Long ownerId) {
+        long totalStations = stationRepository.countByOwnerId(ownerId);
+        long activeChargers = chargerSlotRepository.countByOwnerIdAndStatusNot(ownerId, SlotStatus.MAINTENANCE);
+
+        List<SlotStatus> inUseStatuses = List.of(SlotStatus.RESERVED, SlotStatus.BOOKED, SlotStatus.CHARGING);
+        long inUseChargers = chargerSlotRepository.countByOwnerIdAndStatusIn(ownerId, inUseStatuses);
+
+        // Guard against data mismatches while ensuring a sane utilization cap.
+        if (inUseChargers > activeChargers) {
+            inUseChargers = activeChargers;
+        }
+
+        double utilizationRate = activeChargers == 0
+                ? 0.0
+                : (inUseChargers * 100.0) / activeChargers;
+
+        double roundedUtilizationRate = Math.round(utilizationRate * 10.0) / 10.0;
+
+        return OwnerStationStatsDTO.builder()
+                .totalStations(totalStations)
+                .activeChargers(activeChargers)
+                .inUseChargers(inUseChargers)
+                .utilizationRate(roundedUtilizationRate)
+                .build();
     }
 
     public Station getStationById(Long id) {

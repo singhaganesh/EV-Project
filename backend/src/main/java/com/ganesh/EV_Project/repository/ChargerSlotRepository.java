@@ -29,6 +29,18 @@ public interface ChargerSlotRepository extends JpaRepository<ChargerSlot, Long> 
     // Find all slots at a station
     List<ChargerSlot> findByStationId(Long stationId);
 
+    @Query("SELECT COUNT(s) FROM ChargerSlot s " +
+            "WHERE s.station.owner.id = :ownerId " +
+            "AND s.status <> :excludedStatus")
+    long countByOwnerIdAndStatusNot(@Param("ownerId") Long ownerId,
+                                    @Param("excludedStatus") SlotStatus excludedStatus);
+
+    @Query("SELECT COUNT(s) FROM ChargerSlot s " +
+            "WHERE s.station.owner.id = :ownerId " +
+            "AND s.status IN :statuses")
+    long countByOwnerIdAndStatusIn(@Param("ownerId") Long ownerId,
+                                   @Param("statuses") List<SlotStatus> statuses);
+
     // Pessimistic lock: find available slots of a specific connector type at a station
     // This prevents race conditions when two users book simultaneously
     @Lock(LockModeType.PESSIMISTIC_WRITE)

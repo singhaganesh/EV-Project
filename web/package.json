@@ -32,12 +32,12 @@
         "tailwindcss": "^4.1.18"
     },
     "devDependencies": {
-        "@eslint/eslintrc": "^3.3.3",
+        "@eslint/eslintrc": "^0.1.0",
         "@types/react": "^19.0.8",
         "@types/react-dom": "^19.0.3",
         "@vitejs/plugin-react": "^4.3.4",
-        "eslint": "^9.19.0",
-        "eslint-plugin-react": "^7.37.4",
+        "eslint": "^10.1.0",
+        "eslint-plugin-react": "^7.22.0",
         "eslint-plugin-react-hooks": "^5.0.0",
         "eslint-plugin-react-refresh": "^0.4.18",
         "vite": "^6.1.0"

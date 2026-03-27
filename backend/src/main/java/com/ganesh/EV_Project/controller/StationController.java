@@ -1,6 +1,8 @@
 package com.ganesh.EV_Project.controller;
 
+import com.ganesh.EV_Project.dto.OwnerStationStatsDTO;
 import com.ganesh.EV_Project.model.Station;
+import com.ganesh.EV_Project.payload.APIResponse;
 import com.ganesh.EV_Project.service.StationService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -30,11 +32,19 @@ public class StationController {
         return new ResponseEntity<>(ownerStations, HttpStatus.OK);
     }
 
+    @GetMapping("/owner/{ownerId}/stats")
+    public ResponseEntity<APIResponse> getOwnerRealtimeStats(@PathVariable Long ownerId) {
+        OwnerStationStatsDTO stats = stationService.getOwnerRealtimeStats(ownerId);
+        return new ResponseEntity<>(
+                new APIResponse(true, "Owner station stats fetched successfully", stats),
+                HttpStatus.OK);
+    }
+
     @GetMapping("/{id}")
-    public ResponseEntity<com.ganesh.EV_Project.payload.APIResponse> getStationById(@PathVariable Long id) {
+    public ResponseEntity<APIResponse> getStationById(@PathVariable Long id) {
         Station station = stationService.getStationById(id);
         return new ResponseEntity<>(
-                new com.ganesh.EV_Project.payload.APIResponse(true, "Station fetched successfully", station),
+                new APIResponse(true, "Station fetched successfully", station),
                 HttpStatus.OK);
     }
 
