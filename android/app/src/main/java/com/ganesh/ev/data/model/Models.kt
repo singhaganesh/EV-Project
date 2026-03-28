@@ -124,6 +124,8 @@ data class OtpRequest(val mobileNumber: String)
 
 data class OtpValidateRequest(val mobileNumber: String, val otp: String)
 
+data class TokenRefreshRequest(val refreshToken: String)
+
 data class CompleteProfileRequest(
         @SerializedName("mobileNumber") val mobileNumber: String,
         val name: String,
@@ -149,6 +151,7 @@ data class AuthResponse(val success: Boolean, val message: String?, val data: Au
 data class AuthData(
         @SerializedName("isNewUser") val isNewUser: Boolean?,
         val token: String?,
+        val refreshToken: String?,
         val user: User?
 )
 

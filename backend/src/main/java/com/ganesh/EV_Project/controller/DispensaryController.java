@@ -7,6 +7,7 @@ import com.ganesh.EV_Project.service.DispensaryService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -25,6 +26,7 @@ public class DispensaryController {
     }
 
     @PostMapping("/station/{stationId}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'STATION_OWNER')")
     public ResponseEntity<APIResponse> addToStation(
             @PathVariable Long stationId,
             @RequestBody Dispensary dispensary) {
@@ -33,6 +35,7 @@ public class DispensaryController {
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'STATION_OWNER')")
     public ResponseEntity<APIResponse> updateDispensary(
             @PathVariable Long id,
             @RequestBody Dispensary dispensary) {
@@ -41,6 +44,7 @@ public class DispensaryController {
     }
 
     @PutMapping("/{id}/connectorType")
+    @PreAuthorize("hasAnyRole('ADMIN', 'STATION_OWNER')")
     public ResponseEntity<APIResponse> updateDispensaryConnectorType(
             @PathVariable Long id,
             @RequestParam ConnectorType connectorType) {
@@ -54,6 +58,7 @@ public class DispensaryController {
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'STATION_OWNER')")
     public ResponseEntity<APIResponse> deleteDispensary(@PathVariable Long id) {
         dispensaryService.deleteDispensary(id);
         return ResponseEntity.ok(new APIResponse(true, "Dispensary and its guns deleted", null));

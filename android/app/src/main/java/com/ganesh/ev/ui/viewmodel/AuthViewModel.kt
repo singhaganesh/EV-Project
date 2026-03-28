@@ -16,7 +16,12 @@ sealed class AuthUiState {
     object Initial : AuthUiState()
     object Loading : AuthUiState()
     data class OtpSent(val otp: String, val message: String) : AuthUiState()
-    data class OtpValidated(val isNewUser: Boolean, val token: String?, val user: User?) : AuthUiState()
+    data class OtpValidated(
+        val isNewUser: Boolean, 
+        val token: String?, 
+        val refreshToken: String?,
+        val user: User?
+    ) : AuthUiState()
     data class ProfileCompleted(val user: User, val token: String) : AuthUiState()
     data class Error(val message: String) : AuthUiState()
 }
@@ -69,8 +74,12 @@ class AuthViewModel(
                         val user = authData?.user
                         
                         if (token != null && token.isNotEmpty()) {
-                            // Existing user - save token and user
+                            // Existing user - save tokens and user
                             RetrofitClient.setAuthToken(token)
+                            authData?.refreshToken?.let { 
+                                RetrofitClient.setRefreshToken(it)
+                                userPreferencesRepository?.saveRefreshToken(it)
+                            }
                             userPreferencesRepository?.saveAuthToken(token)
                             user?.let { userPreferencesRepository?.saveUser(it) }
                         }
@@ -78,6 +87,7 @@ class AuthViewModel(
                         _uiState.value = AuthUiState.OtpValidated(
                             isNewUser = isNewUser,
                             token = token,
+                            refreshToken = authData?.refreshToken,
                             user = user
                         )
                     } else {
@@ -115,8 +125,12 @@ class AuthViewModel(
                         val user = authData?.user
                         
                         if (token != null && user != null) {
-                            // Save token and user
+                            // Save tokens and user
                             RetrofitClient.setAuthToken(token)
+                            authData.refreshToken?.let {
+                                RetrofitClient.setRefreshToken(it)
+                                userPreferencesRepository?.saveRefreshToken(it)
+                            }
                             userPreferencesRepository?.saveAuthToken(token)
                             userPreferencesRepository?.saveUser(user)
                             _uiState.value = AuthUiState.ProfileCompleted(user, token)
@@ -134,6 +148,10 @@ class AuthViewModel(
                             )
                             if (token != null) {
                                 RetrofitClient.setAuthToken(token)
+                                authData?.refreshToken?.let {
+                                    RetrofitClient.setRefreshToken(it)
+                                    userPreferencesRepository?.saveRefreshToken(it)
+                                }
                                 userPreferencesRepository?.saveAuthToken(token)
                                 userPreferencesRepository?.saveUser(newUser)
                                 _uiState.value = AuthUiState.ProfileCompleted(newUser, token)
@@ -155,7 +173,12 @@ class AuthViewModel(
     
     fun logout() {
         viewModelScope.launch {
-            RetrofitClient.clearAuthToken()
+            try {
+                RetrofitClient.apiService.logout()
+            } catch (e: Exception) {
+                // Ignore logout network error
+            }
+            RetrofitClient.clearAuthTokens()
             userPreferencesRepository?.clearUserData()
             _uiState.value = AuthUiState.Initial
         }

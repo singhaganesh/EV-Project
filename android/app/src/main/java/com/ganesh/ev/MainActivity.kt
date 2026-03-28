@@ -208,7 +208,7 @@ fun EVChargingApp(userPreferencesRepository: UserPreferencesRepository) {
                         onAuthExpired = {
                             // Token expired or missing — clear data and go to Login
                             coroutineScope.launch { userPreferencesRepository.clearUserData() }
-                            RetrofitClient.clearAuthToken()
+                            RetrofitClient.clearAuthTokens()
                             navController.navigate("login") {
                                 popUpTo("splash") { inclusive = true }
                             }
@@ -236,12 +236,18 @@ fun EVChargingApp(userPreferencesRepository: UserPreferencesRepository) {
 
             composable("login") {
                 LoginScreen(
-                        onLoginSuccess = { user, token ->
+                        onLoginSuccess = { user, token, refreshToken ->
                             currentUserId = user.id
                             currentUser = user
                             if (token != null) {
                                 RetrofitClient.setAuthToken(token)
+                                coroutineScope.launch { userPreferencesRepository.saveAuthToken(token) }
                             }
+                            if (refreshToken != null) {
+                                RetrofitClient.setRefreshToken(refreshToken)
+                                coroutineScope.launch { userPreferencesRepository.saveRefreshToken(refreshToken) }
+                            }
+                            coroutineScope.launch { userPreferencesRepository.saveUser(user) }
                             navController.navigate("home") { popUpTo("login") { inclusive = true } }
                         }
                 )
@@ -252,7 +258,7 @@ fun EVChargingApp(userPreferencesRepository: UserPreferencesRepository) {
                         onLogout = {
                             currentUserId = null
                             currentUser = null
-                            RetrofitClient.clearAuthToken()
+                            RetrofitClient.clearAuthTokens()
                             coroutineScope.launch { userPreferencesRepository.clearUserData() }
                             navController.navigate("login") { popUpTo("home") { inclusive = true } }
                         },
@@ -451,7 +457,7 @@ fun EVChargingApp(userPreferencesRepository: UserPreferencesRepository) {
                         onLogout = {
                             currentUserId = null
                             currentUser = null
-                            RetrofitClient.clearAuthToken()
+                            RetrofitClient.clearAuthTokens()
                             coroutineScope.launch { userPreferencesRepository.clearUserData() }
                             navController.navigate("login") { popUpTo("home") { inclusive = true } }
                         }

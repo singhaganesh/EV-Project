@@ -41,6 +41,12 @@ interface ApiService {
         @POST("api/auth/complete-profile")
         suspend fun completeProfile(@Body request: CompleteProfileRequest): Response<AuthResponse>
 
+        @POST("api/auth/refresh-token")
+        suspend fun refreshToken(@Body request: com.ganesh.ev.data.model.TokenRefreshRequest): Response<AuthResponse>
+
+        @POST("api/auth/logout")
+        suspend fun logout(): Response<ApiResponse<Void>>
+
         // Station APIs
         @GET("api/stations") suspend fun getAllStations(): Response<List<Station>>
 

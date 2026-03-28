@@ -20,7 +20,7 @@ import com.ganesh.ev.ui.viewmodel.AuthViewModelFactory
 
 @Composable
 fun LoginScreen(
-        onLoginSuccess: (User, String?) -> Unit,
+        onLoginSuccess: (User, String?, String?) -> Unit,
         viewModel: AuthViewModel = viewModel(factory = AuthViewModelFactory(LocalContext.current))
 ) {
     var mobileNumber by remember { mutableStateOf("") }
@@ -49,7 +49,7 @@ fun LoginScreen(
                     showProfileForm = false
                     if (state.token != null && state.user != null) {
                         currentUser = state.user
-                        onLoginSuccess(state.user, state.token)
+                        onLoginSuccess(state.user, state.token, state.refreshToken)
                     } else if (state.token != null) {
                         val user =
                                 User(
@@ -63,7 +63,7 @@ fun LoginScreen(
                                         updatedAt = null
                                 )
                         currentUser = user
-                        onLoginSuccess(user, state.token)
+                        onLoginSuccess(user, state.token, state.refreshToken)
                     }
                 }
             }
@@ -71,7 +71,7 @@ fun LoginScreen(
                 showOtpField = false
                 showProfileForm = false
                 state.user?.let { currentUser = it }
-                currentUser?.let { onLoginSuccess(it, state.token) }
+                currentUser?.let { onLoginSuccess(it, state.token, null) } // CompleteProfile should also ideally return refreshToken
             }
             is AuthUiState.Error -> {
                 showOtpField = false

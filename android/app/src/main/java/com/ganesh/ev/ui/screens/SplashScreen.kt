@@ -46,8 +46,13 @@ fun SplashScreen(
 
         try {
             val token = userPreferencesRepository.authToken.first()
+            val refreshToken = userPreferencesRepository.refreshToken.first()
+            
             if (!token.isNullOrEmpty() && isTokenStillValid(token)) {
                 RetrofitClient.setAuthToken(token)
+                if (!refreshToken.isNullOrEmpty()) {
+                    RetrofitClient.setRefreshToken(refreshToken)
+                }
                 tokenValid = true
                 validToken = token
             } else {

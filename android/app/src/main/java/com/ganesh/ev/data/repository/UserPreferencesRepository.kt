@@ -21,6 +21,7 @@ class UserPreferencesRepository(private val context: Context) {
 
     companion object {
         val USER_TOKEN = stringPreferencesKey("user_token")
+        val REFRESH_TOKEN = stringPreferencesKey("refresh_token")
         val USER_DATA = stringPreferencesKey("user_data")
         val USER_ID = longPreferencesKey("user_id")
         val SHOULD_SHOW_ONBOARDING = booleanPreferencesKey("should_show_onboarding")
@@ -34,6 +35,9 @@ class UserPreferencesRepository(private val context: Context) {
     val authToken: Flow<String?> =
             context.dataStore.data.map { preferences -> preferences[USER_TOKEN] }
 
+    val refreshToken: Flow<String?> =
+            context.dataStore.data.map { preferences -> preferences[REFRESH_TOKEN] }
+
     val currentUser: Flow<User?> =
             context.dataStore.data.map { preferences ->
                 preferences[USER_DATA]?.let { userJson ->
@@ -45,6 +49,10 @@ class UserPreferencesRepository(private val context: Context) {
 
     suspend fun saveAuthToken(token: String) {
         context.dataStore.edit { preferences -> preferences[USER_TOKEN] = token }
+    }
+
+    suspend fun saveRefreshToken(token: String) {
+        context.dataStore.edit { preferences -> preferences[REFRESH_TOKEN] = token }
     }
 
     suspend fun saveUser(user: User) {

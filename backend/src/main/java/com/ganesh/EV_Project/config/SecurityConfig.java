@@ -6,6 +6,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -17,11 +18,13 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import org.springframework.http.HttpMethod;
 
 import java.util.Arrays;
 
 @Configuration
 @EnableWebSecurity
+@EnableMethodSecurity // âœ… Enable @PreAuthorize
 public class SecurityConfig {
 
     @Autowired
@@ -60,16 +63,23 @@ public class SecurityConfig {
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> {
-                    auth.requestMatchers("/api/auth/login", "/api/auth/register", "/api/auth/send-otp",
-                            "/api/auth/validate-otp", "/api/auth/complete-profile").permitAll();
-                    auth.requestMatchers("/api/stations/**").permitAll();
-                    auth.requestMatchers("/api/dispensaries/**").permitAll();
-                    auth.requestMatchers("/api/slots/**").permitAll();
+                    // Public Auth Endpoints
+                    auth.requestMatchers("/api/auth/**").permitAll();
+                    
+                    // Station Discovery - GET is public, Mutations are SECURE
+                    auth.requestMatchers(HttpMethod.GET, "/api/stations/**").permitAll();
+                    auth.requestMatchers(HttpMethod.GET, "/api/dispensaries/**").permitAll();
+                    auth.requestMatchers(HttpMethod.GET, "/api/slots/**").permitAll();
+                    auth.requestMatchers(HttpMethod.GET, "/api/iot/**").permitAll();
+                    
+                    // Public System Endpoints
                     auth.requestMatchers("/api/public/**").permitAll();
                     auth.requestMatchers("/ws/**").permitAll();
                     auth.requestMatchers("/api/payments/webhook").permitAll();
                     auth.requestMatchers("/h2-console/**").permitAll();
                     auth.requestMatchers("/error").permitAll();
+                    
+                    // Everything else requires Authentication
                     auth.anyRequest().authenticated();
                 });
 

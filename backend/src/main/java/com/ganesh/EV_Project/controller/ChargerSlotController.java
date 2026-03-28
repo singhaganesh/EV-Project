@@ -7,6 +7,7 @@ import com.ganesh.EV_Project.service.ChargerSlotService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -43,13 +44,15 @@ public class ChargerSlotController {
     }
 
     @PutMapping("/{id}/status")
+    @PreAuthorize("hasAnyRole('ADMIN', 'STATION_OWNER')")
     public ResponseEntity<ChargerSlot> updateSlotStatus(@PathVariable Long id, @RequestParam SlotStatus status) {
         ChargerSlot updatedSlot = slotService.updateSlotStatus(id, status);
         return new ResponseEntity<>(updatedSlot, HttpStatus.OK);
     }
 
     @PutMapping("/{id}/connectorType")
-    public ResponseEntity<ChargerSlot> updateSlotConnectorType(@PathVariable Long id, @RequestParam ConnectorType connectorType) {
+    @PreAuthorize("hasAnyRole('ADMIN', 'STATION_OWNER')")
+    public ResponseEntity<ChargerSlot> updateSlotConnectorType(@PathVariable Long id, @RequestParam ConnectorType connectorType) {    
         ChargerSlot updatedSlot = slotService.updateSlotConnectorType(id, connectorType);
         return new ResponseEntity<>(updatedSlot, HttpStatus.OK);
     }
@@ -61,8 +64,10 @@ public class ChargerSlotController {
     }
 
     @PostMapping("/station/{stationId}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'STATION_OWNER')")
     public ResponseEntity<ChargerSlot> createSlot(@RequestBody ChargerSlot slot, @PathVariable Long stationId) {
         ChargerSlot savedSlot = slotService.createSlot(slot, stationId);
         return new ResponseEntity<>(savedSlot, HttpStatus.CREATED);
     }
 }
+

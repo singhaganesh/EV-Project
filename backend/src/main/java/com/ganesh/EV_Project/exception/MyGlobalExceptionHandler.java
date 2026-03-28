@@ -44,7 +44,8 @@ public class MyGlobalExceptionHandler {
 
     @ExceptionHandler(org.springframework.dao.DataIntegrityViolationException.class)
     public ResponseEntity<APIResponse> handleDataIntegrityViolationException(org.springframework.dao.DataIntegrityViolationException e){
-        APIResponse apiResponse = new APIResponse("This dispenser has past or active bookings, so it cannot be deleted. You can set it to 'Maintenance' instead.", false);
+        String message = e.getRootCause() != null ? e.getRootCause().getMessage() : e.getMessage();
+        APIResponse apiResponse = new APIResponse("Database Error: " + message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.CONFLICT);
     }
 }
