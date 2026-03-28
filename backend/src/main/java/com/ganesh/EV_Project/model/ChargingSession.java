@@ -43,5 +43,8 @@ public class ChargingSession {
 
     @Column
     private Double totalCost;       // final billed amount
+
+    @Column
+    private String status;          // e.g., ONGOING, COMPLETED
 }
 

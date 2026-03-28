@@ -1,6 +1,7 @@
 package com.ganesh.EV_Project.model;
 
 import com.ganesh.EV_Project.enums.ConnectorType;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -41,4 +42,7 @@ public class Dispensary {
     @Column(nullable = false)
     @Builder.Default
     private Integer numberOfGuns = 2;
+
+    @Column
+    private java.time.LocalDateTime lastUsedTime;
 }

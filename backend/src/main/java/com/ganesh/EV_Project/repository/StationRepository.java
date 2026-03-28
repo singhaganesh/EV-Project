@@ -15,6 +15,9 @@ public interface StationRepository extends JpaRepository<Station, Long> {
 
         long countByOwnerId(Long ownerId);
 
+        @Query("SELECT s.lastUsedTime FROM Station s WHERE s.id = :stationId")
+        java.time.LocalDateTime findLastUsedTimeById(@Param("stationId") Long stationId);
+
         // Bounding box query — returns only stations visible in the current map
         // viewport
         @Query("SELECT s FROM Station s WHERE s.latitude BETWEEN :swLat AND :neLat AND s.longitude BETWEEN :swLng AND :neLng")

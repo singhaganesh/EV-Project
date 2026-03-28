@@ -22,6 +22,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.ganesh.ev.data.model.StationWithScore
 import com.ganesh.ev.ui.theme.*
+import com.ganesh.ev.util.formatRelativeTime
 import java.util.Locale
 
 @Composable
@@ -183,7 +184,7 @@ fun StationCard(stationWithScore: StationWithScore, onClick: () -> Unit) {
 
                                         Spacer(modifier = Modifier.height(4.dp))
                                         Text(
-                                                text = "Last used ${stationWithScore.lastActive}",
+                                                text = "Used: ${formatRelativeTime(station.lastUsedTime)}",
                                                 style = MaterialTheme.typography.bodySmall,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )

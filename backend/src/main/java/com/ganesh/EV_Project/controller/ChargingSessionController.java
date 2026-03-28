@@ -6,10 +6,12 @@ import com.ganesh.EV_Project.enums.SlotStatus;
 import com.ganesh.EV_Project.model.Booking;
 import com.ganesh.EV_Project.model.ChargerSlot;
 import com.ganesh.EV_Project.model.ChargingSession;
+import com.ganesh.EV_Project.model.Station;
 import com.ganesh.EV_Project.payload.APIResponse;
 import com.ganesh.EV_Project.repository.BookingRepository;
 import com.ganesh.EV_Project.repository.ChargerSlotRepository;
 import com.ganesh.EV_Project.repository.ChargingSessionRepository;
+import com.ganesh.EV_Project.repository.StationRepository;
 import com.ganesh.EV_Project.controller.WebSocketController;
 import com.ganesh.EV_Project.service.ChargingSimulatorService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,6 +34,12 @@ public class ChargingSessionController {
 
     @Autowired
     private ChargerSlotRepository slotRepository;
+
+    @Autowired
+    private StationRepository stationRepository;
+
+    @Autowired
+    private com.ganesh.EV_Project.repository.DispensaryRepository dispensaryRepository;
 
     @Autowired
     private WebSocketController webSocketController;
@@ -75,6 +83,7 @@ public class ChargingSessionController {
             ChargingSession session = ChargingSession.builder()
                     .booking(booking)
                     .startTime(LocalDateTime.now())
+                    .status("ONGOING")
                     .energyKwh(0.0)
                     .totalCost(0.0)
                     .build();
@@ -127,10 +136,11 @@ public class ChargingSessionController {
             session.setEndTime(endTime);
             session.setEnergyKwh(energyConsumed);
             session.setTotalCost(cost);
+            session.setStatus("COMPLETED");
 
             ChargingSession savedSession = chargingSessionRepository.save(session);
 
-            // Update booking status
+            // Release Booking and Slot
             Booking booking = session.getBooking();
             booking.setStatus(BookingStatus.COMPLETED);
             booking.setActualEndTime(endTime);
@@ -140,6 +150,19 @@ public class ChargingSessionController {
             ChargerSlot slot = booking.getSlot();
             slot.setStatus(SlotStatus.AVAILABLE);
             slotRepository.save(slot);
+
+            // ── UPDATE STATION AND DISPENSARY LAST USED TIME ──
+            Station station = slot.getStation();
+            if (station != null) {
+                station.setLastUsedTime(endTime);
+                stationRepository.save(station);
+            }
+            
+            com.ganesh.EV_Project.model.Dispensary dispensary = slot.getDispensary();
+            if (dispensary != null) {
+                dispensary.setLastUsedTime(endTime);
+                dispensaryRepository.save(dispensary);
+            }
 
             // Notify via WebSocket
             webSocketController.notifySlotStatusChange(slot.getStation().getId(), slot);

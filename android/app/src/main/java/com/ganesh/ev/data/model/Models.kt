@@ -23,14 +23,16 @@ data class Station(
         val operatingHours: String? = null,
         val pricePerKwh: Double? = null,
         val truckPricePerKwh: Double? = null,
-        val isOpen: Boolean? = null
+        val isOpen: Boolean? = null,
+        @SerializedName("lastUsedTime") val lastUsedTime: String? = null
 )
 
 data class Dispensary(
         val id: Long,
         val name: String,
         val totalPowerKw: Double,
-        val acceptsTrucks: Boolean
+        val acceptsTrucks: Boolean,
+        @SerializedName("lastUsedTime") val lastUsedTime: String? = null
 )
 
 data class ChargerSlot(

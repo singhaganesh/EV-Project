@@ -39,6 +39,7 @@ import com.google.maps.android.compose.MapUiSettings
 import com.google.maps.android.compose.Marker
 import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.rememberCameraPositionState
+import com.ganesh.ev.util.formatRelativeTime
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -526,7 +527,7 @@ private fun DispensaryCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                        text = "Last used recently",
+                        text = "Used: ${formatRelativeTime(dispensary?.lastUsedTime)}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
                 )

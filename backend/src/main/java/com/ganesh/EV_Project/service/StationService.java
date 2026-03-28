@@ -15,6 +15,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 public class StationService {
@@ -27,6 +29,9 @@ public class StationService {
 
     @Autowired
     private BookingRepository bookingRepository;
+
+    @Autowired
+    private com.ganesh.EV_Project.repository.ChargingSessionRepository chargingSessionRepository;
 
     public List<Station> getAllStations() {
         return stationRepository.findAll();
@@ -44,7 +49,6 @@ public class StationService {
         List<SlotStatus> inUseStatuses = List.of(SlotStatus.RESERVED, SlotStatus.BOOKED, SlotStatus.CHARGING);
         long inUseChargers = chargerSlotRepository.countByOwnerIdAndStatusIn(ownerId, inUseStatuses);
 
-        // Guard against data mismatches while ensuring a sane utilization cap.
         if (inUseChargers > activeChargers) {
             inUseChargers = activeChargers;
         }
@@ -64,9 +68,8 @@ public class StationService {
     }
 
     public Station getStationById(Long id) {
-        Station station = stationRepository.findById(id)
+        return stationRepository.findById(id)
                 .orElseThrow(() -> new APIException("Station not found"));
-        return station;
     }
 
     @Transactional

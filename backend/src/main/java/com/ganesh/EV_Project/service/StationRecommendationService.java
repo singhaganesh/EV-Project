@@ -30,6 +30,9 @@ public class StationRecommendationService {
     private ChargerSlotRepository chargerSlotRepository;
 
     @Autowired
+    private com.ganesh.EV_Project.repository.ChargingSessionRepository chargingSessionRepository;
+
+    @Autowired
     private com.ganesh.EV_Project.repository.IoTSensorDataRepository ioTSensorDataRepository;
 
     // Weights from paper (approximate or configurable)
@@ -88,6 +91,16 @@ public class StationRecommendationService {
     public StationScoreDTO getStationDetail(Long stationId, double userLat, double userLng) {
         Station station = stationRepository.findById(stationId)
                 .orElseThrow(() -> new RuntimeException("Station not found: " + stationId));
+
+        // ── POPULATE DISPENSARIES FOR DETAIL VIEW ──
+        List<com.ganesh.EV_Project.model.Dispensary> dispensaries = chargerSlotRepository.findByStation(station)
+            .stream()
+            .map(slot -> slot.getDispensary())
+            .distinct()
+            .collect(Collectors.toList());
+        
+        // No need for chargingSessionRepository lookup now, use persistent field
+        station.setDispensaries(dispensaries);
 
         double distance = calculateHaversineDistance(userLat, userLng, station.getLatitude(),
                 station.getLongitude());
@@ -166,7 +179,9 @@ public class StationRecommendationService {
                 .collect(Collectors.toList());
 
         String lastActive = getLastActiveTime(station);
+        station.setLastUsedTime(station.getLastUsedTime()); // Ensure persistent field is updated if needed
         double rating = station.getRating() != null ? station.getRating() : 0.0;
+
 
         return new StationScoreDTO(
                 station, distance, finalScore,

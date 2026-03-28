@@ -38,6 +38,7 @@ import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.maps.android.compose.*
+import com.ganesh.ev.util.formatRelativeTime
 import java.util.Locale
 import kotlinx.coroutines.delay
 
@@ -609,6 +610,12 @@ fun ClayStationCard(item: StationWithScore, onClick: () -> Unit) {
                                                 "${String.format(Locale.US, "%.1f", item.distance)} km • ${item.availableSlots} slots free",
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                        text = "Last used: ${formatRelativeTime(station.lastUsedTime)}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
                                 )
                         }
                         Icon(
