@@ -15,9 +15,11 @@ public class OtpService {
     @Autowired
     private OtpRepository otpRepository;
 
-
+    @Autowired
+    private LoginAttemptService loginAttemptService;
 
     public String generateOtp(String mobileNumber) {
+
         String otp = String.format("%06d", new Random().nextInt(999999));
         Otp otpEntity = new Otp();
         otpEntity.setMobileNumber(mobileNumber);
@@ -44,9 +46,11 @@ public class OtpService {
         }
 
         if (!savedOtp.getOtp().equals(otp)) {
+            loginAttemptService.loginFailed(mobileNumber);
             return false; // wrong
         }
 
+        loginAttemptService.loginSucceeded(mobileNumber);
         savedOtp.setUsed(true);
         otpRepository.save(savedOtp);
 

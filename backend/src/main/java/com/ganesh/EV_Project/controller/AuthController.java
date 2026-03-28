@@ -8,6 +8,7 @@ import com.ganesh.EV_Project.payload.APIResponse;
 import com.ganesh.EV_Project.service.OtpService;
 import com.ganesh.EV_Project.service.RefreshTokenService;
 import com.ganesh.EV_Project.service.UserService;
+import com.ganesh.EV_Project.service.LoginAttemptService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -32,6 +33,9 @@ public class AuthController {
     private RefreshTokenService refreshTokenService;
 
     @Autowired
+    private LoginAttemptService loginAttemptService;
+
+    @Autowired
     private JwtUtil jwtUtil;
 
     @Autowired
@@ -39,6 +43,14 @@ public class AuthController {
 
     @PostMapping("/send-otp")
     public ResponseEntity<?> sendOtp(@RequestParam String mobileNumber) {
+        if (loginAttemptService.isBlocked(mobileNumber)) {
+            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                    .body(APIResponse.builder()
+                            .success(false)
+                            .message("Too many attempts. You are blocked for 15 minutes.")
+                            .build());
+        }
+
         String otp = otpService.generateOtp(mobileNumber);
         return ResponseEntity.ok(APIResponse.builder()
                 .success(true)
@@ -50,11 +62,20 @@ public class AuthController {
     @PostMapping("/validate-otp")
     public ResponseEntity<?> validateOtp(@RequestParam String mobileNumber,
                                          @RequestParam String otp) {
+        if (loginAttemptService.isBlocked(mobileNumber)) {
+            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                    .body(APIResponse.builder()
+                            .success(false)
+                            .message("Too many attempts. You are blocked for 15 minutes.")
+                            .build());
+        }
+
         boolean isValid = otpService.validateOtp(mobileNumber, otp);
         if (!isValid) {
+            int remaining = loginAttemptService.getRemainingAttempts(mobileNumber);
             return ResponseEntity.ok(APIResponse.builder()
                     .success(false)
-                    .message("Invalid or expired OTP")
+                    .message("Invalid or expired OTP. " + remaining + " attempts remaining.")
                     .build());
         }
 
@@ -108,9 +129,19 @@ public class AuthController {
 
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody LoginRequest request) {
+        String key = request.getEmail();
+        if (loginAttemptService.isBlocked(key)) {
+            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                    .body(APIResponse.builder()
+                            .success(false)
+                            .message("Too many attempts. You are blocked for 15 minutes.")
+                            .build());
+        }
+
         User user = userService.findByEmail(request.getEmail());
 
         if (user == null) {
+            loginAttemptService.loginFailed(key);
             return ResponseEntity.ok(APIResponse.builder()
                     .success(false)
                     .message("Invalid email or password")
@@ -121,12 +152,15 @@ public class AuthController {
         boolean isTestPassword = "password123".equals(request.getPassword());
 
         if (!passwordMatches && !isTestPassword) {
+            loginAttemptService.loginFailed(key);
+            int remaining = loginAttemptService.getRemainingAttempts(key);
             return ResponseEntity.ok(APIResponse.builder()
                     .success(false)
-                    .message("Invalid email or password")
+                    .message("Invalid email or password. " + remaining + " attempts remaining.")
                     .build());
         }
 
+        loginAttemptService.loginSucceeded(key);
         Map<String, Object> claims = new HashMap<>();
         claims.put("userId", user.getId());
         claims.put("role", user.getRole().name());
