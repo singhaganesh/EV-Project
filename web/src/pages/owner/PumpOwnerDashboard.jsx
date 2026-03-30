@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     BatteryCharging,
     MapPin,
@@ -7,66 +7,13 @@ import {
     AlertTriangle,
     ChevronDown,
     ChevronUp,
-    Plus
+    Plus,
+    Activity
 } from 'lucide-react';
 
 import StatCard from '../../components/common/StatCard';
-import QuickActionCard from '../../components/common/QuickActionCard';
 import StatusBadge from '../../components/common/StatusBadge';
-
-// Mock Data structure reflecting Owner -> Stations -> Dispensers -> Connectors
-const ownerData = {
-    stats: {
-        activeStations: 2,
-        totalEnergy: "1,450 kWh",
-        todayEarnings: "$342.50",
-        alerts: 1
-    },
-    stations: [
-        {
-            id: 'ST-NW-01',
-            name: 'Downtown Super C',
-            location: '1200 4th Ave, Seattle',
-            status: 'Active',
-            dispensers: [
-                {
-                    id: 'DSP-01',
-                    name: 'Dispenser 1 (Fast DC)',
-                    status: 'Active',
-                    connectors: [
-                        { id: 'C1-A', type: 'CCS2', maxPower: '150kW', status: 'Charging', currentSession: '32m remaining' },
-                        { id: 'C1-B', type: 'CCS2', maxPower: '50kW', status: 'Idle', currentSession: null }
-                    ]
-                },
-                {
-                    id: 'DSP-02',
-                    name: 'Dispenser 2 (AC Level 2)',
-                    status: 'Maintenance',
-                    connectors: [
-                        { id: 'C2-A', type: 'Type 2', maxPower: '22kW', status: 'Offline', currentSession: null },
-                        { id: 'C2-B', type: 'Type 2', maxPower: '22kW', status: 'Offline', currentSession: null }
-                    ]
-                }
-            ]
-        },
-        {
-            id: 'ST-E-05',
-            name: 'Bellevue Mall Hub',
-            location: '500 Bellevue Way NE',
-            status: 'Active',
-            dispensers: [
-                {
-                    id: 'DSP-03',
-                    name: 'Ultra Fast Hub A',
-                    status: 'Active',
-                    connectors: [
-                        { id: 'C3-A', type: 'CCS2', maxPower: '350kW', status: 'Idle', currentSession: null }
-                    ]
-                }
-            ]
-        }
-    ]
-};
+import api from '../../api/axios';
 
 // Sub-component for a Dispenser row
 const DispenserRow = ({ dispenser }) => {
@@ -76,36 +23,22 @@ const DispenserRow = ({ dispenser }) => {
                 <div className="flex items-center gap-2">
                     <BatteryCharging className="w-4 h-4 text-slate-500" />
                     <h5 className="font-semibold text-sm text-slate-800">{dispenser.name}</h5>
-                    <span className="text-xs text-slate-400 font-mono ml-2">{dispenser.id}</span>
+                    <span className="text-xs text-slate-400 font-mono ml-2">#{dispenser.id}</span>
                 </div>
-                <StatusBadge status={dispenser.status} />
+                <StatusBadge status={dispenser.status || 'Active'} />
             </div>
 
-            {/* Connectors Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {dispenser.connectors.map(conn => (
-                    <div key={conn.id} className="bg-white border border-slate-200 rounded-lg p-3 shadow-sm flex flex-col gap-1">
-                        <div className="flex justify-between items-start">
-                            <span className="font-bold text-[#1A2234] text-sm">{conn.type}</span>
-                            <div className="flex items-center gap-1.5">
-                                <div className={`w-2 h-2 rounded-full ${conn.status === 'Charging' ? 'bg-cyan-500 animate-pulse'
-                                    : conn.status === 'Idle' ? 'bg-emerald-500'
-                                        : 'bg-rose-500'
-                                    }`} />
-                                <span className="text-xs font-medium text-slate-500">{conn.status}</span>
-                            </div>
-                        </div>
-                        <div className="flex justify-between items-end mt-1">
-                            <span className="text-xs text-slate-400">{conn.id}</span>
-                            <span className="text-xs font-semibold text-cyan-600 bg-cyan-50 px-2 py-0.5 rounded">{conn.maxPower}</span>
-                        </div>
-                        {conn.currentSession && (
-                            <p className="text-xs text-amber-600 font-medium mt-1 bg-amber-50 px-2 py-1 rounded inline-block">
-                                ⚡ {conn.currentSession}
-                            </p>
-                        )}
-                    </div>
-                ))}
+            {/* In a real scenario, we would map over connectors here. 
+                For the dashboard overview, we show a simplified summary. */}
+            <div className="flex gap-4">
+                <div className="bg-white px-3 py-2 rounded-lg border border-slate-200 shadow-sm flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
+                    <span className="text-xs font-medium text-slate-600">{dispenser.numberOfGuns || 2} Guns Available</span>
+                </div>
+                <div className="bg-white px-3 py-2 rounded-lg border border-slate-200 shadow-sm flex items-center gap-2">
+                    <Zap className="w-3 h-3 text-cyan-500" />
+                    <span className="text-xs font-medium text-slate-600">{dispenser.totalPowerKw} kW Total</span>
+                </div>
             </div>
         </div>
     );
@@ -114,7 +47,7 @@ const DispenserRow = ({ dispenser }) => {
 
 // Sub-component for a Station list item (Expandable)
 const StationRow = ({ station }) => {
-    const [expanded, setExpanded] = useState(true);
+    const [expanded, setExpanded] = useState(false);
 
     return (
         <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm transition-all hover:shadow-md">
@@ -129,16 +62,16 @@ const StationRow = ({ station }) => {
                     <div>
                         <div className="flex items-center gap-2">
                             <h3 className="font-bold text-[#1A2234] text-lg">{station.name}</h3>
-                            <span className="text-xs text-slate-400 font-mono bg-slate-100 px-2 py-0.5 rounded">{station.id}</span>
+                            <span className="text-xs text-slate-400 font-mono bg-slate-100 px-2 py-0.5 rounded">#{station.id}</span>
                         </div>
-                        <p className="text-sm font-medium text-slate-500 mt-1">{station.location}</p>
+                        <p className="text-sm font-medium text-slate-500 mt-1">{station.address}</p>
                     </div>
                 </div>
 
                 <div className="flex items-center gap-6 w-full sm:w-auto justify-between sm:justify-end">
-                    <StatusBadge status={station.status} />
+                    <StatusBadge status={station.isOpen ? 'Active' : 'Closed'} />
                     <div className="flex items-center gap-2 text-slate-400">
-                        <span className="text-sm font-semibold text-slate-600">{station.dispensers.length}</span>
+                        <span className="text-sm font-semibold text-slate-600">{station.dispensaries?.length || 0}</span>
                         <span className="text-xs uppercase tracking-wider">Dispensers</span>
                         <button className="p-1 hover:bg-slate-100 rounded-full transition-colors ml-2">
                             {expanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
@@ -151,14 +84,13 @@ const StationRow = ({ station }) => {
             {expanded && (
                 <div className="mt-4 border-t border-slate-100 pt-2 relative">
                     <div className="absolute left-6 top-2 bottom-4 w-px bg-slate-200 hidden md:block" />
-                    {station.dispensers.map((disp, idx) => (
-                        <DispenserRow key={disp.id} dispenser={disp} />
-                    ))}
-                    <div className="mt-4 ml-4 md:ml-12 pl-6">
-                        <button className="text-sm font-semibold text-cyan-600 flex items-center gap-1 hover:text-cyan-700 transition-colors">
-                            <Plus className="w-4 h-4" /> Add Dispenser to {station.name}
-                        </button>
-                    </div>
+                    {station.dispensaries && station.dispensaries.length > 0 ? (
+                        station.dispensaries.map((disp) => (
+                            <DispenserRow key={disp.id} dispenser={disp} />
+                        ))
+                    ) : (
+                        <p className="text-xs text-slate-400 mt-4 ml-12">No dispensaries configured for this station.</p>
+                    )}
                 </div>
             )}
         </div>
@@ -167,40 +99,90 @@ const StationRow = ({ station }) => {
 
 
 export default function PumpOwnerDashboard() {
+    const [stats, setStats] = useState({
+        totalStations: 0,
+        activeStationsCount: 0,
+        todayEnergyKwh: 0,
+        todayEarnings: 0,
+        utilizationRate: 0
+    });
+    const [stations, setStations] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const fetchDashboardData = async () => {
+            try {
+                setLoading(true);
+                const userStr = localStorage.getItem('user');
+                if (!userStr) return;
+                const user = JSON.parse(userStr);
+
+                const [statsRes, stationsRes] = await Promise.all([
+                    api.get(`/stations/owner/${user.id}/stats`),
+                    api.get(`/stations/owner/${user.id}`)
+                ]);
+
+                const statsData = statsRes.data?.data || statsRes.data || {};
+                setStats({
+                    totalStations: statsData.totalStations || 0,
+                    activeStationsCount: statsData.activeStationsCount || 0,
+                    todayEnergyKwh: statsData.todayEnergyKwh || 0,
+                    todayEarnings: statsData.todayEarnings || 0,
+                    utilizationRate: statsData.utilizationRate || 0
+                });
+
+                const stationList = Array.isArray(stationsRes.data) ? stationsRes.data : (stationsRes.data?.data || []);
+                setStations(stationList);
+            } catch (error) {
+                console.error('Error fetching dashboard data:', error);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchDashboardData();
+    }, []);
+
+    if (loading) {
+        return <div className="flex items-center justify-center h-[60vh]">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-500"></div>
+        </div>;
+    }
+
     return (
         <div className="space-y-8 max-w-[1400px] mx-auto">
             {/* Top Stat Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <StatCard
-                    title="My Active Stations"
-                    value={ownerData.stats.activeStations}
+                    title="Active Stations"
+                    value={`${stats.activeStationsCount} / ${stats.totalStations}`}
                     icon={MapPin}
                     iconColor="bg-blue-600"
-                    trend="up"
-                    trendValue="+1"
-                    trendLabel="since last month"
+                    trend={stats.activeStationsCount === stats.totalStations ? 'up' : 'down'}
+                    trendValue={stats.activeStationsCount === stats.totalStations ? "All Online" : "Action Needed"}
+                    trendLabel=""
                 />
                 <StatCard
-                    title="Energy Dispensed (24h)"
-                    value={ownerData.stats.totalEnergy}
+                    title="Energy Dispensed (Today)"
+                    value={`${stats.todayEnergyKwh.toFixed(1)} kWh`}
                     icon={Zap}
                     iconColor="bg-cyan-500"
                     trend="up"
-                    trendValue="+12%"
-                    trendLabel="vs yesterday"
+                    trendValue="Live"
+                    trendLabel="Updating real-time"
                 />
                 <StatCard
                     title="Today's Earnings"
-                    value={ownerData.stats.todayEarnings}
+                    value={`₹${stats.todayEarnings.toLocaleString('en-IN')}`}
                     icon={Wallet}
                     iconColor="bg-emerald-500"
                     trend="up"
-                    trendValue="+4%"
-                    trendLabel="vs yesterday"
+                    trendValue="Today"
+                    trendLabel="Gross Revenue"
                 />
                 <StatCard
                     title="Hardware Alerts"
-                    value={ownerData.stats.alerts}
+                    value="0"
                     icon={AlertTriangle}
                     iconColor="bg-rose-500"
                     trend="down"
@@ -228,11 +210,18 @@ export default function PumpOwnerDashboard() {
             </div>
 
             {/* Stations Tree View */}
-            <div className="space-y-4">
+            <div className="space-y-4 pb-12">
                 <h3 className="text-xl font-bold text-[#1A2234] mb-2">My Stations Fleet</h3>
-                {ownerData.stations.map(station => (
-                    <StationRow key={station.id} station={station} />
-                ))}
+                {stations.length > 0 ? (
+                    stations.map(station => (
+                        <StationRow key={station.id} station={station} />
+                    ))
+                ) : (
+                    <div className="bg-slate-50 rounded-2xl p-12 text-center border-2 border-dashed border-slate-200">
+                        <MapPin className="w-12 h-12 text-slate-300 mx-auto mb-4" />
+                        <p className="text-slate-500 font-medium">You haven't registered any stations yet.</p>
+                    </div>
+                )}
             </div>
 
         </div>

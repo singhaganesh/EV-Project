@@ -11,7 +11,10 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class OwnerStationStatsDTO {
     private Long totalStations;
+    private Long activeStationsCount;
     private Long activeChargers;
     private Long inUseChargers;
     private Double utilizationRate;
+    private Double todayEnergyKwh;
+    private Double todayEarnings;
 }

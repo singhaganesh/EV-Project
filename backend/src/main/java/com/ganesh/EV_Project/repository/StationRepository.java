@@ -15,6 +15,9 @@ public interface StationRepository extends JpaRepository<Station, Long> {
 
         long countByOwnerId(Long ownerId);
 
+        @Query("SELECT COUNT(s) FROM Station s WHERE s.owner.id = :ownerId AND EXISTS (SELECT 1 FROM ChargerSlot cs WHERE cs.station = s AND cs.status != 'MAINTENANCE')")
+        long countActiveByOwnerId(@Param("ownerId") Long ownerId);
+
         @Query("SELECT s.lastUsedTime FROM Station s WHERE s.id = :stationId")
         java.time.LocalDateTime findLastUsedTimeById(@Param("stationId") Long stationId);
 

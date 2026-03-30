@@ -22,4 +22,10 @@ public interface ChargingSessionRepository extends JpaRepository<ChargingSession
 
     @org.springframework.data.jpa.repository.Query("SELECT s.booking.slot.station.id, MAX(s.endTime) FROM ChargingSession s WHERE s.booking.slot.station.id IN :stationIds AND s.status = 'COMPLETED' GROUP BY s.booking.slot.station.id")
     List<Object[]> findLatestSessionTimesByStationIds(@org.springframework.data.repository.query.Param("stationIds") List<Long> stationIds);
+
+    @org.springframework.data.jpa.repository.Query("SELECT SUM(s.energyKwh) FROM ChargingSession s WHERE s.booking.slot.station.owner.id = :ownerId AND s.endTime >= :since AND s.status = 'COMPLETED'")
+    Double sumEnergyByOwnerSince(@org.springframework.data.repository.query.Param("ownerId") Long ownerId, @org.springframework.data.repository.query.Param("since") java.time.LocalDateTime since);
+
+    @org.springframework.data.jpa.repository.Query("SELECT SUM(s.totalCost) FROM ChargingSession s WHERE s.booking.slot.station.owner.id = :ownerId AND s.endTime >= :since AND s.status = 'COMPLETED'")
+    Double sumEarningsByOwnerSince(@org.springframework.data.repository.query.Param("ownerId") Long ownerId, @org.springframework.data.repository.query.Param("since") java.time.LocalDateTime since);
 }

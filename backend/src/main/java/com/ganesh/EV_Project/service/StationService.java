@@ -44,6 +44,7 @@ public class StationService {
     @Transactional(readOnly = true)
     public OwnerStationStatsDTO getOwnerRealtimeStats(Long ownerId) {
         long totalStations = stationRepository.countByOwnerId(ownerId);
+        long activeStationsCount = stationRepository.countActiveByOwnerId(ownerId);
         long activeChargers = chargerSlotRepository.countByOwnerIdAndStatusNot(ownerId, SlotStatus.MAINTENANCE);
 
         List<SlotStatus> inUseStatuses = List.of(SlotStatus.RESERVED, SlotStatus.BOOKED, SlotStatus.CHARGING);
@@ -59,11 +60,20 @@ public class StationService {
 
         double roundedUtilizationRate = Math.round(utilizationRate * 10.0) / 10.0;
 
+        // ── CALCULATE TODAY'S METRICS ──
+        java.time.LocalDateTime startOfToday = java.time.LocalDate.now().atStartOfDay();
+        
+        Double todayEnergy = chargingSessionRepository.sumEnergyByOwnerSince(ownerId, startOfToday);
+        Double todayEarnings = chargingSessionRepository.sumEarningsByOwnerSince(ownerId, startOfToday);
+
         return OwnerStationStatsDTO.builder()
                 .totalStations(totalStations)
+                .activeStationsCount(activeStationsCount)
                 .activeChargers(activeChargers)
                 .inUseChargers(inUseChargers)
                 .utilizationRate(roundedUtilizationRate)
+                .todayEnergyKwh(todayEnergy != null ? Math.round(todayEnergy * 10.0) / 10.0 : 0.0)
+                .todayEarnings(todayEarnings != null ? Math.round(todayEarnings * 100.0) / 100.0 : 0.0)
                 .build();
     }
 
