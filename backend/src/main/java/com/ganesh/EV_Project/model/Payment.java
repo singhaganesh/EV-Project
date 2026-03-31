@@ -29,8 +29,11 @@ public class Payment {
     @Column(nullable = false)
     private String currency = "INR";
     
-    @Column(name = "stripe_payment_intent_id")
-    private String stripePaymentIntentId;
+    @Column(name = "transaction_id")
+    private String transactionId;
+
+    @Column
+    private String gateway; // e.g., "STRIPE", "RAZORPAY"
     
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)

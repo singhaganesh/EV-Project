@@ -17,8 +17,8 @@ import kotlinx.coroutines.launch
 sealed class ChargingUiState {
     object Initial : ChargingUiState()
     object Loading : ChargingUiState()
-    data class SessionStarted(val session: ChargingSession) : ChargingUiState()
-    data class SessionStopped(val session: ChargingSession) : ChargingUiState()
+    data class SessionStarted(val session: SimpleChargingSession) : ChargingUiState()
+    data class SessionStopped(val simpleSession: SimpleChargingSession) : ChargingUiState()
     data class SessionLoaded(val session: ChargingSession) : ChargingUiState()
     data class SessionsLoaded(val sessions: List<ChargingSession>) : ChargingUiState()
     data class PowerDataLoaded(val powerData: com.ganesh.ev.data.model.LivePowerData) :
@@ -58,15 +58,19 @@ class ChargingViewModel : ViewModel() {
                     }
                     
                     // Handle both SimpleChargingSession and Map responses
-                    val sessionId = when (val data = apiResponse?.data) {
-                        is SimpleChargingSession -> data.id
-                        is Map<*, *> -> (data["id"] as? Number)?.toLong() ?: -1L
-                        else -> -1L
+                    val simpleSession = when (val data = apiResponse?.data) {
+                        is SimpleChargingSession -> data
+                        is Map<*, *> -> {
+                            val id = (data["id"] as? Number)?.toLong() ?: -1L
+                            SimpleChargingSession(id, null, null, null, null)
+                        }
+                        else -> null
                     }
                     
-                    if (sessionId > 0) {
+                    if (simpleSession != null && simpleSession.id > 0) {
+                        _uiState.value = ChargingUiState.SessionStarted(simpleSession)
                         // Immediately load the full session details
-                        loadSession(sessionId)
+                        loadSession(simpleSession.id)
                         startWebSocketTelemetry(bookingId)
                     } else {
                         _uiState.value = ChargingUiState.Error("Failed to start charging session: ${apiResponse?.message}")
@@ -104,9 +108,9 @@ class ChargingViewModel : ViewModel() {
             try {
                 val response = RetrofitClient.apiService.stopCharging(sessionId)
                 if (response.isSuccessful) {
-                    val session = response.body()?.data
-                    if (session != null) {
-                        _uiState.value = ChargingUiState.SessionStopped(session)
+                    val simpleSession = response.body()?.data
+                    if (simpleSession != null) {
+                        _uiState.value = ChargingUiState.SessionStopped(simpleSession)
                         stopWebSocketTelemetry()
                     } else {
                         _uiState.value = ChargingUiState.Error("Failed to stop charging session")
@@ -170,6 +174,24 @@ class ChargingViewModel : ViewModel() {
                 }
             } catch (e: Exception) {
                 _uiState.value = ChargingUiState.Error("Network error: ${e.message}")
+            }
+        }
+    }
+
+    fun verifyPayment(orderId: String, paymentId: String, signature: String) {
+        viewModelScope.launch {
+            try {
+                val data = mapOf(
+                    "razorpay_order_id" to orderId,
+                    "razorpay_payment_id" to paymentId,
+                    "razorpay_signature" to signature
+                )
+                val response = RetrofitClient.apiService.verifyPayment(data)
+                if (response.isSuccessful) {
+                    // Success! No need to reload here as we are likely finishing the flow
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("ChargingVM", "Payment verification failed", e)
             }
         }
     }

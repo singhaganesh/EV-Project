@@ -14,7 +14,9 @@ import com.ganesh.EV_Project.repository.ChargingSessionRepository;
 import com.ganesh.EV_Project.repository.StationRepository;
 import com.ganesh.EV_Project.controller.WebSocketController;
 import com.ganesh.EV_Project.service.ChargingSimulatorService;
+import com.ganesh.EV_Project.service.RazorpayService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -42,7 +44,13 @@ public class ChargingSessionController {
     private com.ganesh.EV_Project.repository.DispensaryRepository dispensaryRepository;
 
     @Autowired
+    private RazorpayService razorpayService;
+
+    @Autowired
     private WebSocketController webSocketController;
+
+    @Value("${razorpay.key.id}")
+    private String razorpayKeyId;
 
     @Autowired
     private ChargingSimulatorService simulatorService;
@@ -84,6 +92,7 @@ public class ChargingSessionController {
                     .booking(booking)
                     .startTime(LocalDateTime.now())
                     .status("ONGOING")
+                    .paymentStatus("PENDING")
                     .energyKwh(0.0)
                     .totalCost(0.0)
                     .build();
@@ -164,6 +173,17 @@ public class ChargingSessionController {
                 dispensaryRepository.save(dispensary);
             }
 
+            // ── CREATE RAZORPAY ORDER ──
+            String razorpayOrderId = null;
+            try {
+                razorpayOrderId = razorpayService.createOrder(cost, booking.getId().toString());
+                session.setRazorpayOrderId(razorpayOrderId);
+                chargingSessionRepository.save(session);
+            } catch (Exception e) {
+                // Log but don't fail session stop
+                System.err.println("Failed to create Razorpay Order: " + e.getMessage());
+            }
+
             // Notify via WebSocket
             webSocketController.notifySlotStatusChange(slot.getStation().getId(), slot);
             webSocketController.notifyUserBookingUpdate(booking.getUser().getId(), booking);
@@ -171,7 +191,12 @@ public class ChargingSessionController {
             return ResponseEntity.ok(APIResponse.builder()
                     .success(true)
                     .message("Charging completed successfully")
-                    .data(savedSession)
+                    .data(Map.of(
+                        "session", savedSession,
+                        "razorpayOrderId", razorpayOrderId != null ? razorpayOrderId : "",
+                        "totalCost", cost,
+                        "razorpayKeyId", razorpayKeyId
+                    ))
                     .build());
 
         } catch (Exception e) {

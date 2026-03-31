@@ -91,6 +91,9 @@ dependencies {
     implementation("com.google.android.gms:play-services-maps:18.2.0")
     implementation("com.google.android.gms:play-services-location:21.1.0")
     
+    // Razorpay
+    implementation("com.razorpay:checkout:1.6.38")
+    
     // Material Icons Extended
     implementation("androidx.compose.material:material-icons-extended")
     

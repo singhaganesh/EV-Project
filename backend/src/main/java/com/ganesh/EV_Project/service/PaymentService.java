@@ -58,7 +58,8 @@ public class PaymentService {
         Payment payment = Payment.builder()
                 .booking(booking)
                 .amount(booking.getPriceEstimate())
-                .stripePaymentIntentId(intent.getId())
+                .transactionId(intent.getId())
+                .gateway("STRIPE")
                 .status(Payment.PaymentStatus.PENDING)
                 .build();
         
@@ -71,8 +72,8 @@ public class PaymentService {
     }
 
     @Transactional
-    public void handlePaymentSuccess(String paymentIntentId) {
-        Payment payment = paymentRepository.findByStripePaymentIntentId(paymentIntentId)
+    public void handlePaymentSuccess(String transactionId) {
+        Payment payment = paymentRepository.findByTransactionId(transactionId)
                 .orElseThrow(() -> new RuntimeException("Payment not found"));
         
         payment.setStatus(Payment.PaymentStatus.COMPLETED);
@@ -81,8 +82,8 @@ public class PaymentService {
     }
 
     @Transactional
-    public void handlePaymentFailure(String paymentIntentId, String failureReason) {
-        Payment payment = paymentRepository.findByStripePaymentIntentId(paymentIntentId)
+    public void handlePaymentFailure(String transactionId, String failureReason) {
+        Payment payment = paymentRepository.findByTransactionId(transactionId)
                 .orElseThrow(() -> new RuntimeException("Payment not found"));
         
         payment.setStatus(Payment.PaymentStatus.FAILED);

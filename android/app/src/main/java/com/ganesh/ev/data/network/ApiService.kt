@@ -47,6 +47,9 @@ interface ApiService {
         @POST("api/auth/logout")
         suspend fun logout(): Response<ApiResponse<Void>>
 
+        @POST("api/payments/verify")
+        suspend fun verifyPayment(@Body data: Map<String, String>): Response<ApiResponse<Void>>
+
         // Station APIs
         @GET("api/stations") suspend fun getAllStations(): Response<List<Station>>
 
@@ -89,7 +92,7 @@ interface ApiService {
         @POST("api/charging/stop/{sessionId}")
         suspend fun stopCharging(
                 @Path("sessionId") sessionId: Long
-        ): Response<ApiResponse<ChargingSession>>
+        ): Response<ApiResponse<SimpleChargingSession>>
 
         @GET("api/charging/session/{sessionId}")
         suspend fun getSession(

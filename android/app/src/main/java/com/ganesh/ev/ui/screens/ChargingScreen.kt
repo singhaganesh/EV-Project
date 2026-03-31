@@ -21,6 +21,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -28,11 +29,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ganesh.ev.ui.theme.*
 import com.ganesh.ev.ui.viewmodel.ChargingUiState
 import com.ganesh.ev.ui.viewmodel.ChargingViewModel
-import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
-import java.time.temporal.ChronoUnit
+import com.razorpay.Checkout
+import org.json.JSONObject
 import java.util.Locale
-import kotlinx.coroutines.delay
 
 @Composable
 fun ChargingScreen(
@@ -45,6 +44,7 @@ fun ChargingScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val telemetry by viewModel.telemetryData.collectAsState()
+    val context = LocalContext.current
 
     var isCharging by remember { mutableStateOf(false) }
     var isCompleted by remember { mutableStateOf(false) }
@@ -61,9 +61,34 @@ fun ChargingScreen(
         label = "pulseAlpha"
     )
 
-    // Derived from actual booking
-    var ratePerKwh by remember { mutableStateOf(15.0) }
-    var vehicleType by remember { mutableStateOf("CAR") }
+    // Razorpay Integration
+    fun startRazorpayPayment(orderId: String, amount: Double, keyId: String, currentSessionId: Long) {
+        val checkout = Checkout()
+        checkout.setKeyID(keyId)
+        
+        try {
+            val options = JSONObject()
+            options.put("name", "EV Charging")
+            options.put("description", "Session #$currentSessionId")
+            options.put("order_id", orderId)
+            options.put("theme.color", "#00BCD4")
+            options.put("currency", "INR")
+            options.put("amount", Math.round(amount * 100))
+            
+            val prefill = JSONObject()
+            prefill.put("email", "customer@example.com")
+            prefill.put("contact", "9144070952")
+            options.put("prefill", prefill)
+
+            val notes = JSONObject()
+            notes.put("session_id", currentSessionId.toString())
+            options.put("notes", notes)
+
+            checkout.open(context as android.app.Activity, options)
+        } catch (e: Exception) {
+            android.util.Log.e("Razorpay", "Error in starting Razorpay Checkout", e)
+        }
+    }
 
     LaunchedEffect(Unit) {
         if (sessionId != null && sessionId > 0) {
@@ -80,21 +105,12 @@ fun ChargingScreen(
     LaunchedEffect(uiState) {
         val state = uiState
         if (state is ChargingUiState.Error && state.message.contains("Session not found")) {
-            // If we tried to load an existing session and it wasn't there, 
-            // then we should actually START a new one.
             viewModel.startCharging(bookingId)
         }
         
         if (state is ChargingUiState.SessionStarted) {
             isCharging = true
-            val booking = state.session.booking
-            vehicleType = booking?.vehicleType ?: "CAR"
-            ratePerKwh = booking?.slot?.station?.pricePerKwh ?: 15.0
         } else if (state is ChargingUiState.SessionLoaded) {
-            val booking = state.session.booking
-            vehicleType = booking?.vehicleType ?: "CAR"
-            ratePerKwh = booking?.slot?.station?.pricePerKwh ?: 15.0
-
             if (state.session.endTime == null) {
                 isCharging = true
             } else {
@@ -103,6 +119,16 @@ fun ChargingScreen(
         } else if (state is ChargingUiState.SessionStopped) {
             isCompleted = true
             isCharging = false
+            
+            // Trigger Razorpay
+            if (!state.simpleSession.razorpayOrderId.isNullOrEmpty()) {
+                startRazorpayPayment(
+                    orderId = state.simpleSession.razorpayOrderId,
+                    amount = state.simpleSession.totalCost ?: 0.0,
+                    keyId = state.simpleSession.razorpayKeyId ?: "",
+                    currentSessionId = state.simpleSession.id
+                )
+            }
         }
     }
 
@@ -143,9 +169,12 @@ fun ChargingScreen(
             }
             else -> {
                 if (isCompleted) {
-                    // Completion state
-                    val session = (uiState as? ChargingUiState.SessionStopped)?.session 
-                                ?: (uiState as? ChargingUiState.SessionLoaded)?.session
+                    // Completion state summary
+                    val session = when(state) {
+                        is ChargingUiState.SessionLoaded -> state.session
+                        is ChargingUiState.SessionStopped -> state.simpleSession.session
+                        else -> null
+                    }
 
                     Column(
                             modifier = Modifier.padding(24.dp),
@@ -229,7 +258,7 @@ fun ChargingScreen(
                                 horizontalArrangement = Arrangement.Center
                             ) {
                                 Icon(
-                                    imageVector = androidx.compose.material.icons.Icons.Default.Bolt,
+                                    imageVector = Icons.Default.Bolt,
                                     contentDescription = null,
                                     tint = Color(0xFF00BCD4),
                                     modifier = Modifier.size(32.dp)
@@ -464,53 +493,5 @@ fun StatCard(
                 }
             }
         }
-    }
-}
-
-@Composable
-fun VitalsRow(
-    icon: ImageVector,
-    label: String,
-    value: String,
-    valueColor: Color = Color(0xFF1A2234),
-    iconTint: Color = Color(0xFF22C55E)
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .background(iconTint.copy(alpha = 0.1f), CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = iconTint,
-                    modifier = Modifier.size(18.dp)
-                )
-            }
-            Spacer(modifier = Modifier.width(12.dp))
-            Text(
-                text = label,
-                style = MaterialTheme.typography.bodyLarge.copy(
-                    color = Color(0xFF64748B),
-                    fontWeight = FontWeight.Medium
-                )
-            )
-        }
-        Text(
-            text = value,
-            style = MaterialTheme.typography.bodyLarge.copy(
-                fontWeight = FontWeight.Bold,
-                color = valueColor
-            )
-        )
     }
 }

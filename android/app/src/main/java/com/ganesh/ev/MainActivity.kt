@@ -33,14 +33,20 @@ import com.ganesh.ev.ui.viewmodel.BookingViewModel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
-class MainActivity : ComponentActivity() {
+import com.razorpay.PaymentResultWithDataListener
+import com.razorpay.PaymentData
+import android.widget.Toast
+
+class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
 
     private lateinit var userPreferencesRepository: UserPreferencesRepository
+    private lateinit var chargingViewModel: com.ganesh.ev.ui.viewmodel.ChargingViewModel
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         userPreferencesRepository = UserPreferencesRepository(applicationContext)
+        chargingViewModel = com.ganesh.ev.ui.viewmodel.ChargingViewModel()
 
         enableEdgeToEdge()
         setContent {
@@ -51,6 +57,22 @@ class MainActivity : ComponentActivity() {
                 ) { EVChargingApp(userPreferencesRepository) }
             }
         }
+    }
+
+    override fun onPaymentSuccess(razorpayPaymentId: String?, paymentData: PaymentData?) {
+        val orderId = paymentData?.orderId
+        val signature = paymentData?.signature
+
+        if (orderId != null && razorpayPaymentId != null && signature != null) {
+            chargingViewModel.verifyPayment(orderId, razorpayPaymentId, signature)
+            Toast.makeText(this, "Payment Verified!", Toast.LENGTH_LONG).show()
+        } else {
+            Toast.makeText(this, "Payment Successful, but details missing.", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    override fun onPaymentError(code: Int, response: String?, paymentData: PaymentData?) {
+        Toast.makeText(this, "Payment Failed: $response", Toast.LENGTH_LONG).show()
     }
 }
 

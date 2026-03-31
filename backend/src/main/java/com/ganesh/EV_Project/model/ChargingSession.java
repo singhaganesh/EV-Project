@@ -46,5 +46,11 @@ public class ChargingSession {
 
     @Column
     private String status;          // e.g., ONGOING, COMPLETED
+
+    @Column
+    private String paymentStatus;   // e.g., PENDING, PAID, FAILED
+
+    @Column
+    private String razorpayOrderId;
 }
 

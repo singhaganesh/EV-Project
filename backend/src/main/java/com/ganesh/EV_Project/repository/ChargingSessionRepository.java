@@ -12,6 +12,8 @@ public interface ChargingSessionRepository extends JpaRepository<ChargingSession
 
     java.util.Optional<ChargingSession> findByBookingId(Long bookingId);
 
+    java.util.Optional<ChargingSession> findByRazorpayOrderId(String orderId);
+
     java.util.List<ChargingSession> findByBookingUserId(Long userId);
 
     @org.springframework.data.jpa.repository.Query("SELECT MAX(s.endTime) FROM ChargingSession s WHERE s.booking.slot.station.id = :stationId AND s.status = 'COMPLETED'")
