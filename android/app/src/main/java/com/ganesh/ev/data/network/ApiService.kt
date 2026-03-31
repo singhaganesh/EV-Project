@@ -48,7 +48,7 @@ interface ApiService {
         suspend fun logout(): Response<ApiResponse<Void>>
 
         @POST("api/payments/verify")
-        suspend fun verifyPayment(@Body data: Map<String, String>): Response<ApiResponse<Void>>
+        suspend fun verifyPayment(@Body data: Map<String, String>): Response<ApiResponse<ChargingSession>>
 
         // Station APIs
         @GET("api/stations") suspend fun getAllStations(): Response<List<Station>>
@@ -103,6 +103,7 @@ interface ApiService {
         suspend fun getSessionByBooking(
                 @Path("bookingId") bookingId: Long
         ): Response<ApiResponse<ChargingSession>>
+
 
         @GET("api/charging/user/{userId}")
         suspend fun getUserChargingHistory(

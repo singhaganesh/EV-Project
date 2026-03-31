@@ -36,11 +36,13 @@ import kotlinx.coroutines.launch
 import com.razorpay.PaymentResultWithDataListener
 import com.razorpay.PaymentData
 import android.widget.Toast
+import androidx.lifecycle.lifecycleScope
 
 class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
 
     private lateinit var userPreferencesRepository: UserPreferencesRepository
     private lateinit var chargingViewModel: com.ganesh.ev.ui.viewmodel.ChargingViewModel
+    private var navController: androidx.navigation.NavHostController? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -54,7 +56,9 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
                 Surface(
                         modifier = Modifier.fillMaxSize(),
                         color = MaterialTheme.colorScheme.background
-                ) { EVChargingApp(userPreferencesRepository) }
+                ) { EVChargingApp(userPreferencesRepository, chargingViewModel) { controller -> 
+                    navController = controller 
+                } }
             }
         }
     }
@@ -62,10 +66,17 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
     override fun onPaymentSuccess(razorpayPaymentId: String?, paymentData: PaymentData?) {
         val orderId = paymentData?.orderId
         val signature = paymentData?.signature
+        
+        val sessionIdString = paymentData?.data?.optString("session_id") ?: 
+                             paymentData?.data?.optJSONObject("notes")?.optString("session_id")
+        val sessionId = sessionIdString?.toLongOrNull() ?: -1L
 
         if (orderId != null && razorpayPaymentId != null && signature != null) {
-            chargingViewModel.verifyPayment(orderId, razorpayPaymentId, signature)
-            Toast.makeText(this, "Payment Verified!", Toast.LENGTH_LONG).show()
+            // This will refresh the state in the shared ViewModel
+            chargingViewModel.verifyPayment(orderId, razorpayPaymentId, signature, sessionId)
+            Toast.makeText(this, "Payment Verified!", Toast.LENGTH_SHORT).show()
+            
+            // REDIRECT REMOVED: We stay on the summary screen to show the success state
         } else {
             Toast.makeText(this, "Payment Successful, but details missing.", Toast.LENGTH_LONG).show()
         }
@@ -105,6 +116,9 @@ sealed class Screen(val route: String) {
     object ChargingSession : Screen("charging/session/{sessionId}") {
         fun createRoute(sessionId: Long) = "charging/session/$sessionId"
     }
+    object PaymentSummary : Screen("payment/summary/{sessionId}") {
+        fun createRoute(sessionId: Long) = "payment/summary/$sessionId"
+    }
     object ChargingHistory : Screen("history/{userId}") {
         fun createRoute(userId: Long) = "history/$userId"
     }
@@ -120,8 +134,17 @@ sealed class BottomNavItem(val route: String, val icon: ImageVector, val label: 
 }
 
 @Composable
-fun EVChargingApp(userPreferencesRepository: UserPreferencesRepository) {
+fun EVChargingApp(
+    userPreferencesRepository: UserPreferencesRepository,
+    chargingViewModel: com.ganesh.ev.ui.viewmodel.ChargingViewModel,
+    onNavControllerReady: (androidx.navigation.NavHostController) -> Unit
+) {
     val navController = rememberNavController()
+    
+    // Pass the controller back to the Activity
+    LaunchedEffect(navController) {
+        onNavControllerReady(navController)
+    }
     var currentUserId by remember { mutableStateOf<Long?>(null) }
     var currentUser by remember { mutableStateOf<User?>(null) }
     val coroutineScope = rememberCoroutineScope()
@@ -434,12 +457,33 @@ fun EVChargingApp(userPreferencesRepository: UserPreferencesRepository) {
                         bookingId = bookingId,
                         sessionId = null,
                         isNewSession = isNewSession,
+                        viewModel = chargingViewModel,
                         onBackClick = { navController.popBackStack() },
-                        onComplete = {
-                            currentUserId?.let { uid ->
-                                navController.navigate("bookings/$uid") { popUpTo("home") }
+                        onComplete = { sessionId ->
+                            navController.navigate(Screen.PaymentSummary.createRoute(sessionId)) {
+                                // ── REMOVE CHARGING SCREEN ──
+                                // This prevents the background screen from triggering again
+                                popUpTo(Screen.Charging.route) { inclusive = true }
                             }
                         }
+                )
+            }
+
+            composable(
+                    route = Screen.PaymentSummary.route,
+                    arguments = listOf(navArgument("sessionId") { type = NavType.LongType })
+            ) { backStackEntry ->
+                val sessionId = backStackEntry.arguments?.getLong("sessionId") ?: return@composable
+                PaymentSummaryScreen(
+                        sessionId = sessionId,
+                        viewModel = chargingViewModel,
+                        onPaymentSuccess = {
+                            navController.navigate("home") {
+                                // Clear all payment/charging related screens from stack
+                                popUpTo("home") { inclusive = true }
+                            }
+                        },
+                        onBack = { navController.popBackStack() }
                 )
             }
 

@@ -95,7 +95,8 @@ data class ChargingSession(
         @SerializedName("energyKwh") val energyKwh: Double?,
         @SerializedName("totalCost") val totalCost: Double?,
         @SerializedName("status") val status: String?,
-        @SerializedName("paymentStatus") val paymentStatus: String?
+        @SerializedName("paymentStatus") val paymentStatus: String?,
+        @SerializedName("razorpayOrderId") val razorpayOrderId: String?
 )
 
 data class SimpleChargingSession(

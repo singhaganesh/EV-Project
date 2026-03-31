@@ -39,7 +39,7 @@ fun ChargingScreen(
         sessionId: Long? = null,
         isNewSession: Boolean = true,
         onBackClick: () -> Unit,
-        onComplete: () -> Unit,
+        onComplete: (Long) -> Unit,
         viewModel: ChargingViewModel = viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -60,35 +60,6 @@ fun ChargingScreen(
         ),
         label = "pulseAlpha"
     )
-
-    // Razorpay Integration
-    fun startRazorpayPayment(orderId: String, amount: Double, keyId: String, currentSessionId: Long) {
-        val checkout = Checkout()
-        checkout.setKeyID(keyId)
-        
-        try {
-            val options = JSONObject()
-            options.put("name", "EV Charging")
-            options.put("description", "Session #$currentSessionId")
-            options.put("order_id", orderId)
-            options.put("theme.color", "#00BCD4")
-            options.put("currency", "INR")
-            options.put("amount", Math.round(amount * 100))
-            
-            val prefill = JSONObject()
-            prefill.put("email", "customer@example.com")
-            prefill.put("contact", "9144070952")
-            options.put("prefill", prefill)
-
-            val notes = JSONObject()
-            notes.put("session_id", currentSessionId.toString())
-            options.put("notes", notes)
-
-            checkout.open(context as android.app.Activity, options)
-        } catch (e: Exception) {
-            android.util.Log.e("Razorpay", "Error in starting Razorpay Checkout", e)
-        }
-    }
 
     LaunchedEffect(Unit) {
         if (sessionId != null && sessionId > 0) {
@@ -120,15 +91,8 @@ fun ChargingScreen(
             isCompleted = true
             isCharging = false
             
-            // Trigger Razorpay
-            if (!state.simpleSession.razorpayOrderId.isNullOrEmpty()) {
-                startRazorpayPayment(
-                    orderId = state.simpleSession.razorpayOrderId,
-                    amount = state.simpleSession.totalCost ?: 0.0,
-                    keyId = state.simpleSession.razorpayKeyId ?: "",
-                    currentSessionId = state.simpleSession.id
-                )
-            }
+            // Redirect to Payment Summary instead of auto-opening Razorpay
+            onComplete(state.simpleSession.id)
         }
     }
 
@@ -168,88 +132,19 @@ fun ChargingScreen(
                 }
             }
             else -> {
-                if (isCompleted) {
-                    // Completion state summary
-                    val session = when(state) {
-                        is ChargingUiState.SessionLoaded -> state.session
-                        is ChargingUiState.SessionStopped -> state.simpleSession.session
-                        else -> null
-                    }
-
+                // ── CENTERED ACTIVE CHARGING STATE ──
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
                     Column(
-                            modifier = Modifier.padding(24.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 24.dp)
+                            .verticalScroll(rememberScrollState()),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
                     ) {
-                        Box(
-                                modifier =
-                                        Modifier.size(80.dp)
-                                                .claySurface(
-                                                        cornerRadius = 40.dp,
-                                                        shadowElevation = 6.dp
-                                                )
-                                                .background(
-                                                        MaterialTheme.colorScheme.primaryContainer,
-                                                        shape = CircleShape
-                                                ),
-                                contentAlignment = Alignment.Center
-                        ) { Text("⚡", style = MaterialTheme.typography.displaySmall) }
-
-                        Spacer(modifier = Modifier.height(20.dp))
-
-                        Text(
-                                text = "Charging Complete!",
-                                style = MaterialTheme.typography.headlineMedium,
-                                color = MaterialTheme.colorScheme.primary
-                        )
-
-                        Spacer(modifier = Modifier.height(24.dp))
-
-                        ClayCard {
-                            Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text("Energy Consumed")
-                                Text(
-                                        "${String.format(Locale.US, "%.2f", session?.energyKwh ?: 0.0)} kWh",
-                                        style = MaterialTheme.typography.titleMedium
-                                )
-                            }
-                            ClayDivider()
-                            Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text("Total Cost", style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Bold)
-                                Text(
-                                        "₹${String.format(Locale.US, "%.2f", session?.totalCost ?: 0.0)}",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        color = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(24.dp))
-
-                        ClayButton(onClick = onComplete, modifier = Modifier.fillMaxWidth()) {
-                            Text("Done")
-                        }
-                    }
-                } else {
-                    // ── CENTERED ACTIVE CHARGING STATE ──
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 24.dp)
-                                .verticalScroll(rememberScrollState()),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
-                        ) {
                             Spacer(modifier = Modifier.height(24.dp))
 
                             // Header
@@ -439,19 +334,18 @@ fun ChargingScreen(
                                         )
                                     }
                                 }
-                            }
-                            
                             Spacer(modifier = Modifier.height(24.dp))
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
+                            }
+                            }
+                            }
+                            }
+                            }
+                            }
+                            }
 
-@Composable
-fun StatCard(
+                            @Composable
+                            fun StatCard(
+
     label: String,
     value: String,
     unit: String,

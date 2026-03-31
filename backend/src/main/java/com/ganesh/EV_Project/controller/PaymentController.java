@@ -31,12 +31,26 @@ public class PaymentController {
         String orderId = data.get("razorpay_order_id");
         String paymentId = data.get("razorpay_payment_id");
         String signature = data.get("razorpay_signature");
+        String sessionIdStr = data.get("sessionId");
 
         boolean isValid = razorpayService.verifySignature(orderId, paymentId, signature);
 
         if (isValid) {
-            ChargingSession session = sessionRepository.findByRazorpayOrderId(orderId)
-                    .orElseThrow(() -> new RuntimeException("Session not found for order: " + orderId));
+            ChargingSession session = null;
+            
+            // Try lookup by orderId first (Preferred)
+            if (orderId != null) {
+                session = sessionRepository.findByRazorpayOrderId(orderId).orElse(null);
+            }
+            
+            // Fallback to explicit sessionId
+            if (session == null && sessionIdStr != null) {
+                session = sessionRepository.findById(Long.parseLong(sessionIdStr)).orElse(null);
+            }
+
+            if (session == null) {
+                throw new RuntimeException("Session not found for verification");
+            }
             
             // 1. Update Session
             session.setPaymentStatus("PAID");
@@ -59,6 +73,7 @@ public class PaymentController {
             return ResponseEntity.ok(APIResponse.builder()
                     .success(true)
                     .message("Payment verified and recorded successfully")
+                    .data(session) // Return the session here
                     .build());
         } else {
             return ResponseEntity.badRequest().body(APIResponse.builder()

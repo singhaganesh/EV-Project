@@ -108,12 +108,27 @@ class ChargingViewModel : ViewModel() {
             try {
                 val response = RetrofitClient.apiService.stopCharging(sessionId)
                 if (response.isSuccessful) {
-                    val simpleSession = response.body()?.data
-                    if (simpleSession != null) {
+                    val apiResponse = response.body()
+                    
+                    // Standardize data extraction
+                    val simpleSession = when (val data = apiResponse?.data) {
+                        is SimpleChargingSession -> data
+                        is Map<*, *> -> {
+                            val id = (data["id"] as? Number)?.toLong() ?: -1L
+                            // Extract other fields if present in the map
+                            val totalCost = (data["totalCost"] as? Number)?.toDouble()
+                            val razorpayOrderId = data["razorpayOrderId"] as? String
+                            val razorpayKeyId = data["razorpayKeyId"] as? String
+                            SimpleChargingSession(id, null, razorpayOrderId, totalCost, razorpayKeyId)
+                        }
+                        else -> null
+                    }
+
+                    if (simpleSession != null && simpleSession.id > 0) {
                         _uiState.value = ChargingUiState.SessionStopped(simpleSession)
                         stopWebSocketTelemetry()
                     } else {
-                        _uiState.value = ChargingUiState.Error("Failed to stop charging session")
+                        _uiState.value = ChargingUiState.Error("Failed to stop charging session summary")
                     }
                 } else {
                     _uiState.value =
@@ -178,17 +193,25 @@ class ChargingViewModel : ViewModel() {
         }
     }
 
-    fun verifyPayment(orderId: String, paymentId: String, signature: String) {
+    fun verifyPayment(orderId: String, paymentId: String, signature: String, sessionId: Long) {
         viewModelScope.launch {
             try {
                 val data = mapOf(
                     "razorpay_order_id" to orderId,
                     "razorpay_payment_id" to paymentId,
-                    "razorpay_signature" to signature
+                    "razorpay_signature" to signature,
+                    "sessionId" to sessionId.toString()
                 )
                 val response = RetrofitClient.apiService.verifyPayment(data)
                 if (response.isSuccessful) {
-                    // Success! No need to reload here as we are likely finishing the flow
+                    val updatedSession = response.body()?.data
+                    if (updatedSession != null) {
+                        // Directly update the UI with the PAID session data
+                        _uiState.value = ChargingUiState.SessionLoaded(updatedSession)
+                    } else if (sessionId > 0) {
+                        // Fallback: reload manually only if ID is valid
+                        loadSession(sessionId)
+                    }
                 }
             } catch (e: Exception) {
                 android.util.Log.e("ChargingVM", "Payment verification failed", e)

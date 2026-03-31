@@ -192,6 +192,7 @@ public class ChargingSessionController {
                     .success(true)
                     .message("Charging completed successfully")
                     .data(Map.of(
+                        "id", savedSession.getId(),
                         "session", savedSession,
                         "razorpayOrderId", razorpayOrderId != null ? razorpayOrderId : "",
                         "totalCost", cost,
