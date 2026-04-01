@@ -17,20 +17,28 @@ object RetrofitClient {
 
     private val BASE_URL = com.ganesh.ev.BuildConfig.BASE_URL
 
+    @Volatile
     private var authToken: String = ""
+    @Volatile
     private var refreshToken: String = ""
 
     fun setAuthToken(token: String) {
-        authToken = token
+        synchronized(this) {
+            authToken = token
+        }
     }
 
     fun setRefreshToken(token: String) {
-        refreshToken = token
+        synchronized(this) {
+            refreshToken = token
+        }
     }
 
     fun clearAuthTokens() {
-        authToken = ""
-        refreshToken = ""
+        synchronized(this) {
+            authToken = ""
+            refreshToken = ""
+        }
     }
 
     // Secondary client just for refresh calls to avoid interceptor recursion

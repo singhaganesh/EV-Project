@@ -212,15 +212,14 @@ fun EVChargingApp(
                                         val route =
                                                 when (item) {
                                                     is BottomNavItem.Bookings ->
-                                                            "bookings/$currentUserId"
+                                                            "bookings/${currentUserId ?: 0L}"
                                                     is BottomNavItem.History ->
-                                                            "history/$currentUserId"
+                                                            "history/${currentUserId ?: 0L}"
                                                     else -> item.route
                                                 }
                                         navController.navigate(route) {
-                                            popUpTo("home") { saveState = true }
+                                            popUpTo("home")
                                             launchSingleTop = true
-                                            restoreState = true
                                         }
                                     }
                             )
@@ -301,11 +300,19 @@ fun EVChargingApp(
             composable("home") {
                 HomeScreen(
                         onLogout = {
-                            currentUserId = null
-                            currentUser = null
-                            RetrofitClient.clearAuthTokens()
-                            coroutineScope.launch { userPreferencesRepository.clearUserData() }
-                            navController.navigate("login") { popUpTo("home") { inclusive = true } }
+                            coroutineScope.launch {
+                                // 1. Clear DataStore
+                                userPreferencesRepository.clearUserData()
+                                // 2. Clear network tokens
+                                RetrofitClient.clearAuthTokens()
+                                // 3. Reset local state
+                                currentUserId = null
+                                currentUser = null
+                                // 4. Navigate back to login
+                                navController.navigate("login") {
+                                    popUpTo(0) { inclusive = true }
+                                }
+                            }
                         },
                         onStationClick = { stationId ->
                             navController.navigate(Screen.StationDetail.createRoute(stationId))
@@ -521,11 +528,15 @@ fun EVChargingApp(
                 ProfileScreen(
                         user = currentUser,
                         onLogout = {
-                            currentUserId = null
-                            currentUser = null
-                            RetrofitClient.clearAuthTokens()
-                            coroutineScope.launch { userPreferencesRepository.clearUserData() }
-                            navController.navigate("login") { popUpTo("home") { inclusive = true } }
+                            coroutineScope.launch {
+                                userPreferencesRepository.clearUserData()
+                                RetrofitClient.clearAuthTokens()
+                                currentUserId = null
+                                currentUser = null
+                                navController.navigate("login") {
+                                    popUpTo(0) { inclusive = true }
+                                }
+                            }
                         }
                 )
             }

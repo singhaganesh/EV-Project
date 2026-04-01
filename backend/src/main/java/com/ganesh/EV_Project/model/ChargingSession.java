@@ -26,9 +26,7 @@ public class ChargingSession {
     @com.fasterxml.jackson.annotation.JsonIgnoreProperties({
         "hibernateLazyInitializer", 
         "handler", 
-        "chargingSession",
-        "user",
-        "slot"
+        "chargingSession"
     })
     private Booking booking;
 

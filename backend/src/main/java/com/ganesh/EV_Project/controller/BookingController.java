@@ -34,16 +34,22 @@ public class BookingController {
     @GetMapping("/user/{userId}")
     public ResponseEntity<?> getBookingsByUser(@PathVariable Long userId, Authentication authentication) {
         // Secure check: Extract user from JWT and compare IDs
-        String principal = authentication.getName(); // This could be email OR mobile number
+        String principal = authentication.getName(); 
         
-        // Robust lookup: try mobile number first (mandatory), then email
         User currentUser = userService.findByPhoneNumber(principal);
         if (currentUser == null) {
             currentUser = userService.findByEmail(principal);
         }
 
-        if (currentUser == null || (!currentUser.getRole().equals("ADMIN") && !currentUser.getId().equals(userId))) {
-            return new ResponseEntity<>("Access Denied: You cannot view other users' bookings", HttpStatus.FORBIDDEN);
+        if (currentUser == null) {
+            return new ResponseEntity<>("User not found for principal: " + principal, HttpStatus.UNAUTHORIZED);
+        }
+
+        boolean isAdmin = currentUser.getRole() == User.Role.ADMIN;
+        boolean isOwner = currentUser.getId().equals(userId);
+
+        if (!isAdmin && !isOwner) {
+            return new ResponseEntity<>("Access Denied: ID mismatch. Token User ID: " + currentUser.getId() + ", Requested ID: " + userId, HttpStatus.FORBIDDEN);
         }
 
         List<Booking> bookings = bookingService.getBookingsByUser(userId);
