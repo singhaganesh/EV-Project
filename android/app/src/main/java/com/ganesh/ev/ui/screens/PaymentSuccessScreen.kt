@@ -21,6 +21,10 @@ import com.ganesh.ev.ui.theme.ClayDivider
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
+/**
+ * PaymentSuccessScreen displays the post-payment transaction details.
+ * This screen is shown only after a successful Razorpay payment verification.
+ */
 @Composable
 fun PaymentSuccessScreen(
     session: ChargingSession,
