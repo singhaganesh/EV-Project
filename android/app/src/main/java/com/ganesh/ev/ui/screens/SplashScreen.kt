@@ -48,6 +48,8 @@ fun SplashScreen(
             val token = userPreferencesRepository.authToken.first()
             val refreshToken = userPreferencesRepository.refreshToken.first()
             
+            android.util.Log.d("Splash", "Checking token: ${token?.take(10)}...")
+            
             if (!token.isNullOrEmpty() && isTokenStillValid(token)) {
                 RetrofitClient.setAuthToken(token)
                 if (!refreshToken.isNullOrEmpty()) {
@@ -56,10 +58,12 @@ fun SplashScreen(
                 tokenValid = true
                 validToken = token
             } else {
+                android.util.Log.d("Splash", "Token invalid or empty, checking onboarding")
                 // If not logged in, check if onboarding is needed
                 onboardingNeeded = userPreferencesRepository.shouldShowOnboarding.first()
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            android.util.Log.e("Splash", "Error during splash check", e)
             // Any error → treat as expired
         }
 

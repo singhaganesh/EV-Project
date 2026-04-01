@@ -11,8 +11,9 @@ val localPropertiesFile = rootProject.file("local.properties")
 if (localPropertiesFile.exists()) {
     localPropertiesFile.inputStream().use { localProperties.load(it) }
 }
-val mapsApiKey: String = localProperties.getProperty("MAPS_API_KEY") ?: ""
-val baseUrl: String = localProperties.getProperty("BASE_URL") ?: ""
+val mapsApiKey: String = localProperties.getProperty("MAPS_API_KEY")?.trim() ?: ""
+val baseUrl: String = localProperties.getProperty("BASE_URL")?.trim() ?: ""
+val razorpayKeyId: String = localProperties.getProperty("RAZORPAY_KEY_ID")?.trim() ?: ""
 
 android {
     namespace = "com.ganesh.ev"
@@ -29,6 +30,7 @@ android {
         
         manifestPlaceholders["MAPS_API_KEY"] = mapsApiKey
         buildConfigField("String", "BASE_URL", "\"${baseUrl}\"")
+        buildConfigField("String", "RAZORPAY_KEY_ID", "\"${razorpayKeyId}\"")
     }
 
     buildTypes {
