@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
 import {
     BatteryCharging,
     MapPin,
@@ -8,12 +9,24 @@ import {
     ChevronDown,
     ChevronUp,
     Plus,
-    Activity
+    Activity,
+    Calendar
 } from 'lucide-react';
+import {
+    AreaChart,
+    Area,
+    XAxis,
+    YAxis,
+    CartesianGrid,
+    Tooltip,
+    ResponsiveContainer,
+    Legend
+} from 'recharts';
 
 import StatCard from '../../components/common/StatCard';
 import StatusBadge from '../../components/common/StatusBadge';
 import api from '../../api/axios';
+import { fetchRevenueTrends, selectRevenueTrends } from '../../store/stationSlice';
 
 // Sub-component for a Dispenser row
 const DispenserRow = ({ dispenser }) => {
@@ -99,6 +112,9 @@ const StationRow = ({ station }) => {
 
 
 export default function PumpOwnerDashboard() {
+    const dispatch = useDispatch();
+    const revenueTrends = useSelector(selectRevenueTrends);
+    
     const [stats, setStats] = useState({
         totalStations: 0,
         activeStationsCount: 0,
@@ -108,6 +124,7 @@ export default function PumpOwnerDashboard() {
     });
     const [stations, setStations] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [chartDays, setChartDays] = useState(7);
 
     useEffect(() => {
         const fetchDashboardData = async () => {
@@ -117,6 +134,7 @@ export default function PumpOwnerDashboard() {
                 if (!userStr) return;
                 const user = JSON.parse(userStr);
 
+                // Fetch stats and stations
                 const [statsRes, stationsRes] = await Promise.all([
                     api.get(`/stations/owner/${user.id}/stats`),
                     api.get(`/stations/owner/${user.id}`)
@@ -133,6 +151,9 @@ export default function PumpOwnerDashboard() {
 
                 const stationList = Array.isArray(stationsRes.data) ? stationsRes.data : (stationsRes.data?.data || []);
                 setStations(stationList);
+
+                // Dispatch analytics fetch
+                dispatch(fetchRevenueTrends({ ownerId: user.id, days: chartDays }));
             } catch (error) {
                 console.error('Error fetching dashboard data:', error);
             } finally {
@@ -141,13 +162,38 @@ export default function PumpOwnerDashboard() {
         };
 
         fetchDashboardData();
-    }, []);
+    }, [dispatch, chartDays]);
 
     if (loading) {
         return <div className="flex items-center justify-center h-[60vh]">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-500"></div>
         </div>;
     }
+
+    // Format date for chart: "2026-03-31" -> "31 Mar"
+    const formatChartDate = (dateStr) => {
+        const date = new Date(dateStr);
+        return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+    };
+
+    const CustomTooltip = ({ active, payload, label }) => {
+        if (active && payload && payload.length) {
+            return (
+                <div className="bg-white p-4 border border-slate-100 shadow-xl rounded-2xl">
+                    <p className="text-xs font-bold text-slate-400 uppercase mb-2">{formatChartDate(label)}</p>
+                    <div className="space-y-1">
+                        <p className="text-sm font-bold text-emerald-600">
+                            Revenue: ₹{payload[0].value.toLocaleString('en-IN')}
+                        </p>
+                        <p className="text-sm font-bold text-cyan-600">
+                            Energy: {payload[1].value.toFixed(1)} kWh
+                        </p>
+                    </div>
+                </div>
+            );
+        }
+        return null;
+    };
 
     return (
         <div className="space-y-8 max-w-[1400px] mx-auto">
@@ -189,6 +235,93 @@ export default function PumpOwnerDashboard() {
                     trendValue="-2"
                     trendLabel="vs last week"
                 />
+            </div>
+
+            {/* Revenue & Energy Analytics Chart */}
+            <div className="bg-white rounded-3xl p-8 shadow-sm shadow-slate-200/50 border border-slate-100/50">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
+                    <div>
+                        <h3 className="text-xl font-bold text-[#1A2234]">Revenue & Energy Trends</h3>
+                        <p className="text-sm text-slate-500 font-medium mt-1">Growth analysis over time</p>
+                    </div>
+                    <div className="flex bg-slate-50 p-1 rounded-xl border border-slate-100">
+                        {[7, 14, 30].map((d) => (
+                            <button
+                                key={d}
+                                onClick={() => setChartDays(d)}
+                                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${
+                                    chartDays === d 
+                                    ? 'bg-white text-[#1A2234] shadow-sm' 
+                                    : 'text-slate-400 hover:text-slate-600'
+                                }`}
+                            >
+                                {d} Days
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                <div className="h-[350px] w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={revenueTrends}>
+                            <defs>
+                                <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.1}/>
+                                    <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                                </linearGradient>
+                                <linearGradient id="colorEnergy" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.1}/>
+                                    <stop offset="95%" stopColor="#06b6d4" stopOpacity={0}/>
+                                </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                            <XAxis 
+                                dataKey="date" 
+                                tickFormatter={formatChartDate}
+                                axisLine={false}
+                                tickLine={false}
+                                tick={{fill: '#94a3b8', fontSize: 12, fontWeight: 600}}
+                                dy={10}
+                            />
+                            <YAxis 
+                                yAxisId="left"
+                                axisLine={false}
+                                tickLine={false}
+                                tick={{fill: '#94a3b8', fontSize: 12, fontWeight: 600}}
+                                tickFormatter={(value) => `₹${value}`}
+                            />
+                            <YAxis 
+                                yAxisId="right" 
+                                orientation="right"
+                                axisLine={false}
+                                tickLine={false}
+                                tick={{fill: '#94a3b8', fontSize: 12, fontWeight: 600}}
+                                tickFormatter={(value) => `${value} kWh`}
+                            />
+                            <Tooltip content={<CustomTooltip />} cursor={{stroke: '#e2e8f0', strokeWidth: 2}} />
+                            <Area
+                                yAxisId="left"
+                                type="monotone"
+                                dataKey="revenue"
+                                stroke="#10b981"
+                                strokeWidth={3}
+                                fillOpacity={1}
+                                fill="url(#colorRevenue)"
+                                name="Revenue"
+                            />
+                            <Area
+                                yAxisId="right"
+                                type="monotone"
+                                dataKey="energy"
+                                stroke="#06b6d4"
+                                strokeWidth={3}
+                                fillOpacity={1}
+                                fill="url(#colorEnergy)"
+                                name="Energy"
+                            />
+                        </AreaChart>
+                    </ResponsiveContainer>
+                </div>
             </div>
 
             {/* Quick Actions specific to Owner */}

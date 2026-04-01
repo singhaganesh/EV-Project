@@ -40,4 +40,8 @@ api.interceptors.response.use(
     }
 );
 
+// Analytics
+export const getOwnerStationStats = (ownerId) => api.get(`/stations/owner/${ownerId}/stats`);
+export const getRevenueTrends = (ownerId, days = 7) => api.get(`/analytics/revenue-trends/${ownerId}?days=${days}`);
+
 export default api;

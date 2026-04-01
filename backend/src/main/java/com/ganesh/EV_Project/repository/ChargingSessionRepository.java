@@ -30,4 +30,11 @@ public interface ChargingSessionRepository extends JpaRepository<ChargingSession
 
     @org.springframework.data.jpa.repository.Query("SELECT SUM(s.totalCost) FROM ChargingSession s WHERE s.booking.slot.station.owner.id = :ownerId AND s.endTime >= :since AND s.paymentStatus = 'PAID'")
     Double sumEarningsByOwnerSince(@org.springframework.data.repository.query.Param("ownerId") Long ownerId, @org.springframework.data.repository.query.Param("since") java.time.LocalDateTime since);
+
+    @org.springframework.data.jpa.repository.Query(value = "SELECT CAST(s.end_time AS DATE) as date, SUM(s.total_cost) as revenue, SUM(s.energy_kwh) as energy " +
+           "FROM charging_sessions s JOIN bookings b ON s.booking_id = b.id " +
+           "JOIN charger_slots cs ON b.slot_id = cs.id JOIN stations st ON cs.station_id = st.id " +
+           "WHERE st.owner_id = :ownerId AND s.payment_status = 'PAID' AND s.end_time >= :since " +
+           "GROUP BY CAST(s.end_time AS DATE) ORDER BY date ASC", nativeQuery = true)
+    List<Object[]> getDailyStatsByOwner(@org.springframework.data.repository.query.Param("ownerId") Long ownerId, @org.springframework.data.repository.query.Param("since") java.time.LocalDateTime since);
 }
