@@ -136,6 +136,15 @@ fun MapScreen(viewModel: StationViewModel = viewModel()) {
                 }
             }
 
+            // Trigger fetch when camera stops
+            LaunchedEffect(cameraPositionState.isMoving) {
+                if (!cameraPositionState.isMoving) {
+                    val center = cameraPositionState.position.target
+                    val zoom = cameraPositionState.position.zoom
+                    viewModel.fetchNearbyStationsDebounced(center, zoom)
+                }
+            }
+
             // Top Search Button
             Box(
                 modifier = Modifier

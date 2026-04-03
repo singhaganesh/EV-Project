@@ -9,6 +9,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 
 sealed class StationUiState {
     object Loading : StationUiState()
@@ -18,19 +20,60 @@ sealed class StationUiState {
 
 class StationViewModel : ViewModel() {
     private val repository = StationRepository()
+    private var searchJob: Job? = null
+    private var lastFetchedLocation: LatLng? = null
 
     private val _uiState = MutableStateFlow<StationUiState>(StationUiState.Loading)
     val uiState: StateFlow<StationUiState> = _uiState.asStateFlow()
 
-    fun fetchNearbyStations(location: LatLng) {
-        viewModelScope.launch {
+    fun fetchNearbyStations(location: LatLng, distance: Double = 20.0) {
+        // Cancel previous search if still running
+        searchJob?.cancel()
+        
+        searchJob = viewModelScope.launch {
             _uiState.value = StationUiState.Loading
             try {
-                val stations = repository.getNearbyStations(location.latitude, location.longitude)
+                val stations = repository.getNearbyStations(location.latitude, location.longitude, distance)
                 _uiState.value = StationUiState.Success(stations)
+                lastFetchedLocation = location
             } catch (e: Exception) {
                 _uiState.value = StationUiState.Error(e.message ?: "Unknown error")
             }
         }
+    }
+
+    fun fetchNearbyStationsDebounced(location: LatLng, zoom: Float) {
+        // Only fetch if moved more than ~500 meters or zoom changed significantly
+        val distanceMoved = lastFetchedLocation?.let { 
+            calculateDistance(it, location)
+        } ?: Float.MAX_VALUE
+
+        if (distanceMoved < 500f) return
+
+        searchJob?.cancel()
+        searchJob = viewModelScope.launch {
+            delay(1500) // 1.5 second debounce
+            val radius = calculateRadiusFromZoom(zoom)
+            fetchNearbyStations(location, radius)
+        }
+    }
+
+    private fun calculateRadiusFromZoom(zoom: Float): Double {
+        return when {
+            zoom >= 15f -> 5.0
+            zoom >= 12f -> 15.0
+            zoom >= 10f -> 30.0
+            else -> 50.0
+        }
+    }
+
+    private fun calculateDistance(start: LatLng, end: LatLng): Float {
+        val results = FloatArray(1)
+        android.location.Location.distanceBetween(
+            start.latitude, start.longitude,
+            end.latitude, end.longitude,
+            results
+        )
+        return results[0]
     }
 }
