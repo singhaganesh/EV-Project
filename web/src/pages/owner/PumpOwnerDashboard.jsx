@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
+import { useNavigate } from 'react-router-dom';
 import {
     BatteryCharging,
     MapPin,
@@ -10,20 +11,16 @@ import {
     ChevronUp,
     Plus,
     Activity,
-    Calendar,
-    Clock
+    ArrowRight
 } from 'lucide-react';
 import {
     AreaChart,
     Area,
-    BarChart,
-    Bar,
     XAxis,
     YAxis,
     CartesianGrid,
     Tooltip,
-    ResponsiveContainer,
-    Cell
+    ResponsiveContainer
 } from 'recharts';
 
 import StatCard from '../../components/common/StatCard';
@@ -31,9 +28,7 @@ import StatusBadge from '../../components/common/StatusBadge';
 import api from '../../api/axios';
 import { 
     fetchRevenueTrends, 
-    selectRevenueTrends, 
-    fetchPeakUsage, 
-    selectPeakUsage 
+    selectRevenueTrends 
 } from '../../store/stationSlice';
 
 // Sub-component for a Dispenser row
@@ -118,8 +113,8 @@ const StationRow = ({ station }) => {
 
 export default function PumpOwnerDashboard() {
     const dispatch = useDispatch();
+    const navigate = useNavigate();
     const revenueTrends = useSelector(selectRevenueTrends);
-    const peakUsage = useSelector(selectPeakUsage);
     
     const [stats, setStats] = useState({
         totalStations: 0,
@@ -130,10 +125,6 @@ export default function PumpOwnerDashboard() {
     });
     const [stations, setStations] = useState([]);
     const [loading, setLoading] = useState(true);
-    
-    // Independent filters for each chart
-    const [revenueDays, setRevenueDays] = useState(7);
-    const [peakDays, setPeakDays] = useState(0); // Default to Today
 
     const fetchDashboardData = async () => {
         try {
@@ -158,6 +149,9 @@ export default function PumpOwnerDashboard() {
 
             const stationList = Array.isArray(stationsRes.data) ? stationsRes.data : (stationsRes.data?.data || []);
             setStations(stationList);
+
+            // Fetch a simple 7-day trend for the "Pulse" sparkline
+            dispatch(fetchRevenueTrends({ ownerId: user.id, days: 7 }));
         } catch (error) {
             console.error('Error fetching dashboard data:', error);
         } finally {
@@ -165,26 +159,9 @@ export default function PumpOwnerDashboard() {
         }
     };
 
-    // Load static dashboard data once
     useEffect(() => {
         fetchDashboardData();
-    }, []);
-
-    // Fetch Revenue Trends when revenueDays filter changes
-    useEffect(() => {
-        const userStr = localStorage.getItem('user');
-        if (!userStr) return;
-        const user = JSON.parse(userStr);
-        dispatch(fetchRevenueTrends({ ownerId: user.id, days: revenueDays }));
-    }, [dispatch, revenueDays]);
-
-    // Fetch Peak Usage when peakDays filter changes
-    useEffect(() => {
-        const userStr = localStorage.getItem('user');
-        if (!userStr) return;
-        const user = JSON.parse(userStr);
-        dispatch(fetchPeakUsage({ ownerId: user.id, days: peakDays }));
-    }, [dispatch, peakDays]);
+    }, [dispatch]);
 
     if (loading) {
         return (
@@ -193,50 +170,6 @@ export default function PumpOwnerDashboard() {
             </div>
         );
     }
-
-    const formatChartDate = (dateStr) => {
-        const date = new Date(dateStr);
-        return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
-    };
-
-    const formatHour = (hour) => {
-        const h = hour % 12 || 12;
-        const ampm = hour < 12 ? 'AM' : 'PM';
-        return `${h}${ampm}`;
-    };
-
-    const CustomTooltip = ({ active, payload, label }) => {
-        if (active && payload && payload.length) {
-            return (
-                <div className="bg-white p-4 border border-slate-100 shadow-xl rounded-2xl">
-                    <p className="text-xs font-bold text-slate-400 uppercase mb-2">{formatChartDate(label)}</p>
-                    <div className="space-y-1">
-                        <p className="text-sm font-bold text-emerald-600">
-                            Revenue: ₹{payload[0].value.toLocaleString('en-IN')}
-                        </p>
-                        <p className="text-sm font-bold text-cyan-600">
-                            Energy: {payload[1].value.toFixed(1)} kWh
-                        </p>
-                    </div>
-                </div>
-            );
-        }
-        return null;
-    };
-
-    const CustomPeakTooltip = ({ active, payload, label }) => {
-        if (active && payload && payload.length) {
-            return (
-                <div className="bg-white p-4 border border-slate-100 shadow-xl rounded-2xl">
-                    <p className="text-xs font-bold text-slate-400 uppercase mb-2">{formatHour(label)} Window</p>
-                    <p className="text-sm font-bold text-[#6366f1]">
-                        Sessions: {payload[0].value}
-                    </p>
-                </div>
-            );
-        }
-        return null;
-    };
 
     return (
         <div className="space-y-8 max-w-[1400px] mx-auto pb-12">
@@ -280,204 +213,101 @@ export default function PumpOwnerDashboard() {
                 />
             </div>
 
-            {/* Main Analytics: Revenue & Energy Trends */}
-            <div className="bg-white rounded-3xl p-8 shadow-sm shadow-slate-200/50 border border-slate-100/50">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
-                    <div>
-                        <h3 className="text-xl font-bold text-[#1A2234]">Revenue & Energy Trends</h3>
-                        <p className="text-sm text-slate-500 font-medium mt-1">Growth analysis over time</p>
-                    </div>
-                    
-                    {/* Independent Filter for Revenue */}
-                    <div className="flex bg-slate-50 p-1 rounded-xl border border-slate-100">
-                        {[7, 14, 30].map((d) => (
-                            <button
-                                key={d}
-                                onClick={() => setRevenueDays(d)}
-                                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${
-                                    revenueDays === d 
-                                    ? 'bg-white text-[#1A2234] shadow-sm border border-slate-100' 
-                                    : 'text-slate-400 hover:text-slate-600'
-                                }`}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                {/* Left Side: Quick Actions & Sparkline */}
+                <div className="lg:col-span-1 space-y-8">
+                    {/* Revenue Sparkline (The Pulse) */}
+                    <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100/50">
+                        <div className="flex items-center justify-between mb-4">
+                            <div>
+                                <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider">Weekly Pulse</h3>
+                                <p className="text-lg font-bold text-[#1A2234]">Revenue Trend</p>
+                            </div>
+                            <button 
+                                onClick={() => navigate('/owner/analytics')}
+                                className="p-2 hover:bg-slate-50 rounded-xl transition-colors text-cyan-600"
                             >
-                                {d} Days
+                                <ArrowRight className="w-5 h-5" />
                             </button>
-                        ))}
-                    </div>
-                </div>
-
-                <div className="h-[350px] w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={revenueTrends}>
-                            <defs>
-                                <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.1}/>
-                                    <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
-                                </linearGradient>
-                                <linearGradient id="colorEnergy" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.1}/>
-                                    <stop offset="95%" stopColor="#06b6d4" stopOpacity={0}/>
-                                </linearGradient>
-                            </defs>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                            <XAxis 
-                                dataKey="date" 
-                                tickFormatter={formatChartDate}
-                                axisLine={false}
-                                tickLine={false}
-                                tick={{fill: '#94a3b8', fontSize: 12, fontWeight: 600}}
-                                dy={10}
-                            />
-                            <YAxis 
-                                yAxisId="left"
-                                axisLine={false}
-                                tickLine={false}
-                                tick={{fill: '#94a3b8', fontSize: 12, fontWeight: 600}}
-                                tickFormatter={(value) => `₹${value}`}
-                            />
-                            <YAxis 
-                                yAxisId="right" 
-                                orientation="right"
-                                axisLine={false}
-                                tickLine={false}
-                                tick={{fill: '#94a3b8', fontSize: 12, fontWeight: 600}}
-                                tickFormatter={(value) => `${value}kWh`}
-                            />
-                            <Tooltip content={<CustomTooltip />} cursor={{stroke: '#e2e8f0', strokeWidth: 2}} />
-                            <Area
-                                yAxisId="left"
-                                type="monotone"
-                                dataKey="revenue"
-                                stroke="#10b981"
-                                strokeWidth={3}
-                                fillOpacity={1}
-                                fill="url(#colorRevenue)"
-                                name="Revenue"
-                            />
-                            <Area
-                                yAxisId="right"
-                                type="monotone"
-                                dataKey="energy"
-                                stroke="#06b6d4"
-                                strokeWidth={3}
-                                fillOpacity={1}
-                                fill="url(#colorEnergy)"
-                                name="Energy"
-                            />
-                        </AreaChart>
-                    </ResponsiveContainer>
-                </div>
-            </div>
-
-            {/* Peak Hours Analysis (Stacked Below) */}
-            <div className="bg-white rounded-3xl p-8 shadow-sm shadow-slate-200/50 border border-slate-100/50">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
-                    <div>
-                        <h3 className="text-xl font-bold text-[#1A2234]">
-                            {peakDays === 0 ? "Today's Peak Usage" : "Peak Usage Patterns"}
-                        </h3>
-                        <p className="text-sm text-slate-500 font-medium mt-1">
-                            {peakDays === 0 ? "Live charging sessions by hour" : `Hourly trends over the last ${peakDays} days`}
-                        </p>
-                    </div>
-                    
-                    {/* Independent Filter for Peak Hours */}
-                    <div className="flex bg-slate-50 p-1 rounded-xl border border-slate-100">
-                        {[0, 7, 14, 30].map((d) => (
-                            <button
-                                key={d}
-                                onClick={() => setPeakDays(d)}
-                                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${
-                                    peakDays === d 
-                                    ? 'bg-white text-[#1A2234] shadow-sm border border-slate-100' 
-                                    : 'text-slate-400 hover:text-slate-600'
-                                }`}
-                            >
-                                {d === 0 ? <Clock className="w-3 h-3" /> : null}
-                                {d === 0 ? 'Today' : `${d} Days`}
-                            </button>
-                        ))}
-                    </div>
-                </div>
-
-                <div className="h-[350px] w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={peakUsage}>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                            <XAxis 
-                                dataKey="hour" 
-                                tickFormatter={formatHour}
-                                axisLine={false}
-                                tickLine={false}
-                                tick={{fill: '#94a3b8', fontSize: 10, fontWeight: 600}}
-                                interval={1}
-                            />
-                            <YAxis hide={true} />
-                            <Tooltip 
-                                content={<CustomPeakTooltip />} 
-                                cursor={{fill: '#f8fafc', radius: 10}} 
-                            />
-                            <Bar 
-                                dataKey="sessionCount" 
-                                radius={[10, 10, 10, 10]}
-                                barSize={24}
-                            >
-                                {peakUsage.map((entry, index) => (
-                                    <Cell 
-                                        key={`cell-${index}`} 
-                                        fill={entry.sessionCount > 0 ? '#6366f1' : '#e2e8f0'} 
+                        </div>
+                        
+                        <div className="h-[120px] w-full">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <AreaChart data={revenueTrends}>
+                                    <defs>
+                                        <linearGradient id="colorPulse" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.2}/>
+                                            <stop offset="95%" stopColor="#06b6d4" stopOpacity={0}/>
+                                        </linearGradient>
+                                    </defs>
+                                    <Area
+                                        type="monotone"
+                                        dataKey="revenue"
+                                        stroke="#06b6d4"
+                                        strokeWidth={3}
+                                        fillOpacity={1}
+                                        fill="url(#colorPulse)"
                                     />
-                                ))}
-                            </Bar>
-                        </BarChart>
-                    </ResponsiveContainer>
+                                    <Tooltip 
+                                        content={({ active, payload }) => {
+                                            if (active && payload && payload.length) {
+                                                return (
+                                                    <div className="bg-[#1A2234] text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-xl">
+                                                        ₹{payload[0].value.toLocaleString('en-IN')}
+                                                    </div>
+                                                );
+                                            }
+                                            return null;
+                                        }}
+                                    />
+                                </AreaChart>
+                            </ResponsiveContainer>
+                        </div>
+                    </div>
+
+                    {/* Quick Actions */}
+                    <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100/50">
+                        <h3 className="text-lg font-bold text-[#1A2234] mb-4">Quick Actions</h3>
+                        <div className="space-y-3">
+                            <button className="w-full flex items-center justify-between bg-[#1A2234] hover:bg-slate-800 text-white p-4 rounded-2xl font-semibold text-sm transition-all shadow-sm group">
+                                <span className="flex items-center gap-3"><Plus className="w-5 h-5 text-cyan-400" /> Add Station</span>
+                                <ArrowRight className="w-4 h-4 opacity-0 group-hover:opacity-100 -translate-x-2 group-hover:translate-x-0 transition-all" />
+                            </button>
+                            <button className="w-full flex items-center justify-between bg-slate-50 hover:bg-slate-100 text-slate-700 p-4 rounded-2xl font-semibold text-sm transition-all group">
+                                <span className="flex items-center gap-3"><Wallet className="w-5 h-5 text-emerald-500" /> View Payouts</span>
+                                <ArrowRight className="w-4 h-4 opacity-0 group-hover:opacity-100 -translate-x-2 group-hover:translate-x-0 transition-all" />
+                            </button>
+                            <button className="w-full flex items-center justify-between bg-slate-50 hover:bg-slate-100 text-slate-700 p-4 rounded-2xl font-semibold text-sm transition-all group">
+                                <span className="flex items-center gap-3"><AlertTriangle className="w-5 h-5 text-rose-500" /> Maintenance</span>
+                                <ArrowRight className="w-4 h-4 opacity-0 group-hover:opacity-100 -translate-x-2 group-hover:translate-x-0 transition-all" />
+                            </button>
+                        </div>
+                    </div>
                 </div>
-                
-                <div className="mt-6 flex items-center justify-center gap-8">
-                    <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full bg-[#6366f1]"></div>
-                        <span className="text-xs font-bold text-slate-500 uppercase tracking-tight">Active Sessions</span>
+
+                {/* Right Side: Stations Fleet (Full width on mobile, 2/3 on desktop) */}
+                <div className="lg:col-span-2 space-y-4">
+                    <div className="flex items-center justify-between mb-2">
+                        <h3 className="text-xl font-bold text-[#1A2234]">My Stations Fleet</h3>
+                        <span className="bg-cyan-100 text-cyan-700 text-xs font-bold px-3 py-1 rounded-full">
+                            {stations.length} STATIONS
+                        </span>
                     </div>
-                    <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full bg-[#e2e8f0]"></div>
-                        <span className="text-xs font-bold text-slate-500 uppercase tracking-tight">No Activity</span>
-                    </div>
+                    
+                    {stations.length > 0 ? (
+                        <div className="grid grid-cols-1 gap-4">
+                            {stations.map(station => (
+                                <StationRow key={station.id} station={station} />
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="bg-slate-50 rounded-3xl p-12 text-center border-2 border-dashed border-slate-200">
+                            <MapPin className="w-12 h-12 text-slate-300 mx-auto mb-4" />
+                            <p className="text-slate-500 font-medium">You haven't registered any stations yet.</p>
+                        </div>
+                    )}
                 </div>
             </div>
-
-            {/* Quick Actions specific to Owner */}
-            <div className="bg-white rounded-2xl p-6 shadow-sm shadow-slate-200/50 border border-slate-100/50">
-                <div className="mb-4">
-                    <h3 className="text-lg font-bold text-[#1A2234]">Quick Actions</h3>
-                </div>
-                <div className="flex flex-wrap gap-4">
-                    <button className="flex items-center gap-2 bg-[#1A2234] hover:bg-slate-800 text-white px-5 py-2.5 rounded-full font-semibold text-sm transition-colors shadow-sm">
-                        <Plus className="w-4 h-4" /> Add New Station
-                    </button>
-                    <button className="flex items-center gap-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-5 py-2.5 rounded-full font-semibold text-sm transition-colors shadow-sm">
-                        <Wallet className="w-4 h-4 text-emerald-500" /> View Payouts
-                    </button>
-                    <button className="flex items-center gap-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-5 py-2.5 rounded-full font-semibold text-sm transition-colors shadow-sm">
-                        <AlertTriangle className="w-4 h-4 text-rose-500" /> Request Maintenance
-                    </button>
-                </div>
-            </div>
-
-            {/* Stations Tree View */}
-            <div className="space-y-4">
-                <h3 className="text-xl font-bold text-[#1A2234] mb-2">My Stations Fleet</h3>
-                {stations.length > 0 ? (
-                    stations.map(station => (
-                        <StationRow key={station.id} station={station} />
-                    ))
-                ) : (
-                    <div className="bg-slate-50 rounded-2xl p-12 text-center border-2 border-dashed border-slate-200">
-                        <MapPin className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-                        <p className="text-slate-500 font-medium">You haven't registered any stations yet.</p>
-                    </div>
-                )}
-            </div>
-
         </div>
     );
 }
