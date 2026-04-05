@@ -1,5 +1,6 @@
 package com.ganesh.EV_Project.controller;
 
+import com.ganesh.EV_Project.dto.AnalyticsSummaryDTO;
 import com.ganesh.EV_Project.dto.DailyStatsDTO;
 import com.ganesh.EV_Project.dto.PeakHourDTO;
 import com.ganesh.EV_Project.service.AnalyticsService;
@@ -35,5 +36,15 @@ public class AnalyticsController {
         
         List<PeakHourDTO> peakUsage = analyticsService.getPeakUsage(ownerId, days);
         return ResponseEntity.ok(peakUsage);
+    }
+
+    @GetMapping("/summary/{ownerId}")
+    @PreAuthorize("hasAnyRole('STATION_OWNER', 'ADMIN')")
+    public ResponseEntity<AnalyticsSummaryDTO> getAnalyticsSummary(
+            @PathVariable Long ownerId,
+            @RequestParam(defaultValue = "7") int days) {
+        
+        AnalyticsSummaryDTO summary = analyticsService.getAnalyticsSummary(ownerId, days);
+        return ResponseEntity.ok(summary);
     }
 }

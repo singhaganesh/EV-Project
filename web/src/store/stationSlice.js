@@ -1,7 +1,8 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import { 
     getRevenueTrends as fetchRevenueTrendsAPI,
-    getPeakUsage as fetchPeakUsageAPI
+    getPeakUsage as fetchPeakUsageAPI,
+    getAnalyticsSummary as fetchAnalyticsSummaryAPI
 } from '../api/axios';
 
 export const fetchRevenueTrends = createAsyncThunk(
@@ -28,10 +29,25 @@ export const fetchPeakUsage = createAsyncThunk(
     }
 );
 
+export const fetchAnalyticsSummary = createAsyncThunk(
+    'station/fetchAnalyticsSummary',
+    async ({ ownerId, days }, { rejectWithValue }) => {
+        try {
+            const response = await fetchAnalyticsSummaryAPI(ownerId, days);
+            return response.data;
+        } catch (error) {
+            return rejectWithValue(error.response?.data?.message || 'Failed to fetch summary');
+        }
+    }
+);
+
 const initialState = {
     stations: [],
     revenueTrends: [],
     peakUsage: [],
+    efficiencyMetrics: null,
+    stationRevenue: [],
+    connectorRevenue: [],
     dashboardStats: {
         totalUsers: 0,
         activeStations: 0,
@@ -82,6 +98,20 @@ const stationSlice = createSlice({
             .addCase(fetchPeakUsage.rejected, (state, action) => {
                 state.loading = false;
                 state.error = action.payload;
+            })
+            // Analytics Summary
+            .addCase(fetchAnalyticsSummary.pending, (state) => {
+                state.loading = true;
+            })
+            .addCase(fetchAnalyticsSummary.fulfilled, (state, action) => {
+                state.loading = false;
+                state.efficiencyMetrics = action.payload.efficiency;
+                state.stationRevenue = action.payload.stationRevenue;
+                state.connectorRevenue = action.payload.connectorRevenue;
+            })
+            .addCase(fetchAnalyticsSummary.rejected, (state, action) => {
+                state.loading = false;
+                state.error = action.payload;
             });
     }
 });
@@ -91,6 +121,9 @@ export const { setStations, setDashboardStats, setRecentActivity } = stationSlic
 export const selectAllStations = (state) => state.station.stations;
 export const selectRevenueTrends = (state) => state.station.revenueTrends;
 export const selectPeakUsage = (state) => state.station.peakUsage;
+export const selectEfficiencyMetrics = (state) => state.station.efficiencyMetrics;
+export const selectStationRevenue = (state) => state.station.stationRevenue;
+export const selectConnectorRevenue = (state) => state.station.connectorRevenue;
 export const selectDashboardStats = (state) => state.station.dashboardStats;
 export const selectRecentActivity = (state) => state.station.recentActivity;
 

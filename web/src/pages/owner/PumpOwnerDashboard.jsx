@@ -220,8 +220,8 @@ export default function PumpOwnerDashboard() {
                     <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100/50">
                         <div className="flex items-center justify-between mb-4">
                             <div>
-                                <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider">Weekly Pulse</h3>
-                                <p className="text-lg font-bold text-[#1A2234]">Revenue Trend</p>
+                                <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider">Weekly Trend</h3>
+                                <p className="text-lg font-bold text-[#1A2234]">Revenue</p>
                             </div>
                             <button 
                                 onClick={() => navigate('/owner/analytics')}
@@ -231,15 +231,30 @@ export default function PumpOwnerDashboard() {
                             </button>
                         </div>
                         
-                        <div className="h-[120px] w-full">
+                        <div className="h-[250px] w-full">
                             <ResponsiveContainer width="100%" height="100%">
-                                <AreaChart data={revenueTrends}>
+                                <AreaChart data={revenueTrends} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
                                     <defs>
                                         <linearGradient id="colorPulse" x1="0" y1="0" x2="0" y2="1">
                                             <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.2}/>
                                             <stop offset="95%" stopColor="#06b6d4" stopOpacity={0}/>
                                         </linearGradient>
                                     </defs>
+                                    <XAxis 
+                                        dataKey="date" 
+                                        hide={false}
+                                        axisLine={false}
+                                        tickLine={false}
+                                        tick={{fill: '#94a3b8', fontSize: 10, fontWeight: 600}}
+                                        tickFormatter={(date) => new Date(date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                                    />
+                                    <YAxis 
+                                        hide={false}
+                                        axisLine={false}
+                                        tickLine={false}
+                                        tick={{fill: '#94a3b8', fontSize: 10, fontWeight: 600}}
+                                        tickFormatter={(val) => `₹${val}`}
+                                    />
                                     <Area
                                         type="monotone"
                                         dataKey="revenue"

@@ -44,4 +44,27 @@ public interface ChargingSessionRepository extends JpaRepository<ChargingSession
            "WHERE st.owner_id = :ownerId AND s.start_time >= :since " +
            "GROUP BY hour ORDER BY hour ASC", nativeQuery = true)
     List<Object[]> getPeakUsageByOwner(@org.springframework.data.repository.query.Param("ownerId") Long ownerId, @org.springframework.data.repository.query.Param("since") java.time.LocalDateTime since);
+
+    @org.springframework.data.jpa.repository.Query(value = "SELECT " +
+           "AVG(EXTRACT(EPOCH FROM (s.end_time - s.start_time))/60) as avgDuration, " +
+           "AVG(s.total_cost) as avgRevenue, " +
+           "AVG(s.energy_kwh) as avgEnergy " +
+           "FROM charging_sessions s JOIN bookings b ON s.booking_id = b.id " +
+           "JOIN charger_slots cs ON b.slot_id = cs.id JOIN stations st ON cs.station_id = st.id " +
+           "WHERE st.owner_id = :ownerId AND s.payment_status = 'PAID' AND s.end_time >= :since", nativeQuery = true)
+    List<Object[]> getEfficiencyMetrics(@org.springframework.data.repository.query.Param("ownerId") Long ownerId, @org.springframework.data.repository.query.Param("since") java.time.LocalDateTime since);
+
+    @org.springframework.data.jpa.repository.Query(value = "SELECT st.name, SUM(s.total_cost) as revenue " +
+           "FROM charging_sessions s JOIN bookings b ON s.booking_id = b.id " +
+           "JOIN charger_slots cs ON b.slot_id = cs.id JOIN stations st ON cs.station_id = st.id " +
+           "WHERE st.owner_id = :ownerId AND s.payment_status = 'PAID' AND s.end_time >= :since " +
+           "GROUP BY st.name", nativeQuery = true)
+    List<Object[]> getRevenueByStation(@org.springframework.data.repository.query.Param("ownerId") Long ownerId, @org.springframework.data.repository.query.Param("since") java.time.LocalDateTime since);
+
+    @org.springframework.data.jpa.repository.Query(value = "SELECT cs.connector_type, SUM(s.total_cost) as revenue " +
+           "FROM charging_sessions s JOIN bookings b ON s.booking_id = b.id " +
+           "JOIN charger_slots cs ON b.slot_id = cs.id JOIN stations st ON cs.station_id = st.id " +
+           "WHERE st.owner_id = :ownerId AND s.payment_status = 'PAID' AND s.end_time >= :since " +
+           "GROUP BY cs.connector_type", nativeQuery = true)
+    List<Object[]> getRevenueByConnector(@org.springframework.data.repository.query.Param("ownerId") Long ownerId, @org.springframework.data.repository.query.Param("since") java.time.LocalDateTime since);
 }
