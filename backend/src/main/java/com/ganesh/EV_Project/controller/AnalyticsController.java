@@ -1,6 +1,7 @@
 package com.ganesh.EV_Project.controller;
 
 import com.ganesh.EV_Project.dto.DailyStatsDTO;
+import com.ganesh.EV_Project.dto.PeakHourDTO;
 import com.ganesh.EV_Project.service.AnalyticsService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -24,5 +25,15 @@ public class AnalyticsController {
         
         List<DailyStatsDTO> trends = analyticsService.getRevenueTrends(ownerId, days);
         return ResponseEntity.ok(trends);
+    }
+
+    @GetMapping("/peak-usage/{ownerId}")
+    @PreAuthorize("hasAnyRole('STATION_OWNER', 'ADMIN')")
+    public ResponseEntity<List<PeakHourDTO>> getPeakUsage(
+            @PathVariable Long ownerId,
+            @RequestParam(defaultValue = "7") int days) {
+        
+        List<PeakHourDTO> peakUsage = analyticsService.getPeakUsage(ownerId, days);
+        return ResponseEntity.ok(peakUsage);
     }
 }

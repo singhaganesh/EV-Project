@@ -1,5 +1,8 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import { getRevenueTrends as fetchRevenueTrendsAPI } from '../api/axios';
+import { 
+    getRevenueTrends as fetchRevenueTrendsAPI,
+    getPeakUsage as fetchPeakUsageAPI
+} from '../api/axios';
 
 export const fetchRevenueTrends = createAsyncThunk(
     'station/fetchRevenueTrends',
@@ -13,9 +16,22 @@ export const fetchRevenueTrends = createAsyncThunk(
     }
 );
 
+export const fetchPeakUsage = createAsyncThunk(
+    'station/fetchPeakUsage',
+    async ({ ownerId, days }, { rejectWithValue }) => {
+        try {
+            const response = await fetchPeakUsageAPI(ownerId, days);
+            return response.data;
+        } catch (error) {
+            return rejectWithValue(error.response?.data?.message || 'Failed to fetch peak usage');
+        }
+    }
+);
+
 const initialState = {
     stations: [],
     revenueTrends: [],
+    peakUsage: [],
     dashboardStats: {
         totalUsers: 0,
         activeStations: 0,
@@ -43,6 +59,7 @@ const stationSlice = createSlice({
     },
     extraReducers: (builder) => {
         builder
+            // Revenue Trends
             .addCase(fetchRevenueTrends.pending, (state) => {
                 state.loading = true;
             })
@@ -53,6 +70,18 @@ const stationSlice = createSlice({
             .addCase(fetchRevenueTrends.rejected, (state, action) => {
                 state.loading = false;
                 state.error = action.payload;
+            })
+            // Peak Usage
+            .addCase(fetchPeakUsage.pending, (state) => {
+                state.loading = true;
+            })
+            .addCase(fetchPeakUsage.fulfilled, (state, action) => {
+                state.loading = false;
+                state.peakUsage = action.payload;
+            })
+            .addCase(fetchPeakUsage.rejected, (state, action) => {
+                state.loading = false;
+                state.error = action.payload;
             });
     }
 });
@@ -61,6 +90,7 @@ export const { setStations, setDashboardStats, setRecentActivity } = stationSlic
 
 export const selectAllStations = (state) => state.station.stations;
 export const selectRevenueTrends = (state) => state.station.revenueTrends;
+export const selectPeakUsage = (state) => state.station.peakUsage;
 export const selectDashboardStats = (state) => state.station.dashboardStats;
 export const selectRecentActivity = (state) => state.station.recentActivity;
 
