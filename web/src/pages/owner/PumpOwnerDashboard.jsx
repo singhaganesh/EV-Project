@@ -11,7 +11,7 @@ import {
     Plus,
     Activity,
     Calendar,
-    RefreshCw
+    Clock
 } from 'lucide-react';
 import {
     AreaChart,
@@ -130,7 +130,10 @@ export default function PumpOwnerDashboard() {
     });
     const [stations, setStations] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [chartDays, setChartDays] = useState(7);
+    
+    // Independent filters for each chart
+    const [revenueDays, setRevenueDays] = useState(7);
+    const [peakDays, setPeakDays] = useState(0); // Default to Today
 
     const fetchDashboardData = async () => {
         try {
@@ -155,9 +158,6 @@ export default function PumpOwnerDashboard() {
 
             const stationList = Array.isArray(stationsRes.data) ? stationsRes.data : (stationsRes.data?.data || []);
             setStations(stationList);
-
-            dispatch(fetchRevenueTrends({ ownerId: user.id, days: chartDays }));
-            dispatch(fetchPeakUsage({ ownerId: user.id, days: chartDays }));
         } catch (error) {
             console.error('Error fetching dashboard data:', error);
         } finally {
@@ -165,9 +165,26 @@ export default function PumpOwnerDashboard() {
         }
     };
 
+    // Load static dashboard data once
     useEffect(() => {
         fetchDashboardData();
-    }, [dispatch, chartDays]);
+    }, []);
+
+    // Fetch Revenue Trends when revenueDays filter changes
+    useEffect(() => {
+        const userStr = localStorage.getItem('user');
+        if (!userStr) return;
+        const user = JSON.parse(userStr);
+        dispatch(fetchRevenueTrends({ ownerId: user.id, days: revenueDays }));
+    }, [dispatch, revenueDays]);
+
+    // Fetch Peak Usage when peakDays filter changes
+    useEffect(() => {
+        const userStr = localStorage.getItem('user');
+        if (!userStr) return;
+        const user = JSON.parse(userStr);
+        dispatch(fetchPeakUsage({ ownerId: user.id, days: peakDays }));
+    }, [dispatch, peakDays]);
 
     if (loading) {
         return (
@@ -263,144 +280,167 @@ export default function PumpOwnerDashboard() {
                 />
             </div>
 
-            {/* Charts Row */}
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-                {/* Revenue & Energy Analytics Chart */}
-                <div className="xl:col-span-2 bg-white rounded-3xl p-8 shadow-sm shadow-slate-200/50 border border-slate-100/50">
-                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
-                        <div>
-                            <h3 className="text-xl font-bold text-[#1A2234]">Revenue & Energy Trends</h3>
-                            <p className="text-sm text-slate-500 font-medium mt-1">Growth analysis over time</p>
-                        </div>
-                        <div className="flex bg-slate-50 p-1 rounded-xl border border-slate-100">
-                            {[7, 14, 30].map((d) => (
-                                <button
-                                    key={d}
-                                    onClick={() => setChartDays(d)}
-                                    className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${
-                                        chartDays === d 
-                                        ? 'bg-white text-[#1A2234] shadow-sm' 
-                                        : 'text-slate-400 hover:text-slate-600'
-                                    }`}
-                                >
-                                    {d} Days
-                                </button>
-                            ))}
-                        </div>
+            {/* Main Analytics: Revenue & Energy Trends */}
+            <div className="bg-white rounded-3xl p-8 shadow-sm shadow-slate-200/50 border border-slate-100/50">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
+                    <div>
+                        <h3 className="text-xl font-bold text-[#1A2234]">Revenue & Energy Trends</h3>
+                        <p className="text-sm text-slate-500 font-medium mt-1">Growth analysis over time</p>
                     </div>
-
-                    <div className="h-[350px] w-full">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <AreaChart data={revenueTrends}>
-                                <defs>
-                                    <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-                                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.1}/>
-                                        <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
-                                    </linearGradient>
-                                    <linearGradient id="colorEnergy" x1="0" y1="0" x2="0" y2="1">
-                                        <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.1}/>
-                                        <stop offset="95%" stopColor="#06b6d4" stopOpacity={0}/>
-                                    </linearGradient>
-                                </defs>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                <XAxis 
-                                    dataKey="date" 
-                                    tickFormatter={formatChartDate}
-                                    axisLine={false}
-                                    tickLine={false}
-                                    tick={{fill: '#94a3b8', fontSize: 12, fontWeight: 600}}
-                                    dy={10}
-                                />
-                                <YAxis 
-                                    yAxisId="left"
-                                    axisLine={false}
-                                    tickLine={false}
-                                    tick={{fill: '#94a3b8', fontSize: 12, fontWeight: 600}}
-                                    tickFormatter={(value) => `₹${value}`}
-                                />
-                                <YAxis 
-                                    yAxisId="right" 
-                                    orientation="right"
-                                    axisLine={false}
-                                    tickLine={false}
-                                    tick={{fill: '#94a3b8', fontSize: 12, fontWeight: 600}}
-                                    tickFormatter={(value) => `${value}kWh`}
-                                />
-                                <Tooltip content={<CustomTooltip />} cursor={{stroke: '#e2e8f0', strokeWidth: 2}} />
-                                <Area
-                                    yAxisId="left"
-                                    type="monotone"
-                                    dataKey="revenue"
-                                    stroke="#10b981"
-                                    strokeWidth={3}
-                                    fillOpacity={1}
-                                    fill="url(#colorRevenue)"
-                                    name="Revenue"
-                                />
-                                <Area
-                                    yAxisId="right"
-                                    type="monotone"
-                                    dataKey="energy"
-                                    stroke="#06b6d4"
-                                    strokeWidth={3}
-                                    fillOpacity={1}
-                                    fill="url(#colorEnergy)"
-                                    name="Energy"
-                                />
-                            </AreaChart>
-                        </ResponsiveContainer>
+                    
+                    {/* Independent Filter for Revenue */}
+                    <div className="flex bg-slate-50 p-1 rounded-xl border border-slate-100">
+                        {[7, 14, 30].map((d) => (
+                            <button
+                                key={d}
+                                onClick={() => setRevenueDays(d)}
+                                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${
+                                    revenueDays === d 
+                                    ? 'bg-white text-[#1A2234] shadow-sm border border-slate-100' 
+                                    : 'text-slate-400 hover:text-slate-600'
+                                }`}
+                            >
+                                {d} Days
+                            </button>
+                        ))}
                     </div>
                 </div>
 
-                {/* Peak Hours Chart */}
-                <div className="bg-white rounded-3xl p-8 shadow-sm shadow-slate-200/50 border border-slate-100/50">
-                    <div className="mb-8">
-                        <h3 className="text-xl font-bold text-[#1A2234]">Peak Hours</h3>
-                        <p className="text-sm text-slate-500 font-medium mt-1">Usage by time of day</p>
-                    </div>
+                <div className="h-[350px] w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={revenueTrends}>
+                            <defs>
+                                <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.1}/>
+                                    <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                                </linearGradient>
+                                <linearGradient id="colorEnergy" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.1}/>
+                                    <stop offset="95%" stopColor="#06b6d4" stopOpacity={0}/>
+                                </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                            <XAxis 
+                                dataKey="date" 
+                                tickFormatter={formatChartDate}
+                                axisLine={false}
+                                tickLine={false}
+                                tick={{fill: '#94a3b8', fontSize: 12, fontWeight: 600}}
+                                dy={10}
+                            />
+                            <YAxis 
+                                yAxisId="left"
+                                axisLine={false}
+                                tickLine={false}
+                                tick={{fill: '#94a3b8', fontSize: 12, fontWeight: 600}}
+                                tickFormatter={(value) => `₹${value}`}
+                            />
+                            <YAxis 
+                                yAxisId="right" 
+                                orientation="right"
+                                axisLine={false}
+                                tickLine={false}
+                                tick={{fill: '#94a3b8', fontSize: 12, fontWeight: 600}}
+                                tickFormatter={(value) => `${value}kWh`}
+                            />
+                            <Tooltip content={<CustomTooltip />} cursor={{stroke: '#e2e8f0', strokeWidth: 2}} />
+                            <Area
+                                yAxisId="left"
+                                type="monotone"
+                                dataKey="revenue"
+                                stroke="#10b981"
+                                strokeWidth={3}
+                                fillOpacity={1}
+                                fill="url(#colorRevenue)"
+                                name="Revenue"
+                            />
+                            <Area
+                                yAxisId="right"
+                                type="monotone"
+                                dataKey="energy"
+                                stroke="#06b6d4"
+                                strokeWidth={3}
+                                fillOpacity={1}
+                                fill="url(#colorEnergy)"
+                                name="Energy"
+                            />
+                        </AreaChart>
+                    </ResponsiveContainer>
+                </div>
+            </div>
 
-                    <div className="h-[350px] w-full">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={peakUsage}>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                <XAxis 
-                                    dataKey="hour" 
-                                    tickFormatter={formatHour}
-                                    axisLine={false}
-                                    tickLine={false}
-                                    tick={{fill: '#94a3b8', fontSize: 10, fontWeight: 600}}
-                                    interval={3}
-                                />
-                                <YAxis hide={true} />
-                                <Tooltip 
-                                    content={<CustomPeakTooltip />} 
-                                    cursor={{fill: '#f8fafc', radius: 10}} 
-                                />
-                                <Bar 
-                                    dataKey="sessionCount" 
-                                    radius={[10, 10, 10, 10]}
-                                    barSize={12}
-                                >
-                                    {peakUsage.map((entry, index) => (
-                                        <Cell 
-                                            key={`cell-${index}`} 
-                                            fill={entry.sessionCount > 0 ? '#6366f1' : '#e2e8f0'} 
-                                        />
-                                    ))}
-                                </Bar>
-                            </BarChart>
-                        </ResponsiveContainer>
+            {/* Peak Hours Analysis (Stacked Below) */}
+            <div className="bg-white rounded-3xl p-8 shadow-sm shadow-slate-200/50 border border-slate-100/50">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
+                    <div>
+                        <h3 className="text-xl font-bold text-[#1A2234]">
+                            {peakDays === 0 ? "Today's Peak Usage" : "Peak Usage Patterns"}
+                        </h3>
+                        <p className="text-sm text-slate-500 font-medium mt-1">
+                            {peakDays === 0 ? "Live charging sessions by hour" : `Hourly trends over the last ${peakDays} days`}
+                        </p>
                     </div>
                     
-                    <div className="mt-4 flex items-center justify-center gap-4">
-                        <div className="flex items-center gap-2">
-                            <div className="w-3 h-3 rounded-full bg-[#6366f1]"></div>
-                            <span className="text-xs font-bold text-slate-500">Peak Activity</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <div className="w-3 h-3 rounded-full bg-[#e2e8f0]"></div>
-                            <span className="text-xs font-bold text-slate-500">Low Demand</span>
-                        </div>
+                    {/* Independent Filter for Peak Hours */}
+                    <div className="flex bg-slate-50 p-1 rounded-xl border border-slate-100">
+                        {[0, 7, 14, 30].map((d) => (
+                            <button
+                                key={d}
+                                onClick={() => setPeakDays(d)}
+                                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${
+                                    peakDays === d 
+                                    ? 'bg-white text-[#1A2234] shadow-sm border border-slate-100' 
+                                    : 'text-slate-400 hover:text-slate-600'
+                                }`}
+                            >
+                                {d === 0 ? <Clock className="w-3 h-3" /> : null}
+                                {d === 0 ? 'Today' : `${d} Days`}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                <div className="h-[350px] w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={peakUsage}>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                            <XAxis 
+                                dataKey="hour" 
+                                tickFormatter={formatHour}
+                                axisLine={false}
+                                tickLine={false}
+                                tick={{fill: '#94a3b8', fontSize: 10, fontWeight: 600}}
+                                interval={1}
+                            />
+                            <YAxis hide={true} />
+                            <Tooltip 
+                                content={<CustomPeakTooltip />} 
+                                cursor={{fill: '#f8fafc', radius: 10}} 
+                            />
+                            <Bar 
+                                dataKey="sessionCount" 
+                                radius={[10, 10, 10, 10]}
+                                barSize={24}
+                            >
+                                {peakUsage.map((entry, index) => (
+                                    <Cell 
+                                        key={`cell-${index}`} 
+                                        fill={entry.sessionCount > 0 ? '#6366f1' : '#e2e8f0'} 
+                                    />
+                                ))}
+                            </Bar>
+                        </BarChart>
+                    </ResponsiveContainer>
+                </div>
+                
+                <div className="mt-6 flex items-center justify-center gap-8">
+                    <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full bg-[#6366f1]"></div>
+                        <span className="text-xs font-bold text-slate-500 uppercase tracking-tight">Active Sessions</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full bg-[#e2e8f0]"></div>
+                        <span className="text-xs font-bold text-slate-500 uppercase tracking-tight">No Activity</span>
                     </div>
                 </div>
             </div>
