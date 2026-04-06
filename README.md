@@ -38,7 +38,6 @@ Real-time slot booking, instant payment processing, and seamless multi-vehicle s
 6. [Live Demo & Screenshots](#live-demo--screenshots)
 7. [Frequently Asked Questions](#frequently-asked-questions-non-technical)
 8. [What's Coming Next?](#whats-coming-next-roadmap)
-9. [Get In Touch](#get-in-touch--support)
 
 ---
 
@@ -257,29 +256,6 @@ No subscription fees. No hidden charges. You pay only for what you charge.
 | **Admin Dashboard** | For station owners: real-time analytics, revenue tracking, customer insights | ✅ Live Now (Beta) |
 | **Referral Program** | Invite friends, get ₹50 credit per referral | 💡 We're Considering |
 | **Green Rewards** | Earn points for charging — redeem for discounts or plant trees | 💡 We're Considering |
-
----
-
-## Get In Touch & Support
-
-### 🙋 **Who Built This?**
-
-We're a small team of engineers passionate about **making EV charging as easy as filling up gas**. We started this project because we were frustrated with the current state of EV charging infrastructure. Now, we're building the solution we wish existed.
-
-### 📧 **How to Reach Us**
-
-- **Email Support:** [support@evcharging.com](mailto:support@evcharging.com) — Response within 1 hour
-- **WhatsApp:** [+91-9876-543-210](https://wa.me/)
-- **Report a Bug:** [GitHub Issues](https://github.com/yourusername/ev-project/issues)
-- **Feature Request:** [Discussion Forum](https://github.com/yourusername/ev-project/discussions)
-
-### 🔗 **Follow Us**
-
-- 🐦 [Twitter](https://twitter.com)
-- 💼 [LinkedIn](https://linkedin.com)
-- 🌐 [Website](https://evcharging.com)
-
----
 
 ---
 
@@ -2376,26 +2352,6 @@ spring.datasource.hikari.idle-timeout=600000
 
 ---
 
-## Contributing
-
-### Welcome! 🎉
-
-We're excited you want to contribute. This section explains how.
-
-### Workflow
-
-1. **Fork** the repository on GitHub
-2. **Clone** your fork locally
-3. **Create** a feature branch
-4. **Code** with our style guide
-5. **Test** thoroughly
-6. **Commit** with clear messages
-7. **Push** to your fork
-8. **Create** a pull request
-
-### Step-by-Step
-
-```bash
 # 1. Fork the repo (click "Fork" on GitHub)
 
 # 2. Clone YOUR fork
@@ -2545,146 +2501,6 @@ We are committed to providing an inclusive and welcoming environment. By contrib
 - ❌ No spam or irrelevant content
 
 For full details, see [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
-
-### Community
-
-- 💬 [GitHub Discussions](https://github.com/yourusername/ev-project/discussions)
-- 🐦 [Twitter](https://twitter.com)
-- 💼 [LinkedIn](https://linkedin.com)
-- 📧 [Email](mailto:contact@evcharging.com)
-
----
-
-## Changelog
-
-### [v0.0.1-SNAPSHOT] — 2026-03-11
-
-#### Added
-- JWT + OTP-based authentication
-- Multi-user support (CUSTOMER, STATION_OWNER, ADMIN roles)
-- Station and charger slot management
-- Booking system with 15-minute expiry
-- Charging session tracking with energy consumption
-- Stripe payment integration with webhooks
-- Real-time WebSocket updates for slot status
-- Android app with Jetpack Compose UI
-- React admin dashboard
-- Database schema with 8 entities
-- Comprehensive API documentation
-
-#### Changed
-- N/A (initial release)
-
-#### Fixed
-- N/A (initial release)
-
-#### Removed
-- N/A (initial release)
-
-### [v0.1.0] — TBD (Next Release)
-
-#### Planned
-- Push notifications for booking alerts
-- Google Maps integration
-- Subscription plans for recurring bookings
-- Advanced analytics dashboard
-- Mobile app UI refinements
-- Admin override capabilities for bookings
-
-For full changelog, see [CHANGELOG.md](CHANGELOG.md).
-
----
-
-## Known Issues & Limitations
-
-### Current Issues
-
-| Issue | Workaround | Status |
-|-------|-----------|--------|
-| Android app crashes on API error | Manually restart app | 🔴 Open |
-| WebSocket disconnects after 30 min idle | Reconnect by refreshing page | 🟡 In Progress |
-| Stripe test mode only (no live payments) | Use test cards | 🟡 By Design |
-| No email receipt (console logs only) | Check server logs | 🟡 In Development |
-
-### Limitations
-
-1. **No Offline Support**
-   - App requires internet connection to book slots
-   - Mitigation: Plan future service worker caching
-
-2. **Single Database Instance**
-   - No read replicas for scaling
-   - Mitigation: Upgrade to Multi-AZ for production
-
-3. **WebSocket Broadcasting**
-   - Broadcasts to all connected clients (no filtering by station)
-   - Mitigation: Implement Redis pub/sub for distributed setups
-
-4. **Mobile App**
-   - Only Android (no iOS yet)
-   - Android 8.0+ only
-   - Mitigation: Plan React Native rewrite for cross-platform
-
-5. **Testing**
-   - Limited test coverage (<60%)
-   - No E2E tests yet
-   - Mitigation: Add Jest/Playwright E2E suite
-
-### Technical Debt
-
-```markdown
-- [ ] Extract Auth interceptor to separate module
-- [ ] Add request/response logging middleware
-- [ ] Refactor ChargerSlot status enum to use state machine
-- [ ] Add database migration tool (Flyway)
-- [ ] Implement API rate limiting
-- [ ] Add feature flag system
-- [ ] Consolidate error response formats
-- [ ] Document API with Swagger/OpenAPI
-```
-
-For full issue tracker, see [GitHub Issues](https://github.com/yourusername/ev-project/issues).
-
----
-
-## Acknowledgements
-
-### Open Source Libraries
-
-| Library | Version | License | Purpose |
-|---------|---------|---------|---------|
-| Spring Boot | 3.3.5 | Apache 2.0 | Backend framework |
-| Hibernate | Latest | LGPL | ORM layer |
-| Stripe SDK | 2.9+ | Apache 2.0 | Payment processing |
-| React | 19 | MIT | Frontend framework |
-| Redux Toolkit | 2.11+ | MIT | State management |
-| Material UI | 7.3+ | MIT | Component library |
-| Jetpack Compose | Latest | Apache 2.0 | Android UI |
-| Retrofit | 2.9+ | Apache 2.0 | HTTP client |
-| Axios | 1.13+ | MIT | HTTP client (web) |
-
-### Inspiration & References
-
-- Uber's real-time dispatch system architecture
-- Stripe's payment handling best practices
-- Google's Material Design 3
-- Spring Framework documentation
-
-### Contributors
-
-- **Lead Developer:** [Ganesh](https://github.com/yourusername)
-- **UI/UX Designer:** [TBD]
-- **DevOps:** [TBD]
-
-### Special Thanks
-
-- PostgreSQL team for reliable open-source database
-- Spring team for the incredible framework
-- Our early testers and feedback providers
-
----
-
----
 
 # 📄 LICENSE
 
