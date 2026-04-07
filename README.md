@@ -277,9 +277,6 @@ No subscription fees. No hidden charges. You pay only for what you charge.
 10. [Security](#security)
 11. [Performance & Scalability](#performance--scalability)
 12. [Contributing](#contributing)
-13. [Changelog](#changelog)
-14. [Known Issues & Limitations](#known-issues--limitations)
-15. [Acknowledgements](#acknowledgements)
 
 ---
 
@@ -990,7 +987,7 @@ Fix:
 
 #### Schema Initialization
 
-Hibernatemutually auto-creates tables on first run (`spring.jpa.hibernate.ddl-auto=update`).
+Hibernate auto-creates tables on first run (`spring.jpa.hibernate.ddl-auto=update`).
 
 For **explicit schema creation**, use Flyway migrations:
 
@@ -2352,6 +2349,9 @@ spring.datasource.hikari.idle-timeout=600000
 
 ---
 
+## Contributing
+
+```bash
 # 1. Fork the repo (click "Fork" on GitHub)
 
 # 2. Clone YOUR fork
@@ -2501,6 +2501,8 @@ We are committed to providing an inclusive and welcoming environment. By contrib
 - ❌ No spam or irrelevant content
 
 For full details, see [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
+
+---
 
 # 📄 LICENSE
 
