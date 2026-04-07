@@ -5,4 +5,11 @@ services:
       - "8080:8080"
     env_file:
       - .env
+    environment:
+      - spring.datasource.url=${DB_URL}
+      - spring.datasource.username=${DB_USERNAME}
+      - spring.datasource.password=${DB_PASSWORD}
+      - jwt.secret=${JWT_SECRET}
+      - razorpay.key.id=${RAZORPAY_KEY_ID}
+      - razorpay.key.secret=${RAZORPAY_KEY_SECRET}
     restart: always
