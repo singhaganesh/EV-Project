@@ -385,87 +385,53 @@ The EV Project is built as a **monolithic backend** with **distributed client ap
 
 ## System Architecture
 
-### High-Level Component Diagram
+```mermaid
+graph TD
+    %% Users
+    U_Customer([Customer / End User])
+    U_Owner([Station Owner / Admin])
 
-```
-┌────────────────────────────────────────────────────────────────┐
-│                        CLIENTS                                 │
-├────────────────────────────────────────────────────────────────┤
-│  Android App (Jetpack)  │  Web React App  │  Web Admin Dashboard│
-│                         │   (Customer)    │   (Owner/Admin)     │
-└────────────┬────────────┴────────────┬────┴────────────┬────────┘
-             │                         │                 │
-             │         JWT Token (Bearer Header)        │
-             │                         │                 │
-      ┌──────▼─────────────────────────▼─────────────────▼──────┐
-      │          Spring Boot 3.3.5 REST API Server             │
-      │                   (Port 8080)                          │
-      ├──────────────────────────────────────────────────────────┤
-      │  Security & Auth                                         │
-      │  ├─ JwtRequestFilter (token validation)                │
-      │  ├─ CorsConfig (cross-origin requests)                 │
-      │  └─ SecurityConfig (role-based access)                 │
-      │                                                          │
-      │  Controllers (7 total)                                   │
-      │  ├─ AuthController        (OTP, JWT)                    │
-      │  ├─ StationController     (CRUD stations)               │
-      │  ├─ ChargerSlotController (slot management)             │
-      │  ├─ BookingController     (booking lifecycle)           │
-      │  ├─ ChargingSessionController (charge start/stop)       │
-      │  ├─ PaymentController     (Stripe integration)          │
-      │  └─ WebSocketController   (real-time broadcasts)        │
-      │                                                          │
-      │  Service Layer (6+ services)                             │
-      │  ├─ BookingService                                      │
-      │  ├─ ChargingSessionService                              │
-      │  ├─ PaymentService                                      │
-      │  ├─ StationService                                      │
-      │  ├─ UserService                                         │
-      │  └─ OtpService                                          │
-      │                                                          │
-      │  Repository Layer (Spring Data JPA)                      │
-      │  ├─ UserRepository         (findByMobileNumber, etc.)   │
-      │  ├─ BookingRepository      (findOverlappingBookings)   │
-      │  ├─ ChargingSessionRepository (existsByBookingId)      │
-      │  └─ [5+ more repositories]                             │
-      │                                                          │
-      │  WebSocket / STOMP Configuration                         │
-      │  └─ /ws endpoint → /app message broker → /topic updates │
-      │                                                          │
-      └────────┬────────────────────────────────────────────────┘
-               │
-      ┌────────▼────────────────────────────────────────────────┐
-      │        PostgreSQL Database (Supabase)                   │
-      ├────────────────────────────────────────────────────────┤
-      │ Tables (8 total):                                       │
-      │  ├─ users (authentication, profile)                    │
-      │  ├─ stations (location, pricing, owner)                │
-      │  ├─ dispensaries (pump units, truck support)           │
-      │  ├─ charger_slots (individual chargers)                │
-      │  ├─ bookings (reservations, vehicle type, expiry)      │
-      │  ├─ charging_sessions (active charges, energy, cost)   │
-      │  ├─ payments (Stripe integration)                       │
-      │  └─ iot_sensor_data (energy consumption)               │
-      │                                                         │
-      │ Indexes (performance optimization):                    │
-      │  ├─ idx_station_lat_lng (location queries)             │
-      │  ├─ idx_booking_user_id                                │
-      │  └─ idx_charging_session_booking_id                    │
-      │                                                         │
-      └─────────────────────────────────────────────────────────┘
-               │
-      ┌────────▼────────────────────────────────────────────────┐
-      │         External Services                               │
-      ├────────────────────────────────────────────────────────┤
-      │  Stripe API        ├─ Payment Intent creation           │
-      │  (stripe.com)      ├─ Webhook handling                  │
-      │                    └─ Payment status tracking           │
-      │                                                         │
-      │  SMS Provider      └─ OTP delivery (for OTP auth)       │
-      │                                                         │
-      │  Email Service     └─ Receipt delivery                  │
-      │                                                         │
-      └─────────────────────────────────────────────────────────┘
+    %% Frontends
+    subgraph Client Applications
+        MobileApp[Android App<br/>Kotlin / Jetpack Compose]
+        WebApp[Web Dashboard<br/>React / Vite / Redux]
+    end
+
+    %% Backend Infrastructure
+    subgraph Backend Services
+        REST_API[Spring Boot REST API<br/>Java 21]
+        WebSocket[WebSocket Server<br/>STOMP Telemetry]
+    end
+
+    %% Database Layer
+    subgraph Data Persistence
+        Postgres[(PostgreSQL Database<br/>Supabase)]
+    end
+
+    %% External Services
+    subgraph Third-Party Integrations
+        Stripe[Payment Gateways<br/>Stripe & Razorpay]
+        Maps[Mapping Services<br/>Google Maps / Nominatim]
+        SMS[SMS Provider<br/>OTP Auth]
+    end
+
+    %% Define Interactions
+    U_Customer -->|Searches & Books| MobileApp
+    U_Owner -->|Manages Stations| WebApp
+
+    MobileApp <-->|HTTPS / REST + JWT| REST_API
+    WebApp <-->|HTTPS / REST + JWT| REST_API
+    
+    MobileApp <-->|Real-time Charging Status| WebSocket
+    WebApp <-->|Live Slot Updates| WebSocket
+
+    REST_API <-->|JPA / Hibernate| Postgres
+    WebSocket -->|Reads Data| Postgres
+
+    REST_API <-->|Processes Transactions & Webhooks| Stripe
+    REST_API -->|Triggers Login Texts| SMS
+    MobileApp -->|Renders UI Location Data| Maps
+    WebApp -->|Reverse Geocoding| Maps
 ```
 
 ### Data Flow: Complete Request Lifecycle
