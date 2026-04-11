@@ -328,21 +328,21 @@ The EV Project is built as a **monolithic backend** with **distributed client ap
 | JWT | jjwt | 0.11.5+ | Token generation and validation |
 | Real-time | Spring WebSocket | Part of Boot | WebSocket, STOMP messaging |
 | Database | PostgreSQL | 12+ | Primary data store |
-| Database (Cloud | Supabase | Latest | Managed PostgreSQL hosting |
+| Database (Cloud | **Supabase** | Latest | Managed PostgreSQL hosting |
 | Validation | Javax Validation API | Part of Boot | Input validation annotations |
-| Payment | Stripe SDK | 2.9+ | Payment processing |
+| Payment | **Stripe SDK** | 2.9+ | Payment processing |
 | Scheduling | Spring Tasks | Part of Boot | @Scheduled booking expiry cleanup |
 | | | | |
 | Mobile OS | Android | 8.0+ | Mobile platform |
-| Mobile Language | Kotlin | 1.9+ | Android development language |
-| Mobile Framework | Jetpack Compose | Latest | Declarative UI framework |
+| Mobile Language | **Kotlin** | 1.9+ | Android development language |
+| Mobile Framework | **Jetpack Compose** | Latest | Declarative UI framework |
 | Mobile Architecture | MVVM | N/A | ViewModel, LiveData pattern |
 | Mobile Async | Coroutines | Latest | Asynchronous programming |
 | Mobile HTTP | Retrofit 2 | 2.9+ | REST client |
 | Mobile Storage | DataStore | Latest | Encrypted local preferences |
 | | | | |
 | Frontend OS | Node.js | 18+ | JavaScript runtime |
-| Frontend Framework | React | 19 | UI library |
+| Frontend Framework | **React** | 19 | UI library |
 | Frontend Router | React Router DOM | 7.12+ | Client-side routing |
 | Frontend State | Redux Toolkit | 2.11+ | Global state management |
 | Frontend Build | Vite | 6.1+ | Fast build tool, dev server |
