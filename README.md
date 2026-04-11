@@ -318,56 +318,56 @@ The EV Project is built as a **monolithic backend** with **distributed client ap
 
 | Category | Technology | Version | Purpose |
 |----------|-----------|---------|---------|
-| **Backend Runtime** | Java | 21 | Core application language |
-| **Backend Framework** | Spring Boot | 3.3.5 | REST API, dependency injection, configuration |
-| **Backend Build** | Maven | 3.6+ | Dependency management, build automation |
-| **Web Framework** | Spring Web | Part of Boot | HTTP request handling, routing |
-| **Data Access** | Spring Data JPA | Part of Boot | ORM, database queries |
-| **ORM** | Hibernate | Part of Boot | Object-relational mapping |
-| **Security** | Spring Security | Part of Boot | Authentication, authorization |
-| **JWT** | jjwt | 0.11.5+ | Token generation and validation |
-| **Real-time** | Spring WebSocket | Part of Boot | WebSocket, STOMP messaging |
-| **Database** | PostgreSQL | 12+ | Primary data store |
-| **Database (Cloud)** | Supabase | Latest | Managed PostgreSQL hosting |
-| **Validation** | Javax Validation API | Part of Boot | Input validation annotations |
-| **Payment** | Stripe SDK | 2.9+ | Payment processing |
-| **Scheduling** | Spring Tasks | Part of Boot | @Scheduled booking expiry cleanup |
+| Backend Runtime | **Java** | 21 | Core application language |
+| Backend Framework | **Spring Boot** | 3.3.5 | REST API, dependency injection, configuration |
+| Backend Build | Maven | 3.6+ | Dependency management, build automation |
+| Web Framework | Spring Web | Part of Boot | HTTP request handling, routing |
+| Data Access | Spring Data JPA | Part of Boot | ORM, database queries |
+| ORM | Hibernate | Part of Boot | Object-relational mapping |
+| Security | Spring Security | Part of Boot | Authentication, authorization |
+| JWT | jjwt | 0.11.5+ | Token generation and validation |
+| Real-time | Spring WebSocket | Part of Boot | WebSocket, STOMP messaging |
+| Database | PostgreSQL | 12+ | Primary data store |
+| Database (Cloud | Supabase | Latest | Managed PostgreSQL hosting |
+| Validation | Javax Validation API | Part of Boot | Input validation annotations |
+| Payment | Stripe SDK | 2.9+ | Payment processing |
+| Scheduling | Spring Tasks | Part of Boot | @Scheduled booking expiry cleanup |
 | | | | |
-| **Mobile OS** | Android | 8.0+ | Mobile platform |
-| **Mobile Language** | Kotlin | 1.9+ | Android development language |
-| **Mobile Framework** | Jetpack Compose | Latest | Declarative UI framework |
-| **Mobile Architecture** | MVVM | N/A | ViewModel, LiveData pattern |
-| **Mobile Async** | Coroutines | Latest | Asynchronous programming |
-| **Mobile HTTP** | Retrofit 2 | 2.9+ | REST client |
-| **Mobile Storage** | DataStore | Latest | Encrypted local preferences |
+| Mobile OS | Android | 8.0+ | Mobile platform |
+| Mobile Language | Kotlin | 1.9+ | Android development language |
+| Mobile Framework | Jetpack Compose | Latest | Declarative UI framework |
+| Mobile Architecture | MVVM | N/A | ViewModel, LiveData pattern |
+| Mobile Async | Coroutines | Latest | Asynchronous programming |
+| Mobile HTTP | Retrofit 2 | 2.9+ | REST client |
+| Mobile Storage | DataStore | Latest | Encrypted local preferences |
 | | | | |
-| **Frontend OS** | Node.js | 18+ | JavaScript runtime |
-| **Frontend Framework** | React | 19 | UI library |
-| **Frontend Router** | React Router DOM | 7.12+ | Client-side routing |
-| **Frontend State** | Redux Toolkit | 2.11+ | Global state management |
-| **Frontend Build** | Vite | 6.1+ | Fast build tool, dev server |
-| **Frontend UI** | Material UI (MUI) | 7.3+ | Component library |
-| **Frontend HTTP** | Axios | 1.13+ | REST client |
-| **Frontend Styling** | Tailwind CSS | 4.1+ | Utility-first CSS framework |
-| **Frontend CSS-in-JS** | Emotion | 11.14+ | CSS-in-JS library |
+| Frontend OS | Node.js | 18+ | JavaScript runtime |
+| Frontend Framework | React | 19 | UI library |
+| Frontend Router | React Router DOM | 7.12+ | Client-side routing |
+| Frontend State | Redux Toolkit | 2.11+ | Global state management |
+| Frontend Build | Vite | 6.1+ | Fast build tool, dev server |
+| Frontend UI | Material UI (MUI) | 7.3+ | Component library |
+| Frontend HTTP | Axios | 1.13+ | REST client |
+| Frontend Styling | Tailwind CSS | 4.1+ | Utility-first CSS framework |
+| Frontend CSS-in-JS | Emotion | 11.14+ | CSS-in-JS library |
 | | | | |
-| **Testing (Backend)** | JUnit 5 | Latest | Unit testing framework |
-| **Testing (Mocking)** | Mockito | Latest | Mock objects for testing |
-| **Testing (Integration)** | Spring Test | Part of Boot | Integration testing support |
-| **Testing (Frontend)** | Jest + React Testing Library | Latest | Component testing |
-| **Code Quality** | ESLint | 9.19+ | JavaScript linting |
-| **Code Quality (Backend)** | SonarQube | Optional | Static code analysis |
+| Testing (Backend) | JUnit 5 | Latest | Unit testing framework |
+| Testing (Mocking) | Mockito | Latest | Mock objects for testing |
+| Testing (Integration) | Spring Test | Part of Boot | Integration testing support |
+| Testing (Frontend) | Jest + React Testing Library | Latest | Component testing |
+| Code Quality | ESLint | 9.19+ | JavaScript linting |
+| Code Quality (Backend) | SonarQube | Optional | Static code analysis |
 | | | | |
-| **Containerization** | Docker | 24.0+ | Container runtime |
-| **Orchestration** | Docker Compose | 2.0+ | Multi-container local dev |
-| **CI/CD** | GitHub Actions | Latest | Automated testing and deployment |
-| **VCS** | Git | 2.40+ | Version control |
+| Containerization | Docker | 24.0+ | Container runtime |
+| Orchestration | Docker Compose | 2.0+ | Multi-container local dev |
+| CI/CD | GitHub Actions | Latest | Automated testing and deployment |
+| VCS | Git | 2.40+ | Version control |
 | | | | |
-| **Server** | Linux (Ubuntu 22.04+) | Latest LTS | Production OS |
-| **Reverse Proxy** | Nginx | 1.24+ | Load balancing, SSL termination |
-| **SSL/TLS** | Let's Encrypt + Certbot | Latest | Free HTTPS certificates |
-| **Monitoring** | TBD | TBD | Application monitoring and logging |
-| **Logging** | SLF4J + Logback | Latest | Structured logging |
+| Server | Linux (Ubuntu 22.04+) | Latest LTS | Production OS |
+| Reverse Proxy | Nginx | 1.24+ | Load balancing, SSL termination |
+| SSL/TLS | Let's Encrypt + Certbot | Latest | Free HTTPS certificates |
+| Monitoring | TBD | TBD | Application monitoring and logging |
+| Logging | SLF4J + Logback | Latest | Structured logging |
 
 ### Technology Justification
 
