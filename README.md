@@ -371,15 +371,15 @@ The EV Project is built as a **monolithic backend** with **distributed client ap
 
 ### Technology Justification
 
-**Spring Boot 3.3.5:** Stable, production-ready version with latest Java 21 support and security patches.
+Spring Boot 3.3.5: Stable, production-ready version with latest Java 21 support and security patches.
 
-**PostgreSQL:** Enterprise-grade relational database with full ACID compliance, JSON support, and excellent Spring integration.
+PostgreSQL: Enterprise-grade relational database with full ACID compliance, JSON support, and excellent Spring integration.
 
-**React 19 + Redux:** Modern component-based architecture with predictable state management and large ecosystem.
+React 19 + Redux: Modern component-based architecture with predictable state management and large ecosystem.
 
-**Jetpack Compose:** Google's modern, declarative UI framework for Android with hot reloading and reactive programming.
+Jetpack Compose: Google's modern, declarative UI framework for Android with hot reloading and reactive programming.
 
-**Stripe:** Industry-leading payment processor with webhooks, idempotency, and PCI compliance built-in.
+Stripe: Industry-leading payment processor with webhooks, idempotency, and PCI compliance built-in.
 
 ---
 
