@@ -318,154 +318,120 @@ The EV Project is built as a **monolithic backend** with **distributed client ap
 
 | Category | Technology | Version | Purpose |
 |----------|-----------|---------|---------|
-| **Backend Runtime** | Java | 21 | Core application language |
-| **Backend Framework** | Spring Boot | 3.3.5 | REST API, dependency injection, configuration |
-| **Backend Build** | Maven | 3.6+ | Dependency management, build automation |
-| **Web Framework** | Spring Web | Part of Boot | HTTP request handling, routing |
-| **Data Access** | Spring Data JPA | Part of Boot | ORM, database queries |
-| **ORM** | Hibernate | Part of Boot | Object-relational mapping |
-| **Security** | Spring Security | Part of Boot | Authentication, authorization |
-| **JWT** | jjwt | 0.11.5+ | Token generation and validation |
-| **Real-time** | Spring WebSocket | Part of Boot | WebSocket, STOMP messaging |
-| **Database** | PostgreSQL | 12+ | Primary data store |
-| **Database (Cloud)** | Supabase | Latest | Managed PostgreSQL hosting |
-| **Validation** | Javax Validation API | Part of Boot | Input validation annotations |
-| **Payment** | Stripe SDK | 2.9+ | Payment processing |
-| **Scheduling** | Spring Tasks | Part of Boot | @Scheduled booking expiry cleanup |
+| Backend Runtime | **Java** | 21 | Core application language |
+| Backend Framework | **Spring Boot** | 3.3.5 | REST API, dependency injection, configuration |
+| Backend Build | Maven | 3.6+ | Dependency management, build automation |
+| Web Framework | Spring Web | Part of Boot | HTTP request handling, routing |
+| Data Access | Spring Data JPA | Part of Boot | ORM, database queries |
+| ORM | Hibernate | Part of Boot | Object-relational mapping |
+| Security | Spring Security | Part of Boot | Authentication, authorization |
+| JWT | jjwt | 0.11.5+ | Token generation and validation |
+| Real-time | Spring WebSocket | Part of Boot | WebSocket, STOMP messaging |
+| Database | PostgreSQL | 12+ | Primary data store |
+| Database (Cloud | **Supabase** | Latest | Managed PostgreSQL hosting |
+| Validation | Javax Validation API | Part of Boot | Input validation annotations |
+| Payment | **Stripe SDK** | 2.9+ | Payment processing |
+| Scheduling | Spring Tasks | Part of Boot | @Scheduled booking expiry cleanup |
 | | | | |
-| **Mobile OS** | Android | 8.0+ | Mobile platform |
-| **Mobile Language** | Kotlin | 1.9+ | Android development language |
-| **Mobile Framework** | Jetpack Compose | Latest | Declarative UI framework |
-| **Mobile Architecture** | MVVM | N/A | ViewModel, LiveData pattern |
-| **Mobile Async** | Coroutines | Latest | Asynchronous programming |
-| **Mobile HTTP** | Retrofit 2 | 2.9+ | REST client |
-| **Mobile Storage** | DataStore | Latest | Encrypted local preferences |
+| Mobile OS | Android | 8.0+ | Mobile platform |
+| Mobile Language | **Kotlin** | 1.9+ | Android development language |
+| Mobile Framework | **Jetpack Compose** | Latest | Declarative UI framework |
+| Mobile Architecture | MVVM | N/A | ViewModel, LiveData pattern |
+| Mobile Async | Coroutines | Latest | Asynchronous programming |
+| Mobile HTTP | Retrofit 2 | 2.9+ | REST client |
+| Mobile Storage | DataStore | Latest | Encrypted local preferences |
 | | | | |
-| **Frontend OS** | Node.js | 18+ | JavaScript runtime |
-| **Frontend Framework** | React | 19 | UI library |
-| **Frontend Router** | React Router DOM | 7.12+ | Client-side routing |
-| **Frontend State** | Redux Toolkit | 2.11+ | Global state management |
-| **Frontend Build** | Vite | 6.1+ | Fast build tool, dev server |
-| **Frontend UI** | Material UI (MUI) | 7.3+ | Component library |
-| **Frontend HTTP** | Axios | 1.13+ | REST client |
-| **Frontend Styling** | Tailwind CSS | 4.1+ | Utility-first CSS framework |
-| **Frontend CSS-in-JS** | Emotion | 11.14+ | CSS-in-JS library |
+| Frontend OS | Node.js | 18+ | JavaScript runtime |
+| Frontend Framework | **React** | 19 | UI library |
+| Frontend Router | React Router DOM | 7.12+ | Client-side routing |
+| Frontend State | Redux Toolkit | 2.11+ | Global state management |
+| Frontend Build | Vite | 6.1+ | Fast build tool, dev server |
+| Frontend UI | Material UI (MUI) | 7.3+ | Component library |
+| Frontend HTTP | Axios | 1.13+ | REST client |
+| Frontend Styling | Tailwind CSS | 4.1+ | Utility-first CSS framework |
+| Frontend CSS-in-JS | Emotion | 11.14+ | CSS-in-JS library |
 | | | | |
-| **Testing (Backend)** | JUnit 5 | Latest | Unit testing framework |
-| **Testing (Mocking)** | Mockito | Latest | Mock objects for testing |
-| **Testing (Integration)** | Spring Test | Part of Boot | Integration testing support |
-| **Testing (Frontend)** | Jest + React Testing Library | Latest | Component testing |
-| **Code Quality** | ESLint | 9.19+ | JavaScript linting |
-| **Code Quality (Backend)** | SonarQube | Optional | Static code analysis |
+| Testing (Backend) | JUnit 5 | Latest | Unit testing framework |
+| Testing (Mocking) | Mockito | Latest | Mock objects for testing |
+| Testing (Integration) | Spring Test | Part of Boot | Integration testing support |
+| Testing (Frontend) | Jest + React Testing Library | Latest | Component testing |
+| Code Quality | ESLint | 9.19+ | JavaScript linting |
+| Code Quality (Backend) | SonarQube | Optional | Static code analysis |
 | | | | |
-| **Containerization** | Docker | 24.0+ | Container runtime |
-| **Orchestration** | Docker Compose | 2.0+ | Multi-container local dev |
-| **CI/CD** | GitHub Actions | Latest | Automated testing and deployment |
-| **VCS** | Git | 2.40+ | Version control |
+| Containerization | Docker | 24.0+ | Container runtime |
+| Orchestration | Docker Compose | 2.0+ | Multi-container local dev |
+| CI/CD | GitHub Actions | Latest | Automated testing and deployment |
+| VCS | Git | 2.40+ | Version control |
 | | | | |
-| **Server** | Linux (Ubuntu 22.04+) | Latest LTS | Production OS |
-| **Reverse Proxy** | Nginx | 1.24+ | Load balancing, SSL termination |
-| **SSL/TLS** | Let's Encrypt + Certbot | Latest | Free HTTPS certificates |
-| **Monitoring** | TBD | TBD | Application monitoring and logging |
-| **Logging** | SLF4J + Logback | Latest | Structured logging |
+| Server | Linux (Ubuntu 22.04+) | Latest LTS | Production OS |
+| Reverse Proxy | Nginx | 1.24+ | Load balancing, SSL termination |
+| SSL/TLS | Let's Encrypt + Certbot | Latest | Free HTTPS certificates |
+| Monitoring | TBD | TBD | Application monitoring and logging |
+| Logging | SLF4J + Logback | Latest | Structured logging |
 
 ### Technology Justification
 
-**Spring Boot 3.3.5:** Stable, production-ready version with latest Java 21 support and security patches.
+Spring Boot 3.3.5: Stable, production-ready version with latest Java 21 support and security patches.
 
-**PostgreSQL:** Enterprise-grade relational database with full ACID compliance, JSON support, and excellent Spring integration.
+PostgreSQL: Enterprise-grade relational database with full ACID compliance, JSON support, and excellent Spring integration.
 
-**React 19 + Redux:** Modern component-based architecture with predictable state management and large ecosystem.
+React 19 + Redux: Modern component-based architecture with predictable state management and large ecosystem.
 
-**Jetpack Compose:** Google's modern, declarative UI framework for Android with hot reloading and reactive programming.
+Jetpack Compose: Google's modern, declarative UI framework for Android with hot reloading and reactive programming.
 
-**Stripe:** Industry-leading payment processor with webhooks, idempotency, and PCI compliance built-in.
+Stripe: Industry-leading payment processor with webhooks, idempotency, and PCI compliance built-in.
 
 ---
 
 ## System Architecture
 
-### High-Level Component Diagram
+```mermaid
+graph TD
+    %% Users
+    U_Customer([Customer / End User])
+    U_Owner([Station Owner / Admin])
 
-```
-┌────────────────────────────────────────────────────────────────┐
-│                        CLIENTS                                 │
-├────────────────────────────────────────────────────────────────┤
-│  Android App (Jetpack)  │  Web React App  │  Web Admin Dashboard│
-│                         │   (Customer)    │   (Owner/Admin)     │
-└────────────┬────────────┴────────────┬────┴────────────┬────────┘
-             │                         │                 │
-             │         JWT Token (Bearer Header)        │
-             │                         │                 │
-      ┌──────▼─────────────────────────▼─────────────────▼──────┐
-      │          Spring Boot 3.3.5 REST API Server             │
-      │                   (Port 8080)                          │
-      ├──────────────────────────────────────────────────────────┤
-      │  Security & Auth                                         │
-      │  ├─ JwtRequestFilter (token validation)                │
-      │  ├─ CorsConfig (cross-origin requests)                 │
-      │  └─ SecurityConfig (role-based access)                 │
-      │                                                          │
-      │  Controllers (7 total)                                   │
-      │  ├─ AuthController        (OTP, JWT)                    │
-      │  ├─ StationController     (CRUD stations)               │
-      │  ├─ ChargerSlotController (slot management)             │
-      │  ├─ BookingController     (booking lifecycle)           │
-      │  ├─ ChargingSessionController (charge start/stop)       │
-      │  ├─ PaymentController     (Stripe integration)          │
-      │  └─ WebSocketController   (real-time broadcasts)        │
-      │                                                          │
-      │  Service Layer (6+ services)                             │
-      │  ├─ BookingService                                      │
-      │  ├─ ChargingSessionService                              │
-      │  ├─ PaymentService                                      │
-      │  ├─ StationService                                      │
-      │  ├─ UserService                                         │
-      │  └─ OtpService                                          │
-      │                                                          │
-      │  Repository Layer (Spring Data JPA)                      │
-      │  ├─ UserRepository         (findByMobileNumber, etc.)   │
-      │  ├─ BookingRepository      (findOverlappingBookings)   │
-      │  ├─ ChargingSessionRepository (existsByBookingId)      │
-      │  └─ [5+ more repositories]                             │
-      │                                                          │
-      │  WebSocket / STOMP Configuration                         │
-      │  └─ /ws endpoint → /app message broker → /topic updates │
-      │                                                          │
-      └────────┬────────────────────────────────────────────────┘
-               │
-      ┌────────▼────────────────────────────────────────────────┐
-      │        PostgreSQL Database (Supabase)                   │
-      ├────────────────────────────────────────────────────────┤
-      │ Tables (8 total):                                       │
-      │  ├─ users (authentication, profile)                    │
-      │  ├─ stations (location, pricing, owner)                │
-      │  ├─ dispensaries (pump units, truck support)           │
-      │  ├─ charger_slots (individual chargers)                │
-      │  ├─ bookings (reservations, vehicle type, expiry)      │
-      │  ├─ charging_sessions (active charges, energy, cost)   │
-      │  ├─ payments (Stripe integration)                       │
-      │  └─ iot_sensor_data (energy consumption)               │
-      │                                                         │
-      │ Indexes (performance optimization):                    │
-      │  ├─ idx_station_lat_lng (location queries)             │
-      │  ├─ idx_booking_user_id                                │
-      │  └─ idx_charging_session_booking_id                    │
-      │                                                         │
-      └─────────────────────────────────────────────────────────┘
-               │
-      ┌────────▼────────────────────────────────────────────────┐
-      │         External Services                               │
-      ├────────────────────────────────────────────────────────┤
-      │  Stripe API        ├─ Payment Intent creation           │
-      │  (stripe.com)      ├─ Webhook handling                  │
-      │                    └─ Payment status tracking           │
-      │                                                         │
-      │  SMS Provider      └─ OTP delivery (for OTP auth)       │
-      │                                                         │
-      │  Email Service     └─ Receipt delivery                  │
-      │                                                         │
-      └─────────────────────────────────────────────────────────┘
+    %% Frontends
+    subgraph Client Applications
+        MobileApp[Android App<br/>Kotlin / Jetpack Compose]
+        WebApp[Web Dashboard<br/>React / Vite / Redux]
+    end
+
+    %% Backend Infrastructure
+    subgraph Backend Services
+        REST_API[Spring Boot REST API<br/>Java 21]
+        WebSocket[WebSocket Server<br/>STOMP Telemetry]
+    end
+
+    %% Database Layer
+    subgraph Data Persistence
+        Postgres[(PostgreSQL Database<br/>Supabase)]
+    end
+
+    %% External Services
+    subgraph Third-Party Integrations
+        Stripe[Payment Gateways<br/>Stripe & Razorpay]
+        Maps[Mapping Services<br/>Google Maps / Nominatim]
+        SMS[SMS Provider<br/>OTP Auth]
+    end
+
+    %% Define Interactions
+    U_Customer -->|Searches & Books| MobileApp
+    U_Owner -->|Manages Stations| WebApp
+
+    MobileApp <-->|HTTPS / REST + JWT| REST_API
+    WebApp <-->|HTTPS / REST + JWT| REST_API
+    
+    MobileApp <-->|Real-time Charging Status| WebSocket
+    WebApp <-->|Live Slot Updates| WebSocket
+
+    REST_API <-->|JPA / Hibernate| Postgres
+    WebSocket -->|Reads Data| Postgres
+
+    REST_API <-->|Processes Transactions & Webhooks| Stripe
+    REST_API -->|Triggers Login Texts| SMS
+    MobileApp -->|Renders UI Location Data| Maps
+    WebApp -->|Reverse Geocoding| Maps
 ```
 
 ### Data Flow: Complete Request Lifecycle
