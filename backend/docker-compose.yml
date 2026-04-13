@@ -6,6 +6,7 @@ services:
     env_file:
       - .env
     environment:
+      - TZ=Asia/Kolkata
       - spring.datasource.url=${DB_URL}
       - spring.datasource.username=${DB_USERNAME}
       - spring.datasource.password=${DB_PASSWORD}
