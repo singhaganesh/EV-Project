@@ -67,108 +67,107 @@ fun MyBookingsScreen(
         viewModel.loadUserBookings(userId, isRefresh = true)
     }
 
-    // Update refreshing state based on UI state
     LaunchedEffect(uiState) {
         if (uiState is BookingUiState.BookingsLoaded || uiState is BookingUiState.Error) {
             isRefreshing = false
         }
     }
 
-    Scaffold(
-            topBar = { ClayTopBar(title = "My Bookings") },
-            containerColor = MaterialTheme.colorScheme.background
-    ) { paddingValues ->
-        Column(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
-            // Filter Tabs
-            TabRow(
-                    selectedTabIndex = selectedFilter.ordinal,
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    contentColor = MaterialTheme.colorScheme.primary
+    Column(
+        modifier = Modifier.fillMaxSize()
+    ) {
+        // Top Bar
+        ClayTopBar(title = "My Bookings")
+
+        // Filter Tabs
+        TabRow(
+                selectedTabIndex = selectedFilter.ordinal,
+                containerColor = MaterialTheme.colorScheme.surface,
+                contentColor = MaterialTheme.colorScheme.primary
+        ) {
+            Tab(
+                    selected = selectedFilter == BookingFilter.ALL,
+                    onClick = { selectedFilter = BookingFilter.ALL },
+                    text = { Text("All") }
+            )
+            Tab(
+                    selected = selectedFilter == BookingFilter.ACTIVE,
+                    onClick = { selectedFilter = BookingFilter.ACTIVE },
+                    text = { Text("Active") }
+            )
+            Tab(
+                    selected = selectedFilter == BookingFilter.PAST,
+                    onClick = { selectedFilter = BookingFilter.PAST },
+                    text = { Text("Past") }
+            )
+        }
+
+        // Filter bookings based on selected filter
+        val filteredBookings = when (selectedFilter) {
+            BookingFilter.ALL -> bookings
+            BookingFilter.ACTIVE -> bookings.filter { it.status == BookingStatus.CONFIRMED || it.status == BookingStatus.ONGOING || it.status == BookingStatus.PENDING }
+            BookingFilter.PAST -> bookings.filter { it.status == BookingStatus.COMPLETED || it.status == BookingStatus.CANCELLED || it.status == BookingStatus.EXPIRED }
+        }
+
+        if (uiState is BookingUiState.Loading && bookings.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                ClayProgressIndicator()
+            }
+        } else if (filteredBookings.isEmpty() && uiState !is BookingUiState.Loading) {
+            Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
             ) {
-                Tab(
-                        selected = selectedFilter == BookingFilter.ALL,
-                        onClick = { selectedFilter = BookingFilter.ALL },
-                        text = { Text("All") }
-                )
-                Tab(
-                        selected = selectedFilter == BookingFilter.ACTIVE,
-                        onClick = { selectedFilter = BookingFilter.ACTIVE },
-                        text = { Text("Active") }
-                )
-                Tab(
-                        selected = selectedFilter == BookingFilter.PAST,
-                        onClick = { selectedFilter = BookingFilter.PAST },
-                        text = { Text("Past") }
-                )
-            }
-
-            // Filter bookings based on selected filter
-            val filteredBookings = when (selectedFilter) {
-                BookingFilter.ALL -> bookings
-                BookingFilter.ACTIVE -> bookings.filter { it.status == BookingStatus.CONFIRMED || it.status == BookingStatus.ONGOING || it.status == BookingStatus.PENDING }
-                BookingFilter.PAST -> bookings.filter { it.status == BookingStatus.COMPLETED || it.status == BookingStatus.CANCELLED || it.status == BookingStatus.EXPIRED }
-            }
-
-            if (uiState is BookingUiState.Loading && bookings.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    ClayProgressIndicator()
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                            imageVector = Icons.Default.DateRange,
+                            contentDescription = null,
+                            modifier = Modifier.size(64.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                            text = when (selectedFilter) {
+                                BookingFilter.ALL -> "No bookings yet"
+                                BookingFilter.ACTIVE -> "No active bookings"
+                                BookingFilter.PAST -> "No past bookings"
+                            },
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
-            } else if (filteredBookings.isEmpty() && uiState !is BookingUiState.Loading) {
-                Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                                imageVector = Icons.Default.DateRange,
-                                contentDescription = null,
-                                modifier = Modifier.size(64.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                                text = when (selectedFilter) {
-                                    BookingFilter.ALL -> "No bookings yet"
-                                    BookingFilter.ACTIVE -> "No active bookings"
-                                    BookingFilter.PAST -> "No past bookings"
-                                },
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+            }
+        } else {
+            LazyColumn(
+                    state = lazyListState,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(16.dp)
+            ) {
+                items(filteredBookings) { booking ->
+                    BookingListItem(
+                            booking = booking,
+                            onClick = { onBookingClick(booking.id) }
+                    )
+                    HorizontalDivider(
+                            modifier = Modifier.padding(vertical = 8.dp),
+                            color = MaterialTheme.colorScheme.outlineVariant
+                    )
                 }
-            } else {
-                LazyColumn(
-                        state = lazyListState,
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(16.dp)
-                ) {
-                    items(filteredBookings) { booking ->
-                        BookingListItem(
-                                booking = booking,
-                                onClick = { onBookingClick(booking.id) }
-                        )
-                        HorizontalDivider(
-                                modifier = Modifier.padding(vertical = 8.dp),
-                                color = MaterialTheme.colorScheme.outlineVariant
-                        )
-                    }
-                    
-                    // Bottom loading indicator
-                    if (uiState is BookingUiState.Loading && bookings.isNotEmpty()) {
-                        item {
-                            Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
-                                CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                            }
+                
+                // Bottom loading indicator
+                if (uiState is BookingUiState.Loading && bookings.isNotEmpty()) {
+                    item {
+                        Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp))
                         }
                     }
                 }
             }
-            
-            if (uiState is BookingUiState.Error) {
-                Box(modifier = Modifier.fillMaxWidth().padding(8.dp), contentAlignment = Alignment.Center) {
-                    Text((uiState as BookingUiState.Error).message, color = MaterialTheme.colorScheme.error)
-                }
+        }
+        
+        if (uiState is BookingUiState.Error) {
+            Box(modifier = Modifier.fillMaxWidth().padding(8.dp), contentAlignment = Alignment.Center) {
+                Text((uiState as BookingUiState.Error).message, color = MaterialTheme.colorScheme.error)
             }
         }
     }
