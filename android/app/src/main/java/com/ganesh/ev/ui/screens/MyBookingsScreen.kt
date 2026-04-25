@@ -153,16 +153,35 @@ fun MyBookingsScreen(
                             color = MaterialTheme.colorScheme.outlineVariant
                     )
                 }
-                
-                // Bottom loading indicator
-                if (uiState is BookingUiState.Loading && bookings.isNotEmpty()) {
+
+                // ── REFINED BOTTOM LOADING INDICATOR ──
+                // Only show if there are more items to fetch
+                if (uiState is BookingUiState.BookingsLoaded && !viewModel.isLastPage()) {
                     item {
-                        Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(24.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(28.dp),
+                                    strokeWidth = 3.dp,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    "Loading previous bookings...",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
                         }
                     }
                 }
             }
+
         }
         
         if (uiState is BookingUiState.Error) {

@@ -148,6 +148,8 @@ class BookingViewModel : ViewModel() {
         }
     }
 
+    fun isLastPage(): Boolean = isLastPage
+
     fun cancelBooking(bookingId: Long) {
         viewModelScope.launch {
             _uiState.value = BookingUiState.Loading
