@@ -393,7 +393,11 @@ fun EVChargingApp(
                         vehicleType = vehicleType,
                         viewModel = bookingViewModel, // Pass the shared viewModel
                         onBack = { navController.popBackStack() },
-                        onViewBookings = { navController.navigate("bookings") { popUpTo("home") } },
+                        onViewBookings = { 
+                            navController.navigate(Screen.MyBookings.createRoute(userId)) { 
+                                popUpTo("home") 
+                            } 
+                        },
                         onGoHome = { navController.navigate("home") { popUpTo("home") } }
                 )
             }
