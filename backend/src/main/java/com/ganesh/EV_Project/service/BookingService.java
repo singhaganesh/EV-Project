@@ -172,6 +172,10 @@ public class BookingService {
         return bookingRepository.findByUserId(userId);
     }
 
+    public org.springframework.data.domain.Page<Booking> getBookingsByUser(Long userId, org.springframework.data.domain.Pageable pageable) {
+        return bookingRepository.findByUserId(userId, pageable);
+    }
+
     @Transactional
     public void cancelBooking(Long bookingId) {
         Booking booking = bookingRepository.findById(bookingId)

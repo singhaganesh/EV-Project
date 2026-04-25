@@ -12,6 +12,8 @@ import java.util.List;
 
 public interface BookingRepository extends JpaRepository<Booking, Long> {
        List<Booking> findByUserId(Long userId);
+       
+       org.springframework.data.domain.Page<Booking> findByUserId(Long userId, org.springframework.data.domain.Pageable pageable);
 
        List<Booking> findByStatus(BookingStatus bookingStatus);
 

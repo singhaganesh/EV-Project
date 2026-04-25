@@ -32,7 +32,11 @@ public class BookingController {
     }
 
     @GetMapping("/user/{userId}")
-    public ResponseEntity<?> getBookingsByUser(@PathVariable Long userId, Authentication authentication) {
+    public ResponseEntity<?> getBookingsByUser(
+            @PathVariable Long userId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            Authentication authentication) {
         // Secure check: Extract user from JWT and compare IDs
         String principal = authentication.getName(); 
         
@@ -52,8 +56,15 @@ public class BookingController {
             return new ResponseEntity<>("Access Denied: ID mismatch. Token User ID: " + currentUser.getId() + ", Requested ID: " + userId, HttpStatus.FORBIDDEN);
         }
 
-        List<Booking> bookings = bookingService.getBookingsByUser(userId);
-        return new ResponseEntity<>(bookings, HttpStatus.OK);
+        org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(
+            page, size, org.springframework.data.domain.Sort.by("startTime").descending());
+            
+        org.springframework.data.domain.Page<Booking> bookings = bookingService.getBookingsByUser(userId, pageable);
+        
+        return ResponseEntity.ok(com.ganesh.EV_Project.payload.APIResponse.builder()
+                .success(true)
+                .data(bookings)
+                .build());
     }
 
     @PostMapping

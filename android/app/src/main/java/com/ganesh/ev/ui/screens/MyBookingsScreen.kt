@@ -38,15 +38,33 @@ fun MyBookingsScreen(
         viewModel: BookingViewModel = viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val bookings by viewModel.bookingsList.collectAsState()
+    
     var selectedFilter by remember { mutableStateOf(BookingFilter.ALL) }
     var isRefreshing by remember { mutableStateOf(false) }
 
+    val lazyListState = androidx.compose.foundation.lazy.rememberLazyListState()
+
     LaunchedEffect(userId) { viewModel.loadUserBookings(userId) }
+
+    // Detect when scrolling near the end
+    val shouldLoadMore = remember {
+        derivedStateOf {
+            val totalItemsCount = lazyListState.layoutInfo.totalItemsCount
+            val lastVisibleItemIndex = lazyListState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+            lastVisibleItemIndex >= totalItemsCount - 2 && totalItemsCount > 0
+        }
+    }
+
+    LaunchedEffect(shouldLoadMore.value) {
+        if (shouldLoadMore.value) {
+            viewModel.loadMoreBookings(userId)
+        }
+    }
 
     // Handle refresh
     fun refresh() {
-        isRefreshing = true
-        viewModel.loadUserBookings(userId)
+        viewModel.loadUserBookings(userId, isRefresh = true)
     }
 
     // Update refreshing state based on UI state
@@ -84,93 +102,73 @@ fun MyBookingsScreen(
                 )
             }
 
-            when (val state = uiState) {
-                is BookingUiState.Loading -> {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        ClayProgressIndicator()
-                    }
-                }
-                is BookingUiState.BookingsLoaded -> {
-                    // Filter bookings based on selected filter
-                    val filteredBookings =
-                            when (selectedFilter) {
-                                BookingFilter.ALL -> state.bookings
-                                BookingFilter.ACTIVE ->
-                                        state.bookings.filter { booking ->
-                                            booking.status == BookingStatus.CONFIRMED ||
-                                                    booking.status == BookingStatus.ONGOING ||
-                                                    booking.status == BookingStatus.PENDING
-                                        }
-                                BookingFilter.PAST ->
-                                        state.bookings.filter { booking ->
-                                            booking.status == BookingStatus.COMPLETED ||
-                                                    booking.status == BookingStatus.CANCELLED ||
-                                                    booking.status == BookingStatus.EXPIRED
-                                        }
-                            }
+            // Filter bookings based on selected filter
+            val filteredBookings = when (selectedFilter) {
+                BookingFilter.ALL -> bookings
+                BookingFilter.ACTIVE -> bookings.filter { it.status == BookingStatus.CONFIRMED || it.status == BookingStatus.ONGOING || it.status == BookingStatus.PENDING }
+                BookingFilter.PAST -> bookings.filter { it.status == BookingStatus.COMPLETED || it.status == BookingStatus.CANCELLED || it.status == BookingStatus.EXPIRED }
+            }
 
-                    if (filteredBookings.isEmpty()) {
-                        Box(
-                                modifier = Modifier.fillMaxSize(),
-                                contentAlignment = Alignment.Center
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(
-                                        imageVector = Icons.Default.DateRange,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(64.dp),
-                                        tint =
-                                                MaterialTheme.colorScheme.onSurfaceVariant.copy(
-                                                        alpha = 0.5f
-                                                )
-                                )
-                                Spacer(modifier = Modifier.height(12.dp))
-                                Text(
-                                        text =
-                                                when (selectedFilter) {
-                                                    BookingFilter.ALL -> "No bookings yet"
-                                                    BookingFilter.ACTIVE -> "No active bookings"
-                                                    BookingFilter.PAST -> "No past bookings"
-                                                },
-                                        style = MaterialTheme.typography.titleMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                    } else {
-                        LazyColumn(
-                                modifier = Modifier.fillMaxSize(),
-                                contentPadding = PaddingValues(16.dp)
-                        ) {
-                            items(filteredBookings) { booking ->
-                                BookingListItem(
-                                        booking = booking,
-                                        onClick = { onBookingClick(booking.id) }
-                                )
-                                if (booking != filteredBookings.last()) {
-                                    HorizontalDivider(
-                                            modifier = Modifier.padding(vertical = 8.dp),
-                                            color = MaterialTheme.colorScheme.outlineVariant
-                                    )
-                                }
+            if (uiState is BookingUiState.Loading && bookings.isEmpty()) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    ClayProgressIndicator()
+                }
+            } else if (filteredBookings.isEmpty() && uiState !is BookingUiState.Loading) {
+                Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                                imageVector = Icons.Default.DateRange,
+                                contentDescription = null,
+                                modifier = Modifier.size(64.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                                text = when (selectedFilter) {
+                                    BookingFilter.ALL -> "No bookings yet"
+                                    BookingFilter.ACTIVE -> "No active bookings"
+                                    BookingFilter.PAST -> "No past bookings"
+                                },
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            } else {
+                LazyColumn(
+                        state = lazyListState,
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(16.dp)
+                ) {
+                    items(filteredBookings) { booking ->
+                        BookingListItem(
+                                booking = booking,
+                                onClick = { onBookingClick(booking.id) }
+                        )
+                        HorizontalDivider(
+                                modifier = Modifier.padding(vertical = 8.dp),
+                                color = MaterialTheme.colorScheme.outlineVariant
+                        )
+                    }
+                    
+                    // Bottom loading indicator
+                    if (uiState is BookingUiState.Loading && bookings.isNotEmpty()) {
+                        item {
+                            Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator(modifier = Modifier.size(24.dp))
                             }
                         }
                     }
                 }
-                is BookingUiState.Error -> {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            ClayCard(containerColor = MaterialTheme.colorScheme.errorContainer) {
-                                Text(state.message, color = MaterialTheme.colorScheme.error)
-                            }
-                            Spacer(modifier = Modifier.height(16.dp))
-                            ClayButton(onClick = { viewModel.loadUserBookings(userId) }) {
-                                Text("Retry")
-                            }
-                        }
-                    }
+            }
+            
+            if (uiState is BookingUiState.Error) {
+                Box(modifier = Modifier.fillMaxWidth().padding(8.dp), contentAlignment = Alignment.Center) {
+                    Text((uiState as BookingUiState.Error).message, color = MaterialTheme.colorScheme.error)
                 }
-                else -> {}
             }
         }
     }

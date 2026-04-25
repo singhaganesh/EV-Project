@@ -8,6 +8,7 @@ import com.ganesh.ev.data.model.ChargerSlot
 import com.ganesh.ev.data.model.ChargingSession
 import com.ganesh.ev.data.model.CompleteProfileRequest
 import com.ganesh.ev.data.model.LivePowerData
+import com.ganesh.ev.data.model.PaginatedResponse
 import com.ganesh.ev.data.model.Payment
 import com.ganesh.ev.data.model.PaymentIntentResponse
 import com.ganesh.ev.data.model.SimpleChargingSession
@@ -75,7 +76,11 @@ interface ApiService {
         @GET("api/bookings") suspend fun getAllBookings(): Response<ApiResponse<List<Booking>>>
 
         @GET("api/bookings/user/{userId}")
-        suspend fun getUserBookings(@Path("userId") userId: Long): Response<List<Booking>>
+        suspend fun getUserBookings(
+            @Path("userId") userId: Long,
+            @Query("page") page: Int = 0,
+            @Query("size") size: Int = 10
+        ): Response<ApiResponse<PaginatedResponse<Booking>>>
 
         @POST("api/bookings")
         suspend fun createBooking(@Body request: BookingRequest): Response<Booking>

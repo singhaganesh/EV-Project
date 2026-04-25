@@ -95,23 +95,56 @@ class BookingViewModel : ViewModel() {
         }
     }
 
-    fun loadUserBookings(userId: Long) {
+    private val _bookingsList = MutableStateFlow<List<Booking>>(emptyList())
+    val bookingsList: StateFlow<List<Booking>> = _bookingsList.asStateFlow()
+
+    private var currentPage = 0
+    private var isLastPage = false
+    private var isFetchingNextPage = false
+
+    fun loadUserBookings(userId: Long, isRefresh: Boolean = true) {
+        if (isFetchingNextPage) return
+
         viewModelScope.launch {
-            _uiState.value = BookingUiState.Loading
+            if (isRefresh) {
+                _uiState.value = BookingUiState.Loading
+                currentPage = 0
+                isLastPage = false
+                _bookingsList.value = emptyList()
+            } else {
+                if (isLastPage) return@launch
+                isFetchingNextPage = true
+            }
+
             try {
-                val response = RetrofitClient.apiService.getUserBookings(userId)
+                val response = RetrofitClient.apiService.getUserBookings(userId, page = currentPage, size = 10)
                 if (response.isSuccessful) {
-                    // API returns direct list, not wrapped in ApiResponse
-                    val bookings = response.body() ?: emptyList()
-                    // Sort by startTime descending (newest first)
-                    val sortedBookings = bookings.sortedByDescending { it.startTime }
-                    _uiState.value = BookingUiState.BookingsLoaded(sortedBookings)
+                    val paginatedData = response.body()?.data
+                    if (paginatedData != null) {
+                        val newBookings = paginatedData.content
+                        _bookingsList.value = if (isRefresh) newBookings else _bookingsList.value + newBookings
+                        
+                        currentPage++
+                        isLastPage = paginatedData.last
+                        
+                        _uiState.value = BookingUiState.BookingsLoaded(_bookingsList.value)
+                    } else {
+                        if (isRefresh) _uiState.value = BookingUiState.Error("No bookings found")
+                    }
                 } else {
-                    _uiState.value = BookingUiState.Error("Failed to load bookings")
+                    _uiState.value = BookingUiState.Error("Failed to load bookings: ${response.message()}")
                 }
             } catch (e: Exception) {
                 _uiState.value = BookingUiState.Error("Network error: ${e.message}")
+            } finally {
+                isFetchingNextPage = false
             }
+        }
+    }
+
+    fun loadMoreBookings(userId: Long) {
+        if (!isLastPage && !isFetchingNextPage) {
+            loadUserBookings(userId, isRefresh = false)
         }
     }
 
