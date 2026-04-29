@@ -24,18 +24,18 @@ const recentActivityData = [
 ];
 
 const activityColumns = [
-    { header: 'STATION ID', accessor: 'id', render: (row) => <span className="font-semibold text-slate-800">{row.id}</span> },
-    { header: 'LOCATION', accessor: 'location' },
-    { header: 'STATUS', accessor: 'status', render: (row) => <StatusBadge status={row.status} /> },
+    { header: 'STATION ID', key: 'id', render: (val) => <span className="font-semibold text-slate-800">{val}</span> },
+    { header: 'LOCATION', key: 'location' },
+    { header: 'STATUS', key: 'status', render: (val) => <StatusBadge status={val} /> },
     {
-        header: 'USER', accessor: 'user', render: (row) => (
+        header: 'USER', key: 'user', render: (val) => (
             <div className="flex items-center gap-2">
                 <div className="w-6 h-6 rounded-full bg-slate-200 flex-shrink-0" />
-                <span>{row.user}</span>
+                <span>{val}</span>
             </div>
         )
     },
-    { header: 'CHARGE', accessor: 'charge', render: (row) => <span className="font-medium text-slate-700">{row.charge}</span> },
+    { header: 'CHARGE', key: 'charge', render: (val) => <span className="font-medium text-slate-700">{val}</span> },
 ];
 
 export default function DashboardOverview() {

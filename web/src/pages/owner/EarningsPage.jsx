@@ -99,12 +99,12 @@ export default function EarningsPage() {
         { 
             header: 'Energy', 
             key: 'energyKwh',
-            render: (val) => <span className="text-xs font-bold text-slate-500">{val?.toFixed(2)} kWh</span>
+            render: (val) => <span className="text-xs font-bold text-slate-500">{Number(val || 0).toFixed(2)} kWh</span>
         },
         { 
             header: 'Revenue', 
             key: 'amount',
-            render: (val) => <span className="font-bold text-emerald-600">₹{val?.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+            render: (val) => <span className="font-bold text-emerald-600">₹{Number(val || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
         },
         { 
             header: 'Transaction ID', 
