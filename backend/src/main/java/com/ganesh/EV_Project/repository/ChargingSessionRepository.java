@@ -73,4 +73,12 @@ public interface ChargingSessionRepository extends JpaRepository<ChargingSession
 
     @org.springframework.data.jpa.repository.Query("SELECT SUM(s.totalCost) FROM ChargingSession s WHERE s.booking.slot.station.owner.id = :ownerId AND s.paymentStatus = 'PAID' AND s.endTime >= :since")
     Double getRecentRevenue(@org.springframework.data.repository.query.Param("ownerId") Long ownerId, @org.springframework.data.repository.query.Param("since") java.time.LocalDateTime since);
+
+    @org.springframework.data.jpa.repository.Query("SELECT new com.ganesh.EV_Project.dto.TransactionRowDTO(" +
+           "s.id, s.endTime, s.booking.slot.station.name, s.energyKwh, s.totalCost, s.razorpayOrderId, s.paymentStatus) " +
+           "FROM ChargingSession s WHERE s.booking.slot.station.owner.id = :ownerId " +
+           "ORDER BY s.endTime DESC")
+    org.springframework.data.domain.Page<com.ganesh.EV_Project.dto.TransactionRowDTO> getTransactionHistory(
+            @org.springframework.data.repository.query.Param("ownerId") Long ownerId, 
+            org.springframework.data.domain.Pageable pageable);
 }

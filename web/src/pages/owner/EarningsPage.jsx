@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { 
     Wallet, 
@@ -8,11 +8,12 @@ import {
     ArrowRight,
     Download,
     MapPin,
-    BarChart3
+    BarChart3,
+    ChevronLeft,
+    ChevronRight,
+    Search
 } from 'lucide-react';
 import {
-    LineChart,
-    Line,
     XAxis,
     YAxis,
     CartesianGrid,
@@ -22,7 +23,16 @@ import {
     Area
 } from 'recharts';
 import StatCard from '../../components/common/StatCard';
-import { fetchEarningsSummary, selectEarningsSummary, selectEarningsLoading } from '../../store/earningsSlice';
+import DataTable from '../../components/common/DataTable';
+import StatusBadge from '../../components/common/StatusBadge';
+import { 
+    fetchEarningsSummary, 
+    selectEarningsSummary, 
+    fetchEarningsTransactions,
+    selectEarningsTransactions,
+    selectEarningsPagination,
+    selectEarningsLoading 
+} from '../../store/earningsSlice';
 import { 
     fetchRevenueTrends, 
     selectRevenueTrends, 
@@ -33,9 +43,14 @@ import {
 export default function EarningsPage() {
     const dispatch = useDispatch();
     const summary = useSelector(selectEarningsSummary);
-    const earningsLoading = useSelector(selectEarningsLoading);
+    const transactions = useSelector(selectEarningsTransactions);
+    const pagination = useSelector(selectEarningsPagination);
+    const loading = useSelector(selectEarningsLoading);
+    
     const revenueTrends = useSelector(selectRevenueTrends);
     const stationRevenue = useSelector(selectStationRevenue);
+
+    const [page, setPage] = useState(0);
 
     useEffect(() => {
         const userStr = localStorage.getItem('user');
@@ -52,12 +67,58 @@ export default function EarningsPage() {
         dispatch(fetchAnalyticsSummary({ ownerId: user.id, days: 30 }));
     }, [dispatch]);
 
+    useEffect(() => {
+        const userStr = localStorage.getItem('user');
+        if (!userStr) return;
+        const user = JSON.parse(userStr);
+        
+        // Fetch transactions for current page
+        dispatch(fetchEarningsTransactions({ ownerId: user.id, page, size: 10 }));
+    }, [dispatch, page]);
+
     const formatChartDate = (dateStr) => {
         const date = new Date(dateStr);
         return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
     };
 
-    if (earningsLoading && summary.lifetimeRevenue === 0) {
+    const columns = [
+        { 
+            header: 'Date', 
+            key: 'timestamp',
+            render: (val) => (
+                <span className="text-xs font-semibold text-slate-600">
+                    {new Date(val).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                </span>
+            )
+        },
+        { 
+            header: 'Station', 
+            key: 'stationName',
+            render: (val) => <span className="font-bold text-[#1A2234]">{val}</span>
+        },
+        { 
+            header: 'Energy', 
+            key: 'energyKwh',
+            render: (val) => <span className="text-xs font-bold text-slate-500">{val?.toFixed(2)} kWh</span>
+        },
+        { 
+            header: 'Revenue', 
+            key: 'amount',
+            render: (val) => <span className="font-bold text-emerald-600">₹{val?.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+        },
+        { 
+            header: 'Transaction ID', 
+            key: 'razorpayOrderId',
+            render: (val) => <span className="text-[10px] font-mono text-slate-400 bg-slate-50 px-2 py-1 rounded border border-slate-100">{val || 'N/A'}</span>
+        },
+        { 
+            header: 'Status', 
+            key: 'status',
+            render: (val) => <StatusBadge status={val === 'PAID' ? 'active' : 'pending'} />
+        }
+    ];
+
+    if (loading && summary.lifetimeRevenue === 0) {
         return (
             <div className="flex items-center justify-center h-[60vh]">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500"></div>
@@ -192,7 +253,9 @@ export default function EarningsPage() {
                     <div className="space-y-6">
                         {stationRevenue.length > 0 ? (
                             stationRevenue.map((station, index) => {
-                                const percentage = ((station.totalRevenue / summary.lifetimeRevenue) * 100).toFixed(1);
+                                const percentage = summary.lifetimeRevenue > 0 
+                                    ? ((station.totalRevenue / summary.lifetimeRevenue) * 100).toFixed(1)
+                                    : '0.0';
                                 return (
                                     <div key={index} className="group">
                                         <div className="flex justify-between items-start mb-2">
@@ -226,13 +289,47 @@ export default function EarningsPage() {
                 </div>
             </div>
 
-            {/* Placeholder for Transaction History */}
-            <div className="bg-white rounded-3xl p-12 text-center border-2 border-dashed border-slate-200">
-                <Clock className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-                <h3 className="text-lg font-bold text-[#1A2234]">Transaction History Coming Soon</h3>
-                <p className="text-slate-500 font-medium max-w-sm mx-auto mt-2">
-                    We are currently building the detailed ledger view for your charging sessions.
-                </p>
+            {/* Transaction Ledger Table */}
+            <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-100/50">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
+                    <div>
+                        <h3 className="text-xl font-bold text-[#1A2234]">Transaction Ledger</h3>
+                        <p className="text-sm text-slate-500 font-medium mt-1">Detailed audit of all charging sessions</p>
+                    </div>
+                    <div className="relative group">
+                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-emerald-500 transition-colors" />
+                        <input 
+                            type="text" 
+                            placeholder="Search transaction..." 
+                            className="pl-11 pr-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:bg-white transition-all min-w-[240px]"
+                        />
+                    </div>
+                </div>
+
+                <DataTable columns={columns} data={transactions} keyField="sessionId" />
+
+                {/* Pagination Controls */}
+                <div className="mt-8 flex items-center justify-between">
+                    <p className="text-sm text-slate-500 font-medium">
+                        Page <span className="text-[#1A2234] font-bold">{pagination.currentPage + 1}</span> of <span className="text-[#1A2234] font-bold">{pagination.totalPages}</span>
+                    </p>
+                    <div className="flex gap-3">
+                        <button 
+                            onClick={() => setPage(p => Math.max(0, p - 1))}
+                            disabled={page === 0}
+                            className="p-2.5 rounded-xl border border-slate-100 bg-white hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-sm"
+                        >
+                            <ChevronLeft className="w-5 h-5 text-[#1A2234]" />
+                        </button>
+                        <button 
+                            onClick={() => setPage(p => p + 1)}
+                            disabled={page >= pagination.totalPages - 1}
+                            className="p-2.5 rounded-xl border border-slate-100 bg-white hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-sm"
+                        >
+                            <ChevronRight className="w-5 h-5 text-[#1A2234]" />
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
     );

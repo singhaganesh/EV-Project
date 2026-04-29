@@ -1,8 +1,11 @@
 package com.ganesh.EV_Project.service;
 
 import com.ganesh.EV_Project.dto.EarningsSummaryDTO;
+import com.ganesh.EV_Project.dto.TransactionRowDTO;
 import com.ganesh.EV_Project.repository.ChargingSessionRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -14,6 +17,7 @@ public class EarningsService {
     private ChargingSessionRepository sessionRepository;
 
     public EarningsSummaryDTO getEarningsSummary(Long ownerId) {
+        // ... (existing code)
         Double lifetimeRevenue = sessionRepository.getTotalLifetimeRevenue(ownerId);
         if (lifetimeRevenue == null) lifetimeRevenue = 0.0;
 
@@ -33,5 +37,9 @@ public class EarningsService {
             pendingPayouts,
             lastSettlement
         );
+    }
+
+    public Page<TransactionRowDTO> getTransactionHistory(Long ownerId, Pageable pageable) {
+        return sessionRepository.getTransactionHistory(ownerId, pageable);
     }
 }
