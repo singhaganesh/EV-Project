@@ -39,6 +39,14 @@ fun PaymentSummaryScreen(
 
     // Function to launch Razorpay
     fun startRazorpay(orderId: String, amount: Double, keyId: String) {
+        android.util.Log.d("Razorpay", "Starting checkout. Key: $keyId, Order: $orderId, Amount: $amount")
+        
+        if (keyId.isEmpty()) {
+            android.util.Log.e("Razorpay", "FAILED: Razorpay Key ID is empty!")
+            android.widget.Toast.makeText(context, "Payment Error: Missing API Key", android.widget.Toast.LENGTH_LONG).show()
+            return
+        }
+
         val checkout = Checkout()
         checkout.setKeyID(keyId)
         try {
@@ -59,9 +67,11 @@ fun PaymentSummaryScreen(
             notes.put("session_id", sessionId.toString())
             options.put("notes", notes)
 
+            android.util.Log.d("Razorpay", "Opening checkout window...")
             checkout.open(context as android.app.Activity, options)
         } catch (e: Exception) {
-            android.util.Log.e("Razorpay", "Error starting checkout", e)
+            android.util.Log.e("Razorpay", "CRITICAL ERROR starting checkout", e)
+            android.widget.Toast.makeText(context, "Error: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
         }
     }
 
@@ -144,8 +154,12 @@ fun PaymentSummaryScreen(
                             onClick = {
                                 val orderId = session.razorpayOrderId
                                 val cost = session.totalCost ?: 0.0
-                                if (orderId != null) {
+                                android.util.Log.d("Razorpay", "Button Clicked. Session: ${session.id}, Order: $orderId")
+                                if (!orderId.isNullOrEmpty()) {
                                     startRazorpay(orderId, cost, com.ganesh.ev.BuildConfig.RAZORPAY_KEY_ID)
+                                } else {
+                                    android.util.Log.e("Razorpay", "CANNOT PAY: Order ID is null or empty!")
+                                    android.widget.Toast.makeText(context, "Backend Error: Order ID not generated yet. Please wait...", android.widget.Toast.LENGTH_LONG).show()
                                 }
                             },
                             modifier = Modifier.fillMaxWidth().height(60.dp),

@@ -127,6 +127,8 @@ class ChargingViewModel : ViewModel() {
                     if (simpleSession != null && simpleSession.id > 0) {
                         _uiState.value = ChargingUiState.SessionStopped(simpleSession)
                         stopWebSocketTelemetry()
+                        // Force reload to get full details including razorpayOrderId
+                        loadSession(simpleSession.id)
                     } else {
                         _uiState.value = ChargingUiState.Error("Failed to stop charging session summary")
                     }

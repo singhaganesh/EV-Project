@@ -67,4 +67,10 @@ public interface ChargingSessionRepository extends JpaRepository<ChargingSession
            "WHERE st.owner_id = :ownerId AND s.payment_status = 'PAID' AND s.end_time >= :since " +
            "GROUP BY cs.connector_type", nativeQuery = true)
     List<Object[]> getRevenueByConnector(@org.springframework.data.repository.query.Param("ownerId") Long ownerId, @org.springframework.data.repository.query.Param("since") java.time.LocalDateTime since);
+
+    @org.springframework.data.jpa.repository.Query("SELECT SUM(s.totalCost) FROM ChargingSession s WHERE s.booking.slot.station.owner.id = :ownerId AND s.paymentStatus = 'PAID'")
+    Double getTotalLifetimeRevenue(@org.springframework.data.repository.query.Param("ownerId") Long ownerId);
+
+    @org.springframework.data.jpa.repository.Query("SELECT SUM(s.totalCost) FROM ChargingSession s WHERE s.booking.slot.station.owner.id = :ownerId AND s.paymentStatus = 'PAID' AND s.endTime >= :since")
+    Double getRecentRevenue(@org.springframework.data.repository.query.Param("ownerId") Long ownerId, @org.springframework.data.repository.query.Param("since") java.time.LocalDateTime since);
 }
