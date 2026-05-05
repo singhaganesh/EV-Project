@@ -75,6 +75,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> {
                     // Public Auth Endpoints
                     auth.requestMatchers("/api/auth/**").permitAll();
+                    auth.requestMatchers("/api/test/**").permitAll();
                     
                     // Station Discovery - GET is public, Mutations are SECURE
                     auth.requestMatchers(HttpMethod.GET, "/api/stations/**").permitAll();
