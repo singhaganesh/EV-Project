@@ -75,6 +75,8 @@ fun ChargingScreen(
 
     LaunchedEffect(uiState) {
         val state = uiState
+        android.util.Log.d("ChargingScreen", "Current UI State: ${state.javaClass.simpleName}")
+
         if (state is ChargingUiState.Error && state.message.contains("Session not found")) {
             viewModel.startCharging(bookingId)
         }
@@ -85,14 +87,17 @@ fun ChargingScreen(
             if (state.session.endTime == null) {
                 isCharging = true
             } else {
+                android.util.Log.d("ChargingScreen", "Session is COMPLETED. Navigating to summary...")
+                isCharging = false
                 isCompleted = true
+                onComplete(state.session.id)
             }
         } else if (state is ChargingUiState.SessionStopped) {
-            isCompleted = true
+            android.util.Log.d("ChargingScreen", "Session STOPPED. Waiting for refresh...")
             isCharging = false
-            
-            // Redirect to Payment Summary instead of auto-opening Razorpay
-            onComplete(state.simpleSession.id)
+            isCompleted = true
+            // viewModel.loadSession is already called inside stopCharging()
+            // We wait for SessionLoaded to trigger the final navigation
         }
     }
 
