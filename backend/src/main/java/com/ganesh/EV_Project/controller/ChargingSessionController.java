@@ -102,9 +102,16 @@ public class ChargingSessionController {
             // ── TRIGGER SMART SIMULATION ──
             simulatorService.startSimulation(booking.getId());
 
-            // Notify via WebSocket
-            webSocketController.notifySlotStatusChange(slot.getStation().getId(), slot);
-            webSocketController.notifyUserBookingUpdate(booking.getUser().getId(), booking);
+            // Notify via WebSocket - Wrapped in try-catch to prevent failure
+            try {
+                webSocketController.notifySlotStatusChange(slot.getStation().getId(), slot);
+                webSocketController.notifyUserBookingUpdate(booking.getUser().getId(), Map.of(
+                    "bookingId", booking.getId(),
+                    "status", booking.getStatus()
+                ));
+            } catch (Exception wsEx) {
+                System.err.println("WebSocket Notification Failed: " + wsEx.getMessage());
+            }
 
             return ResponseEntity.ok(APIResponse.builder()
                     .success(true)
@@ -126,7 +133,7 @@ public class ChargingSessionController {
             ChargingSession session = chargingSessionRepository.findById(sessionId)
                     .orElseThrow(() -> new RuntimeException("Charging session not found"));
 
-            if (session.getEndTime() != null) {
+            if (session.getEndTime() != null || "COMPLETED".equals(session.getStatus())) {
                 return ResponseEntity.badRequest().body(APIResponse.builder()
                         .success(false)
                         .message("Charging session already ended")
@@ -184,9 +191,16 @@ public class ChargingSessionController {
                 System.err.println("Failed to create Razorpay Order: " + e.getMessage());
             }
 
-            // Notify via WebSocket
-            webSocketController.notifySlotStatusChange(slot.getStation().getId(), slot);
-            webSocketController.notifyUserBookingUpdate(booking.getUser().getId(), booking);
+            // Notify via WebSocket - Wrapped in try-catch to prevent failure
+            try {
+                webSocketController.notifySlotStatusChange(slot.getStation().getId(), slot);
+                webSocketController.notifyUserBookingUpdate(booking.getUser().getId(), Map.of(
+                    "bookingId", booking.getId(),
+                    "status", booking.getStatus()
+                ));
+            } catch (Exception wsEx) {
+                System.err.println("WebSocket Notification Failed: " + wsEx.getMessage());
+            }
 
             return ResponseEntity.ok(APIResponse.builder()
                     .success(true)
@@ -201,6 +215,8 @@ public class ChargingSessionController {
                     .build());
 
         } catch (Exception e) {
+            System.err.println("CRITICAL ERROR in stopCharging: " + e.getMessage());
+            e.printStackTrace();
             return ResponseEntity.badRequest().body(APIResponse.builder()
                     .success(false)
                     .message("Failed to stop charging: " + e.getMessage())
