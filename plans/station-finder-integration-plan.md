@@ -33,13 +33,13 @@ Make the standalone **station-finder** Android app use the **shared backend** (i
            │                                      │
            ▼                                      │
 ┌──────────────────────┐          ┌────────────────────────────┐
-│  Station Finder App   │          │  Main EV Android App       │
-│  (separate project)   │          │  (unchanged — untouched)   │
-│                       │          │                            │
-│  • No auth required   │          │  • JWT auth                │
-│  • Finder APIs only   │          │  • Full lifecycle          │
-│  • Map + details      │          │  • Bookings, charging,     │
-│  • Bottom sheet UI    │          │    payments, profile, etc. │
+│  Station Finder App  │          │  Main EV Android App       │
+│  (separate project)  │          │  (unchanged — untouched)   │
+│                      │          │                            │
+│  • No auth required  │          │  • JWT auth                │
+│  • Finder APIs only  │          │  • Full lifecycle          │
+│  • Map + details     │          │  • Bookings, charging,     │
+│  • Bottom sheet UI   │          │    payments, profile, etc. │
 └──────────────────────┘          └────────────────────────────┘
 ```
 
