@@ -1,40 +1,53 @@
 # Station Finder — Detailed Phase-by-Phase Implementation Plan
 
-> **Goal:** Replace the station-finder Android app's direct OpenChargeMap API calls with the shared EV-Project backend, without touching the main Android app or breaking existing backend logic.
+> **Goal:** Create a **dedicated Spring Boot backend + separate PostgreSQL database** for the station-finder Android app. Zero changes to the main EV backend or main Android app.
 >
-> **Branch:** Work on a new branch `feature/station-finder-backend`
+> **New project location:** `station-finder-backend/` (at project root)
 >
-> **Total estimated time:** ~8-12 hours
+> **Total estimated time:** ~8-10 hours
 
 ---
 
 ## Table of Contents
 
 - [Phase 0: Setup & Preparation](#phase-0-setup--preparation)
-- [Phase 1: Backend — StationFinderController](#phase-1-backend--stationfindercontroller)
-- [Phase 2: Backend — StationImportService](#phase-2-backend--stationimportservice)
-- [Phase 3: Backend — StationSyncJob & Configuration](#phase-3-backend--stationsyncjob--configuration)
-- [Phase 4: Backend Testing](#phase-4-backend-testing)
-- [Phase 5: Station Finder — New Network Layer](#phase-5-station-finder--new-network-layer)
-- [Phase 6: Station Finder — Repository & ViewModel Updates](#phase-6-station-finder--repository--viewmodel-updates)
-- [Phase 7: Station Finder — UI Updates (StationDetailsSheet)](#phase-7-station-finder--ui-updates-stationdetailssheet)
+- [Phase 1: Create New Spring Boot Project](#phase-1-create-new-spring-boot-project)
+- [Phase 2: Data Models + DTOs + Repositories](#phase-2-data-models--dtos--repositories)
+- [Phase 3: StationImportService + DataSeeder](#phase-3-stationimportservice--dataseeder)
+- [Phase 4: StationService + StationController](#phase-4-stationservice--stationcontroller)
+- [Phase 5: StationSyncJob + Configuration](#phase-5-stationsyncjob--configuration)
+- [Phase 6: Backend Testing](#phase-6-backend-testing)
+- [Phase 7: Station Finder Android App Updates](#phase-7-station-finder-android-app-updates)
 - [Phase 8: Integration Testing](#phase-8-integration-testing)
-- [Appendix: Full File Reference](#appendix-full-file-reference)
+- [Rollback Plan](#rollback-plan)
 
 ---
 
 ## Phase 0: Setup & Preparation
 
-### Step 0.2 — Verify Environment
+**Estimated time:** 15 min
+
+### Step 0.1 — Verify Tools
 
 ```bash
-# Check backend compiles
-cd backend
-./mvnw compile -q 2>&1 | tail -20
+# Check Java version (must be 21)
+java -version
 
-# Check station-finder compiles (if Gradle is available)
-cd ../station-finder
-./gradlew assembleDebug 2>&1 | tail -20
+# Check Maven (or we'll use the wrapper)
+mvn --version
+
+# Check PostgreSQL is running
+psql --version
+```
+
+### Step 0.2 — Create Database
+
+```bash
+# Connect to PostgreSQL and create the finder database
+psql -U postgres -c "CREATE DATABASE ev_station_finder;"
+
+# Verify it was created
+psql -U postgres -c "\l" | grep ev_station_finder
 ```
 
 ### Step 0.3 — Get an OCM API Key
@@ -42,209 +55,231 @@ cd ../station-finder
 1. Go to https://openchargemap.io/site/register
 2. Sign up for a free account
 3. Get your API key from the dashboard
-4. Keep it ready — you'll need it in Phase 2
+
+### Step 0.4 — Review Station Finder Android App
+
+Familiarize yourself with the current app code at `station-finder/app/src/main/java/com/ganesh/stationfinder/`. We'll be:
+- **Replacing** the network layer (OCM API → Backend API)
+- **Keeping** the UI structure (map, markers, bottom sheet)
 
 ---
 
-## Phase 1: Backend — StationFinderController
+## Phase 1: Create New Spring Boot Project
 
-> **Files to create:** 1
-> **Files to modify:** 1
-> **Estimated time:** 30 min
+**Estimated time:** 30 min
 
-### Step 1.1 — Create StationFinderController
+### Step 1.1 — Create Project Directory Structure
 
-**File path:** `backend/src/main/java/com/ganesh/EV_Project/controller/StationFinderController.java`
+```bash
+# From project root
+mkdir -p station-finder-backend/src/main/java/com/ganesh/finder/{config,controller,model,dto,repository,service}
+mkdir -p station-finder-backend/src/main/resources
+mkdir -p station-finder-backend/src/test/java/com/ganesh/finder
+```
 
-This controller exposes **public (no auth)** endpoints that the station-finder app calls. It delegates to existing `StationRecommendationService` and `StationService` — **zero logic duplication**.
+### Step 1.2 — Create pom.xml
+
+**File:** `station-finder-backend/pom.xml`
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+         https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.3.5</version>
+        <relativePath/>
+    </parent>
+
+    <groupId>com.ganesh</groupId>
+    <artifactId>ev-station-finder</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+    <name>EV Station Finder Backend</name>
+    <description>Dedicated backend for the EV Station Finder Android app</description>
+
+    <properties>
+        <java.version>21</java.version>
+    </properties>
+
+    <dependencies>
+        <!-- Spring Boot Web -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+
+        <!-- JPA + Hibernate -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+
+        <!-- Validation -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+
+        <!-- PostgreSQL -->
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!-- Lombok -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Testing -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <source>${java.version}</source>
+                    <target>${java.version}</target>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <excludes>
+                        <exclude>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>
+```
+
+### Step 1.3 — Create Main Application Class
+
+**File:** `station-finder-backend/src/main/java/com/ganesh/finder/FinderApplication.java`
 
 ```java
-package com.ganesh.EV_Project.controller;
+package com.ganesh.finder;
 
-import com.ganesh.EV_Project.dto.StationMarkerDTO;
-import com.ganesh.EV_Project.dto.StationScoreDTO;
-import com.ganesh.EV_Project.dto.ViewportResponseDTO;
-import com.ganesh.EV_Project.payload.APIResponse;
-import com.ganesh.EV_Project.service.StationRecommendationService;
-import com.ganesh.EV_Project.service.StationService;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
-import java.util.List;
-import java.util.Map;
+@SpringBootApplication
+@EnableScheduling
+public class FinderApplication {
 
-@RestController
-@RequestMapping("/api/finder/stations")
-public class StationFinderController {
-
-    @Autowired
-    private StationRecommendationService recommendationService;
-
-    @Autowired
-    private StationService stationService;
-
-    /**
-     * GET /api/finder/stations/nearby?lat=19.07&lng=72.87&radius=50&limit=20
-     * Returns ranked nearby stations with full scoring data.
-     */
-    @GetMapping("/nearby")
-    public ResponseEntity<APIResponse> getNearbyStations(
-            @RequestParam double lat,
-            @RequestParam double lng,
-            @RequestParam(defaultValue = "50") double radius,
-            @RequestParam(defaultValue = "20") int limit) {
-        try {
-            List<StationScoreDTO> stations = recommendationService.getNearbyStationsRanked(lat, lng, radius, limit);
-            return ResponseEntity.ok(APIResponse.builder()
-                    .success(true)
-                    .message("Found " + stations.size() + " nearby stations")
-                    .data(stations)
-                    .build());
-        } catch (Exception e) {
-            return ResponseEntity.internalServerError().body(
-                    APIResponse.builder()
-                            .success(false)
-                            .message("Error fetching nearby stations: " + e.getMessage())
-                            .build());
-        }
-    }
-
-    /**
-     * GET /api/finder/stations/viewport?neLat=19.2&neLng=73.0&swLat=18.9&swLng=72.7
-     * Returns lightweight markers for map pins in the current viewport.
-     */
-    @GetMapping("/viewport")
-    public ResponseEntity<APIResponse> getStationsInViewport(
-            @RequestParam double neLat,
-            @RequestParam double neLng,
-            @RequestParam double swLat,
-            @RequestParam double swLng) {
-        try {
-            List<StationMarkerDTO> markers = recommendationService.getStationsInViewport(swLat, neLat, swLng, neLng);
-            return ResponseEntity.ok(APIResponse.builder()
-                    .success(true)
-                    .message("Found " + markers.size() + " stations in viewport")
-                    .data(markers)
-                    .build());
-        } catch (Exception e) {
-            return ResponseEntity.internalServerError().body(
-                    APIResponse.builder()
-                            .success(false)
-                            .message("Error fetching viewport stations: " + e.getMessage())
-                            .build());
-        }
-    }
-
-    /**
-     * GET /api/finder/stations/detail/{id}?lat=19.07&lng=72.87
-     * Returns full detail for a single station (on marker tap).
-     */
-    @GetMapping("/detail/{id}")
-    public ResponseEntity<APIResponse> getStationDetail(
-            @PathVariable Long id,
-            @RequestParam double lat,
-            @RequestParam double lng) {
-        try {
-            StationScoreDTO detail = recommendationService.getStationDetail(id, lat, lng);
-            return ResponseEntity.ok(APIResponse.builder()
-                    .success(true)
-                    .message("Station detail found")
-                    .data(detail)
-                    .build());
-        } catch (Exception e) {
-            return ResponseEntity.internalServerError().body(
-                    APIResponse.builder()
-                            .success(false)
-                            .message("Error fetching station detail: " + e.getMessage())
-                            .build());
-        }
-    }
-
-    /**
-     * GET /api/finder/stations/search?q=nexon&lat=19.07&lng=72.87&radius=50
-     * Text search by station name/address.
-     */
-    @GetMapping("/search")
-    public ResponseEntity<APIResponse> searchStations(
-            @RequestParam String q,
-            @RequestParam double lat,
-            @RequestParam double lng,
-            @RequestParam(defaultValue = "50") double radius) {
-        try {
-            List<StationScoreDTO> results = recommendationService.getNearbyStationsRanked(lat, lng, radius, 50);
-            // Filter by name/address containing query (case-insensitive)
-            String query = q.toLowerCase().trim();
-            List<StationScoreDTO> filtered = results.stream()
-                    .filter(s -> s.getStation().getName().toLowerCase().contains(query)
-                            || s.getStation().getAddress().toLowerCase().contains(query))
-                    .collect(java.util.stream.Collectors.toList());
-            return ResponseEntity.ok(APIResponse.builder()
-                    .success(true)
-                    .message("Found " + filtered.size() + " stations matching \"" + q + "\"")
-                    .data(filtered)
-                    .build());
-        } catch (Exception e) {
-            return ResponseEntity.internalServerError().body(
-                    APIResponse.builder()
-                            .success(false)
-                            .message("Error searching stations: " + e.getMessage())
-                            .build());
-        }
-    }
-
-    /**
-     * GET /api/finder/stations/count
-     * Returns total number of stations in the system.
-     */
-    @GetMapping("/count")
-    public ResponseEntity<APIResponse> getStationCount() {
-        try {
-            long count = stationService.getAllStations().size();
-            return ResponseEntity.ok(APIResponse.builder()
-                    .success(true)
-                    .message("Station count retrieved")
-                    .data(Map.of("count", count))
-                    .build());
-        } catch (Exception e) {
-            return ResponseEntity.internalServerError().body(
-                    APIResponse.builder()
-                            .success(false)
-                            .message("Error counting stations: " + e.getMessage())
-                            .build());
-        }
+    public static void main(String[] args) {
+        SpringApplication.run(FinderApplication.class, args);
     }
 }
 ```
 
-### Step 1.2 — Update SecurityConfig
+### Step 1.4 — Create application.properties
 
-**File path:** `backend/src/main/java/com/ganesh/EV_Project/config/SecurityConfig.java`
+**File:** `station-finder-backend/src/main/resources/application.properties`
 
-Add one line after the existing `.permitAll()` calls:
+```properties
+spring.application.name=ev-station-finder
 
-```java
-// Inside the authorizeHttpRequests lambda, after:
-auth.requestMatchers("/api/public/**").permitAll();
+# ========================================
+# PostgreSQL (separate database)
+# ========================================
+spring.datasource.url=jdbc:postgresql://localhost:5432/ev_station_finder
+spring.datasource.username=postgres
+spring.datasource.password=postgres
+spring.jpa.hibernate.ddl-auto=update
+spring.jpa.show-sql=true
+spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.PostgreSQLDialect
 
-// ADD THIS LINE:
-auth.requestMatchers("/api/finder/**").permitAll();
+# ========================================
+# Server (different port from main backend)
+# ========================================
+server.port=8081
+
+# ========================================
+# OCM (OpenChargeMap) Import Configuration
+# ========================================
+ocm.api.key=${OCM_API_KEY:demo_key}
+ocm.sync.enabled=true
+ocm.sync.radius-km=500
+ocm.sync.country-id=101
+ocm.sync.interval-cron=0 0 3 * * ?
 ```
 
-**Context in the file (around line 76):**
+### Step 1.5 — Create API Response Wrapper
+
+**File:** `station-finder-backend/src/main/java/com/ganesh/finder/dto/ApiResponse.java`
+
 ```java
-// Public System Endpoints
-auth.requestMatchers("/api/public/**").permitAll();
-auth.requestMatchers("/api/finder/**").permitAll();   // <-- ADD THIS
-auth.requestMatchers("/ws/**").permitAll();
+package com.ganesh.finder.dto;
+
+public class ApiResponse<T> {
+    private boolean success;
+    private String message;
+    private T data;
+
+    public ApiResponse() {}
+
+    public ApiResponse(boolean success, String message, T data) {
+        this.success = success;
+        this.message = message;
+        this.data = data;
+    }
+
+    public static <T> ApiResponse<T> success(String message, T data) {
+        return new ApiResponse<>(true, message, data);
+    }
+
+    public static <T> ApiResponse<T> error(String message) {
+        return new ApiResponse<>(false, message, null);
+    }
+
+    // Getters and Setters
+    public boolean isSuccess() { return success; }
+    public void setSuccess(boolean success) { this.success = success; }
+    public String getMessage() { return message; }
+    public void setMessage(String message) { this.message = message; }
+    public T getData() { return data; }
+    public void setData(T data) { this.data = data; }
+}
 ```
 
 ### ✅ Phase 1 Verification
 
-Build the backend to make sure it compiles:
-
 ```bash
-cd backend
+cd station-finder-backend
+# Generate Maven wrapper
+mvn -N wrapper:wrapper -Dmaven=3.9.6
+
+# Compile
 ./mvnw compile -q 2>&1 | tail -10
 ```
 
@@ -252,38 +287,435 @@ Expected: `BUILD SUCCESS`
 
 ---
 
-## Phase 2: Backend — StationImportService
+## Phase 2: Data Models + DTOs + Repositories
 
-> **Files to create:** 1
-> **Files to modify:** 0
-> **Estimated time:** 1-2 hours
+**Estimated time:** 45 min
 
-### Step 2.1 — Create StationImportService
+### Step 2.1 — Create Station Entity
 
-**File path:** `backend/src/main/java/com/ganesh/EV_Project/service/StationImportService.java`
-
-This service fetches station data from the OpenChargeMap API and stores it in the local PostgreSQL database. It handles:
-- Fetching from OCM API
-- Transforming OCM data → backend `Station` model
-- Creating default `ChargerSlot` entries per connector
-- Deduplication by OCM UUID
-- Rate-limit aware (sync is async, not per-request)
+**File:** `station-finder-backend/src/main/java/com/ganesh/finder/model/Station.java`
 
 ```java
-package com.ganesh.EV_Project.service;
+package com.ganesh.finder.model;
 
-import com.ganesh.EV_Project.enums.ConnectorType;
-import com.ganesh.EV_Project.enums.SlotStatus;
-import com.ganesh.EV_Project.enums.SlotType;
-import com.ganesh.EV_Project.model.ChargerSlot;
-import com.ganesh.EV_Project.model.Station;
-import com.ganesh.EV_Project.repository.ChargerSlotRepository;
-import com.ganesh.EV_Project.repository.StationRepository;
+import jakarta.persistence.*;
+import java.time.LocalDateTime;
+
+@Entity
+@Table(name = "stations")
+public class Station {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(nullable = false)
+    private String name;
+
+    @Column(nullable = false)
+    private Double latitude;
+
+    @Column(nullable = false)
+    private Double longitude;
+
+    @Column(length = 500)
+    private String address;
+
+    private String operatingHours;
+
+    private Double pricePerKwh;
+
+    private Double rating;
+
+    private Boolean isOpen;
+
+    // OCM identifiers for dedup
+    private Long ocmId;
+    private String ocmUuid;
+
+    // Extra metadata stored as JSON string
+    @Column(columnDefinition = "TEXT")
+    private String meta;
+
+    private LocalDateTime lastSynced;
+
+    @Column(updatable = false)
+    private LocalDateTime createdAt;
+
+    private LocalDateTime updatedAt;
+
+    @PrePersist
+    protected void onCreate() {
+        createdAt = LocalDateTime.now();
+        updatedAt = LocalDateTime.now();
+    }
+
+    @PreUpdate
+    protected void onUpdate() {
+        updatedAt = LocalDateTime.now();
+    }
+
+    // Constructors
+    public Station() {}
+
+    public Station(String name, Double latitude, Double longitude, String address) {
+        this.name = name;
+        this.latitude = latitude;
+        this.longitude = longitude;
+        this.address = address;
+    }
+
+    // Getters and Setters
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
+
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
+
+    public Double getLatitude() { return latitude; }
+    public void setLatitude(Double latitude) { this.latitude = latitude; }
+
+    public Double getLongitude() { return longitude; }
+    public void setLongitude(Double longitude) { this.longitude = longitude; }
+
+    public String getAddress() { return address; }
+    public void setAddress(String address) { this.address = address; }
+
+    public String getOperatingHours() { return operatingHours; }
+    public void setOperatingHours(String operatingHours) { this.operatingHours = operatingHours; }
+
+    public Double getPricePerKwh() { return pricePerKwh; }
+    public void setPricePerKwh(Double pricePerKwh) { this.pricePerKwh = pricePerKwh; }
+
+    public Double getRating() { return rating; }
+    public void setRating(Double rating) { this.rating = rating; }
+
+    public Boolean getIsOpen() { return isOpen; }
+    public void setIsOpen(Boolean isOpen) { this.isOpen = isOpen; }
+
+    public Long getOcmId() { return ocmId; }
+    public void setOcmId(Long ocmId) { this.ocmId = ocmId; }
+
+    public String getOcmUuid() { return ocmUuid; }
+    public void setOcmUuid(String ocmUuid) { this.ocmUuid = ocmUuid; }
+
+    public String getMeta() { return meta; }
+    public void setMeta(String meta) { this.meta = meta; }
+
+    public LocalDateTime getLastSynced() { return lastSynced; }
+    public void setLastSynced(LocalDateTime lastSynced) { this.lastSynced = lastSynced; }
+
+    public LocalDateTime getCreatedAt() { return createdAt; }
+    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+
+    public LocalDateTime getUpdatedAt() { return updatedAt; }
+    public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
+}
+```
+
+### Step 2.2 — Create ChargerSlot Entity
+
+**File:** `station-finder-backend/src/main/java/com/ganesh/finder/model/ChargerSlot.java`
+
+```java
+package com.ganesh.finder.model;
+
+import jakarta.persistence.*;
+import java.time.LocalDateTime;
+
+@Entity
+@Table(name = "charger_slots")
+public class ChargerSlot {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "station_id", nullable = false)
+    private Station station;
+
+    private String slotLabel;
+
+    private String connectorType;
+
+    private Double powerKw;
+
+    private Boolean isAvailable;
+
+    @Column(updatable = false)
+    private LocalDateTime createdAt;
+
+    @PrePersist
+    protected void onCreate() {
+        createdAt = LocalDateTime.now();
+    }
+
+    // Constructors
+    public ChargerSlot() {}
+
+    public ChargerSlot(Station station, String slotLabel, String connectorType, Double powerKw) {
+        this.station = station;
+        this.slotLabel = slotLabel;
+        this.connectorType = connectorType;
+        this.powerKw = powerKw;
+        this.isAvailable = true;
+    }
+
+    // Getters and Setters
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
+
+    public Station getStation() { return station; }
+    public void setStation(Station station) { this.station = station; }
+
+    public String getSlotLabel() { return slotLabel; }
+    public void setSlotLabel(String slotLabel) { this.slotLabel = slotLabel; }
+
+    public String getConnectorType() { return connectorType; }
+    public void setConnectorType(String connectorType) { this.connectorType = connectorType; }
+
+    public Double getPowerKw() { return powerKw; }
+    public void setPowerKw(Double powerKw) { this.powerKw = powerKw; }
+
+    public Boolean getIsAvailable() { return isAvailable; }
+    public void setIsAvailable(Boolean isAvailable) { this.isAvailable = isAvailable; }
+
+    public LocalDateTime getCreatedAt() { return createdAt; }
+    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+}
+```
+
+### Step 2.3 — Create DTOs
+
+**File:** `station-finder-backend/src/main/java/com/ganesh/finder/dto/StationMarker.java`
+
+```java
+package com.ganesh.finder.dto;
+
+/**
+ * Lightweight DTO for map pins.
+ */
+public class StationMarker {
+    private Long id;
+    private String name;
+    private Double latitude;
+    private Double longitude;
+    private Boolean available;
+
+    public StationMarker() {}
+
+    public StationMarker(Long id, String name, Double latitude, Double longitude, Boolean available) {
+        this.id = id;
+        this.name = name;
+        this.latitude = latitude;
+        this.longitude = longitude;
+        this.available = available;
+    }
+
+    // Getters and Setters
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
+    public Double getLatitude() { return latitude; }
+    public void setLatitude(Double latitude) { this.latitude = latitude; }
+    public Double getLongitude() { return longitude; }
+    public void setLongitude(Double longitude) { this.longitude = longitude; }
+    public Boolean getAvailable() { return available; }
+    public void setAvailable(Boolean available) { this.available = available; }
+}
+```
+
+**File:** `station-finder-backend/src/main/java/com/ganesh/finder/dto/StationWithScore.java`
+
+```java
+package com.ganesh.finder.dto;
+
+import java.util.List;
+
+/**
+ * Full station data with scoring and slot info.
+ */
+public class StationWithScore {
+    private Long id;
+    private String name;
+    private Double latitude;
+    private Double longitude;
+    private String address;
+    private String operatingHours;
+    private Double pricePerKwh;
+    private Double rating;
+    private Boolean isOpen;
+    private String meta;
+
+    // Computed fields
+    private Double distance;
+    private Integer availableSlots;
+    private Integer totalSlots;
+    private List<String> connectorTypes;
+    private List<SlotInfo> slots;
+
+    public static class SlotInfo {
+        private Long id;
+        private String label;
+        private String connectorType;
+        private Double powerKw;
+        private Boolean isAvailable;
+
+        public SlotInfo() {}
+
+        public SlotInfo(Long id, String label, String connectorType, Double powerKw, Boolean isAvailable) {
+            this.id = id;
+            this.label = label;
+            this.connectorType = connectorType;
+            this.powerKw = powerKw;
+            this.isAvailable = isAvailable;
+        }
+
+        // Getters and Setters
+        public Long getId() { return id; }
+        public void setId(Long id) { this.id = id; }
+        public String getLabel() { return label; }
+        public void setLabel(String label) { this.label = label; }
+        public String getConnectorType() { return connectorType; }
+        public void setConnectorType(String connectorType) { this.connectorType = connectorType; }
+        public Double getPowerKw() { return powerKw; }
+        public void setPowerKw(Double powerKw) { this.powerKw = powerKw; }
+        public Boolean getIsAvailable() { return isAvailable; }
+        public void setIsAvailable(Boolean isAvailable) { this.isAvailable = isAvailable; }
+    }
+
+    // Getters and Setters
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
+    public Double getLatitude() { return latitude; }
+    public void setLatitude(Double latitude) { this.latitude = latitude; }
+    public Double getLongitude() { return longitude; }
+    public void setLongitude(Double longitude) { this.longitude = longitude; }
+    public String getAddress() { return address; }
+    public void setAddress(String address) { this.address = address; }
+    public String getOperatingHours() { return operatingHours; }
+    public void setOperatingHours(String operatingHours) { this.operatingHours = operatingHours; }
+    public Double getPricePerKwh() { return pricePerKwh; }
+    public void setPricePerKwh(Double pricePerKwh) { this.pricePerKwh = pricePerKwh; }
+    public Double getRating() { return rating; }
+    public void setRating(Double rating) { this.rating = rating; }
+    public Boolean getIsOpen() { return isOpen; }
+    public void setIsOpen(Boolean isOpen) { this.isOpen = isOpen; }
+    public String getMeta() { return meta; }
+    public void setMeta(String meta) { this.meta = meta; }
+    public Double getDistance() { return distance; }
+    public void setDistance(Double distance) { this.distance = distance; }
+    public Integer getAvailableSlots() { return availableSlots; }
+    public void setAvailableSlots(Integer availableSlots) { this.availableSlots = availableSlots; }
+    public Integer getTotalSlots() { return totalSlots; }
+    public void setTotalSlots(Integer totalSlots) { this.totalSlots = totalSlots; }
+    public List<String> getConnectorTypes() { return connectorTypes; }
+    public void setConnectorTypes(List<String> connectorTypes) { this.connectorTypes = connectorTypes; }
+    public List<SlotInfo> getSlots() { return slots; }
+    public void setSlots(List<SlotInfo> slots) { this.slots = slots; }
+}
+```
+
+### Step 2.4 — Create Repositories
+
+**File:** `station-finder-backend/src/main/java/com/ganesh/finder/repository/StationRepository.java`
+
+```java
+package com.ganesh.finder.repository;
+
+import com.ganesh.finder.model.Station;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
+
+import java.util.List;
+import java.util.Optional;
+
+@Repository
+public interface StationRepository extends JpaRepository<Station, Long> {
+
+    // Find stations within a bounding box (viewport)
+    @Query("SELECT s FROM Station s WHERE s.latitude BETWEEN :swLat AND :neLat AND s.longitude BETWEEN :swLng AND :neLng")
+    List<Station> findStationsInViewport(
+        @Param("swLat") double swLat,
+        @Param("neLat") double neLat,
+        @Param("swLng") double swLng,
+        @Param("neLng") double neLng
+    );
+
+    // Search by name or address (case-insensitive)
+    @Query("SELECT s FROM Station s WHERE LOWER(s.name) LIKE LOWER(CONCAT('%', :query, '%')) OR LOWER(s.address) LIKE LOWER(CONCAT('%', :query, '%'))")
+    List<Station> searchByNameOrAddress(@Param("query") String query);
+
+    // Check if station already imported by OCM ID
+    Optional<Station> findByOcmId(Long ocmId);
+
+    // Count imported stations
+    long count();
+}
+```
+
+**File:** `station-finder-backend/src/main/java/com/ganesh/finder/repository/ChargerSlotRepository.java`
+
+```java
+package com.ganesh.finder.repository;
+
+import com.ganesh.finder.model.ChargerSlot;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+import java.util.List;
+
+@Repository
+public interface ChargerSlotRepository extends JpaRepository<ChargerSlot, Long> {
+
+    List<ChargerSlot> findByStationId(Long stationId);
+
+    List<ChargerSlot> findByStationIdAndIsAvailableTrue(Long stationId);
+
+    long countByStationIdAndIsAvailableTrue(Long stationId);
+
+    long countByStationId(Long stationId);
+
+    void deleteByStationId(Long stationId);
+}
+```
+
+### ✅ Phase 2 Verification
+
+```bash
+cd station-finder-backend
+./mvnw compile -q 2>&1 | tail -10
+```
+
+Expected: `BUILD SUCCESS`
+
+---
+
+## Phase 3: StationImportService + DataSeeder
+
+**Estimated time:** 1-2 hours
+
+### Step 3.1 — Create StationImportService
+
+**File:** `station-finder-backend/src/main/java/com/ganesh/finder/service/StationImportService.java`
+
+```java
+package com.ganesh.finder.service;
+
+import com.ganesh.finder.model.ChargerSlot;
+import com.ganesh.finder.model.Station;
+import com.ganesh.finder.repository.ChargerSlotRepository;
+import com.ganesh.finder.repository.StationRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
@@ -292,8 +724,10 @@ import org.springframework.web.client.RestTemplate;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 @Service
 public class StationImportService {
@@ -309,21 +743,25 @@ public class StationImportService {
     @Value("${ocm.sync.country-id:101}")
     private int countryId;
 
-    @Autowired
-    private StationRepository stationRepository;
+    private final StationRepository stationRepository;
+    private final ChargerSlotRepository chargerSlotRepository;
+    private final RestTemplate restTemplate;
+    private final ObjectMapper objectMapper;
 
-    @Autowired
-    private ChargerSlotRepository chargerSlotRepository;
-
-    private final RestTemplate restTemplate = new RestTemplate();
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    public StationImportService(StationRepository stationRepository,
+                                ChargerSlotRepository chargerSlotRepository) {
+        this.stationRepository = stationRepository;
+        this.chargerSlotRepository = chargerSlotRepository;
+        this.restTemplate = new RestTemplate();
+        this.objectMapper = new ObjectMapper();
+    }
 
     /**
      * Fetch stations from OCM within a radius of a center point.
-     * 
-     * @param centerLat  Center latitude
-     * @param centerLng  Center longitude
-     * @param radiusKm   Search radius in kilometers
+     *
+     * @param centerLat Center latitude
+     * @param centerLng Center longitude
+     * @param radiusKm  Search radius in kilometers
      * @return Number of stations imported
      */
     @Transactional
@@ -360,7 +798,8 @@ public class StationImportService {
                 }
             }
 
-            log.info("OCM import complete: {} imported, {} skipped (total {})", imported, skipped, root.size());
+            log.info("OCM import complete: {} imported, {} skipped (total {})",
+                    imported, skipped, root.size());
 
         } catch (Exception e) {
             log.error("OCM import failed: {}", e.getMessage(), e);
@@ -369,9 +808,6 @@ public class StationImportService {
         return imported;
     }
 
-    /**
-     * Build the OCM API URL with query parameters.
-     */
     private String buildOCMUrl(double lat, double lng, int radiusKm) {
         String baseUrl = "https://api.openchargemap.io/v3/poi";
         return baseUrl + "?key=" + URLEncoder.encode(ocmApiKey, StandardCharsets.UTF_8)
@@ -385,26 +821,25 @@ public class StationImportService {
                 + "&countryid=" + countryId;
     }
 
-    /**
-     * Transform a single OCM station JSON node into a Station entity and save it.
-     * Returns true if a new station was created, false if skipped (duplicate or invalid).
-     */
-    private boolean transformAndSave(JsonNode ocmNode) {
-        // Extract OCM UUID for deduplication
-        String ocmUuid = ocmNode.has("UUID") && !ocmNode.get("UUID").isNull()
-                ? ocmNode.get("UUID").asText()
-                : null;
+    @Transactional
+    public boolean transformAndSave(JsonNode ocmNode) {
+        // Extract OCM ID for deduplication
+        long ocmId = ocmNode.has("ID") && !ocmNode.get("ID").isNull()
+                ? ocmNode.get("ID").asLong()
+                : -1;
 
-        if (ocmUuid == null || ocmUuid.isEmpty()) {
-            return false; // Skip stations without UUID
+        if (ocmId == -1) {
+            return false; // Skip stations without ID
         }
 
-        // Check if this station was already imported (dedup by OCM UUID in meta)
-        boolean exists = stationRepository.findAll().stream()
-                .anyMatch(s -> s.getMeta() != null && s.getMeta().contains("\"ocm_id\":" + ocmNode.get("ID").asLong()));
-
-        if (exists) {
-            return false; // Skip — already imported
+        // Check if already imported
+        Optional<Station> existing = stationRepository.findByOcmId(ocmId);
+        if (existing.isPresent()) {
+            // Update lastSynced timestamp
+            Station station = existing.get();
+            station.setLastSynced(LocalDateTime.now());
+            stationRepository.save(station);
+            return false; // Already exists
         }
 
         // Extract AddressInfo
@@ -413,9 +848,17 @@ public class StationImportService {
             return false;
         }
 
-        String name = addressInfo.has("Title") ? addressInfo.get("Title").asText() : "Unknown Station";
-        double latitude = addressInfo.has("Latitude") ? addressInfo.get("Latitude").asDouble() : 0;
-        double longitude = addressInfo.has("Longitude") ? addressInfo.get("Longitude").asDouble() : 0;
+        String name = addressInfo.has("Title") && !addressInfo.get("Title").isNull()
+                ? addressInfo.get("Title").asText()
+                : "Unknown Station";
+
+        double latitude = addressInfo.has("Latitude") && !addressInfo.get("Latitude").isNull()
+                ? addressInfo.get("Latitude").asDouble()
+                : 0;
+
+        double longitude = addressInfo.has("Longitude") && !addressInfo.get("Longitude").isNull()
+                ? addressInfo.get("Longitude").asDouble()
+                : 0;
 
         if (latitude == 0 && longitude == 0) {
             return false; // Skip stations with no coordinates
@@ -434,22 +877,33 @@ public class StationImportService {
             if (addressBuilder.length() > 0) addressBuilder.append(", ");
             addressBuilder.append(addressInfo.get("StateOrProvince").asText());
         }
-        String address = addressBuilder.length() > 0 ? addressBuilder.toString() : "Address not available";
+        String address = addressBuilder.length() > 0
+                ? addressBuilder.toString()
+                : "Address not available";
+
+        // Extract OCM UUID
+        String ocmUuid = ocmNode.has("UUID") && !ocmNode.get("UUID").isNull()
+                ? ocmNode.get("UUID").asText()
+                : null;
 
         // Build meta JSON
         StringBuilder metaBuilder = new StringBuilder();
         metaBuilder.append("{");
-        metaBuilder.append("\"ocm_id\":").append(ocmNode.get("ID").asLong());
-        metaBuilder.append(",\"ocm_uuid\":\"").append(escapeJson(ocmUuid)).append("\"");
+        metaBuilder.append("\"ocm_id\":").append(ocmId);
+        if (ocmUuid != null) {
+            metaBuilder.append(",\"ocm_uuid\":\"").append(escapeJson(ocmUuid)).append("\"");
+        }
 
         // Operator info
         if (ocmNode.has("OperatorInfo") && !ocmNode.get("OperatorInfo").isNull()) {
             JsonNode operator = ocmNode.get("OperatorInfo");
             if (operator.has("Title") && !operator.get("Title").isNull()) {
-                metaBuilder.append(",\"ocm_operator\":\"").append(escapeJson(operator.get("Title").asText())).append("\"");
+                metaBuilder.append(",\"ocm_operator\":\"")
+                        .append(escapeJson(operator.get("Title").asText())).append("\"");
             }
             if (operator.has("WebsiteURL") && !operator.get("WebsiteURL").isNull()) {
-                metaBuilder.append(",\"ocm_website\":\"").append(escapeJson(operator.get("WebsiteURL").asText())).append("\"");
+                metaBuilder.append(",\"ocm_website\":\"")
+                        .append(escapeJson(operator.get("WebsiteURL").asText())).append("\"");
             }
         }
 
@@ -457,43 +911,41 @@ public class StationImportService {
         if (ocmNode.has("UsageType") && !ocmNode.get("UsageType").isNull()) {
             JsonNode usage = ocmNode.get("UsageType");
             if (usage.has("Title") && !usage.get("Title").isNull()) {
-                metaBuilder.append(",\"ocm_usage_type\":\"").append(escapeJson(usage.get("Title").asText())).append("\"");
+                metaBuilder.append(",\"ocm_usage_type\":\"")
+                        .append(escapeJson(usage.get("Title").asText())).append("\"");
             }
         }
 
         // Comments
         if (ocmNode.has("GeneralComments") && !ocmNode.get("GeneralComments").isNull()) {
-            metaBuilder.append(",\"ocm_comments\":\"").append(escapeJson(ocmNode.get("GeneralComments").asText())).append("\"");
+            metaBuilder.append(",\"ocm_comments\":\"")
+                    .append(escapeJson(ocmNode.get("GeneralComments").asText())).append("\"");
         }
 
         metaBuilder.append(",\"source\":\"OCM\"");
-        metaBuilder.append(",\"last_synced\":\"").append(java.time.LocalDateTime.now().toString()).append("\"");
+        metaBuilder.append(",\"last_synced\":\"").append(LocalDateTime.now()).append("\"");
         metaBuilder.append("}");
 
-        // Operating hours from OCM (if available)
-        String operatingHours = "24 Hours"; // Default
+        // Determine operating hours from usage type
+        String operatingHours = "24 Hours";
         if (ocmNode.has("UsageType") && !ocmNode.get("UsageType").isNull()) {
             JsonNode usage = ocmNode.get("UsageType");
-            // Some common OCM usage types that imply 24/7
-            String usageTitle = usage.has("Title") ? usage.get("Title").asText() : "";
-            if (usageTitle.toLowerCase().contains("pay") || usageTitle.toLowerCase().contains("public")) {
-                operatingHours = "24 Hours";
+            String usageTitle = usage.has("Title") ? usage.get("Title").asText().toLowerCase() : "";
+            if (!usageTitle.contains("pay") && !usageTitle.contains("public")) {
+                operatingHours = "Check with operator";
             }
         }
 
         // Create Station entity
-        Station station = Station.builder()
-                .name(name)
-                .latitude(latitude)
-                .longitude(longitude)
-                .address(address)
-                .owner(null) // No owner — these are public OCM stations
-                .meta(metaBuilder.toString())
-                .rating(0.0)
-                .operatingHours(operatingHours)
-                .pricePerKwh(0.0) // Unknown from OCM; owner can set later
-                .truckPricePerKwh(0.0)
-                .build();
+        Station station = new Station(name, latitude, longitude, address);
+        station.setOperatingHours(operatingHours);
+        station.setPricePerKwh(0.0); // Unknown from OCM
+        station.setRating(0.0);
+        station.setIsOpen(true);
+        station.setOcmId(ocmId);
+        station.setOcmUuid(ocmUuid);
+        station.setMeta(metaBuilder.toString());
+        station.setLastSynced(LocalDateTime.now());
 
         station = stationRepository.save(station);
 
@@ -510,36 +962,30 @@ public class StationImportService {
                         ? conn.get("PowerKW").asDouble()
                         : 22.0;
 
-                ConnectorType connectorType = mapConnectorType(conn);
-                SlotType slotType = (connectorType == ConnectorType.TYPE_2) ? SlotType.AC : SlotType.DC;
+                String connectorType = mapConnectorType(conn);
+                String slotPrefix = connectorType.replaceAll("[^a-zA-Z0-9]", "");
 
                 for (int i = 0; i < quantity; i++) {
-                    ChargerSlot slot = ChargerSlot.builder()
-                            .station(station)
-                            .dispensary(null) // OCM doesn't provide dispensary data
-                            .slotLabel(connectorType.toString() + " #" + (i + 1))
-                            .slotType(slotType)
-                            .status(SlotStatus.AVAILABLE)
-                            .connectorType(connectorType)
-                            .powerKw(powerKw)
-                            .build();
+                    ChargerSlot slot = new ChargerSlot(
+                            station,
+                            slotPrefix + " #" + (i + 1),
+                            connectorType,
+                            powerKw
+                    );
                     slotsToCreate.add(slot);
                 }
             }
         }
 
-        // If no connections found, create 2 default CCS2 slots
+        // If no connections, create 2 default CCS2 slots
         if (slotsToCreate.isEmpty()) {
             for (int i = 0; i < 2; i++) {
-                ChargerSlot slot = ChargerSlot.builder()
-                        .station(station)
-                        .dispensary(null)
-                        .slotLabel("CCS2 #" + (i + 1))
-                        .slotType(SlotType.DC)
-                        .status(SlotStatus.AVAILABLE)
-                        .connectorType(ConnectorType.CCS2)
-                        .powerKw(60.0)
-                        .build();
+                ChargerSlot slot = new ChargerSlot(
+                        station,
+                        "CCS2 #" + (i + 1),
+                        "CCS2",
+                        60.0
+                );
                 slotsToCreate.add(slot);
             }
         }
@@ -549,41 +995,36 @@ public class StationImportService {
         return true;
     }
 
-    /**
-     * Map OCM connection type to backend ConnectorType enum.
-     */
-    private ConnectorType mapConnectorType(JsonNode connection) {
+    private String mapConnectorType(JsonNode connection) {
         if (connection.has("ConnectionType") && !connection.get("ConnectionType").isNull()) {
             JsonNode connType = connection.get("ConnectionType");
             String title = connType.has("Title") && !connType.get("Title").isNull()
                     ? connType.get("Title").asText().toLowerCase()
                     : "";
 
-            if (title.contains("ccs") || title.contains("combo") || title.contains("dc")) {
-                return ConnectorType.CCS2;
+            if (title.contains("ccs") || title.contains("combo")) {
+                return "CCS2";
             }
             if (title.contains("type 2") || title.contains("type2") || title.contains("mennekes")) {
-                return ConnectorType.TYPE_2;
+                return "Type 2";
             }
             if (title.contains("chademo")) {
-                return ConnectorType.CCS2; // Treat CHAdeMO as CCS2 for compatibility
+                return "CHAdeMO";
+            }
+            if (title.contains("type 1") || title.contains("type1") || title.contains("j1772")) {
+                return "Type 1";
             }
         }
 
-        // Check power level: high power = DC
+        // Default based on power level
         if (connection.has("PowerKW") && !connection.get("PowerKW").isNull()) {
             double power = connection.get("PowerKW").asDouble();
-            if (power > 22) {
-                return ConnectorType.CCS2;
-            }
+            return power > 22 ? "CCS2" : "Type 2";
         }
 
-        return ConnectorType.CCS2; // Default
+        return "CCS2";
     }
 
-    /**
-     * Escape a string for safe inclusion in JSON.
-     */
     private String escapeJson(String value) {
         if (value == null) return "";
         return value
@@ -596,10 +1037,77 @@ public class StationImportService {
 }
 ```
 
-### ✅ Phase 2 Verification
+### Step 3.2 — Create DataSeeder
+
+**File:** `station-finder-backend/src/main/java/com/ganesh/finder/config/DataSeeder.java`
+
+```java
+package com.ganesh.finder.config;
+
+import com.ganesh.finder.service.StationImportService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.boot.CommandLineRunner;
+import org.springframework.stereotype.Component;
+
+@Component
+public class DataSeeder implements CommandLineRunner {
+
+    private static final Logger log = LoggerFactory.getLogger(DataSeeder.class);
+
+    private final StationImportService stationImportService;
+
+    public DataSeeder(StationImportService stationImportService) {
+        this.stationImportService = stationImportService;
+    }
+
+    @Override
+    public void run(String... args) {
+        log.info("====================================");
+        log.info("🔍 STATION FINDER DATA SEEDER STARTED");
+        log.info("====================================");
+
+        try {
+            // Import stations for major Indian cities on first run
+            // Using radius 50km for each city center
+
+            log.info("🗺️ Importing stations from Mumbai...");
+            int mumbaiCount = stationImportService.importFromOCM(19.0760, 72.8777, 50);
+            log.info("✅ Imported {} stations from Mumbai region", mumbaiCount);
+
+            log.info("🗺️ Importing stations from Bangalore...");
+            int bangaloreCount = stationImportService.importFromOCM(12.9716, 77.5946, 50);
+            log.info("✅ Imported {} stations from Bangalore region", bangaloreCount);
+
+            log.info("🗺️ Importing stations from Delhi...");
+            int delhiCount = stationImportService.importFromOCM(28.7041, 77.1025, 50);
+            log.info("✅ Imported {} stations from Delhi region", delhiCount);
+
+            log.info("🗺️ Importing stations from Hyderabad...");
+            int hyderabadCount = stationImportService.importFromOCM(17.3850, 78.4867, 50);
+            log.info("✅ Imported {} stations from Hyderabad region", hyderabadCount);
+
+            log.info("🗺️ Importing stations from Chennai...");
+            int chennaiCount = stationImportService.importFromOCM(13.0827, 80.2707, 50);
+            log.info("✅ Imported {} stations from Chennai region", chennaiCount);
+
+            int total = mumbaiCount + bangaloreCount + delhiCount + hyderabadCount + chennaiCount;
+            log.info("====================================");
+            log.info("🎉 SEEDING COMPLETE: {} total stations imported", total);
+            log.info("====================================");
+
+        } catch (Exception e) {
+            log.warn("⚠️ Seeding skipped or partially completed: {}", e.getMessage());
+            log.warn("Make sure OCM_API_KEY environment variable is set.");
+        }
+    }
+}
+```
+
+### ✅ Phase 3 Verification
 
 ```bash
-cd backend
+cd station-finder-backend
 ./mvnw compile -q 2>&1 | tail -10
 ```
 
@@ -607,126 +1115,427 @@ Expected: `BUILD SUCCESS`
 
 ---
 
-## Phase 3: Backend — StationSyncJob & Configuration
+## Phase 4: StationService + StationController
 
-> **Files to create:** 1
-> **Files to modify:** 2
-> **Estimated time:** 30 min
+**Estimated time:** 1 hour
 
-### Step 3.1 — Create StationSyncJob
+### Step 4.1 — Create StationService
 
-**File path:** `backend/src/main/java/com/ganesh/EV_Project/config/StationSyncJob.java`
-
-A scheduled job that periodically syncs new/updated stations from OpenChargeMap.
+**File:** `station-finder-backend/src/main/java/com/ganesh/finder/service/StationService.java`
 
 ```java
-package com.ganesh.EV_Project.config;
+package com.ganesh.finder.service;
 
-import com.ganesh.EV_Project.service.StationImportService;
+import com.ganesh.finder.dto.StationMarker;
+import com.ganesh.finder.dto.StationWithScore;
+import com.ganesh.finder.model.ChargerSlot;
+import com.ganesh.finder.model.Station;
+import com.ganesh.finder.repository.ChargerSlotRepository;
+import com.ganesh.finder.repository.StationRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Optional;
+import java.util.stream.Collectors;
+
+@Service
+public class StationService {
+
+    private static final Logger log = LoggerFactory.getLogger(StationService.class);
+
+    private final StationRepository stationRepository;
+    private final ChargerSlotRepository chargerSlotRepository;
+
+    public StationService(StationRepository stationRepository,
+                          ChargerSlotRepository chargerSlotRepository) {
+        this.stationRepository = stationRepository;
+        this.chargerSlotRepository = chargerSlotRepository;
+    }
+
+    /**
+     * Get lightweight markers for stations in a viewport.
+     */
+    public List<StationMarker> getStationsInViewport(double neLat, double neLng,
+                                                      double swLat, double swLng) {
+        List<Station> stations = stationRepository.findStationsInViewport(
+                Math.min(swLat, neLat), Math.max(swLat, neLat),
+                Math.min(swLng, neLng), Math.max(swLng, neLng));
+
+        return stations.stream().map(station -> {
+            long availableSlots = chargerSlotRepository.countByStationIdAndIsAvailableTrue(station.getId());
+            return new StationMarker(
+                    station.getId(),
+                    station.getName(),
+                    station.getLatitude(),
+                    station.getLongitude(),
+                    availableSlots > 0
+            );
+        }).collect(Collectors.toList());
+    }
+
+    /**
+     * Get nearby stations ranked by distance.
+     */
+    public List<StationWithScore> getNearbyStations(double lat, double lng,
+                                                     double radiusKm, int limit) {
+        // Calculate approximate bounding box
+        double latDelta = radiusKm / 111.0;
+        double lngDelta = radiusKm / (111.0 * Math.cos(Math.toRadians(lat)));
+
+        List<Station> stations = stationRepository.findStationsInViewport(
+                lat - latDelta, lat + latDelta,
+                lng - lngDelta, lng + lngDelta);
+
+        return stations.stream()
+                .map(station -> enrichWithScore(station, lat, lng))
+                .filter(s -> s.getDistance() <= radiusKm)
+                .sorted(Comparator.comparingDouble(StationWithScore::getDistance))
+                .limit(limit)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Get detailed info for a single station.
+     */
+    public Optional<StationWithScore> getStationDetail(Long id, double userLat, double userLng) {
+        return stationRepository.findById(id)
+                .map(station -> enrichWithScore(station, userLat, userLng));
+    }
+
+    /**
+     * Search stations by name or address.
+     */
+    public List<StationWithScore> searchStations(String query, double lat, double lng, double radiusKm) {
+        List<Station> stations = stationRepository.searchByNameOrAddress(query.toLowerCase().trim());
+
+        return stations.stream()
+                .map(station -> enrichWithScore(station, lat, lng))
+                .filter(s -> s.getDistance() <= radiusKm)
+                .sorted(Comparator.comparingDouble(StationWithScore::getDistance))
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Get total station count.
+     */
+    public long getStationCount() {
+        return stationRepository.count();
+    }
+
+    /**
+     * Enrich a Station entity with scoring and slot data.
+     */
+    private StationWithScore enrichWithScore(Station station, double userLat, double userLng) {
+        StationWithScore dto = new StationWithScore();
+        dto.setId(station.getId());
+        dto.setName(station.getName());
+        dto.setLatitude(station.getLatitude());
+        dto.setLongitude(station.getLongitude());
+        dto.setAddress(station.getAddress());
+        dto.setOperatingHours(station.getOperatingHours());
+        dto.setPricePerKwh(station.getPricePerKwh());
+        dto.setRating(station.getRating());
+        dto.setIsOpen(station.getIsOpen());
+        dto.setMeta(station.getMeta());
+
+        // Calculate distance using Haversine formula
+        dto.setDistance(calculateDistance(userLat, userLng, station.getLatitude(), station.getLongitude()));
+
+        // Get slot data
+        List<ChargerSlot> slots = chargerSlotRepository.findByStationId(station.getId());
+        long availableCount = slots.stream().filter(ChargerSlot::getIsAvailable).count();
+
+        dto.setTotalSlots(slots.size());
+        dto.setAvailableSlots((int) availableCount);
+
+        // Extract unique connector types
+        List<String> connectorTypes = slots.stream()
+                .map(ChargerSlot::getConnectorType)
+                .distinct()
+                .collect(Collectors.toList());
+        dto.setConnectorTypes(connectorTypes);
+
+        // Slot details
+        List<StationWithScore.SlotInfo> slotInfos = slots.stream()
+                .map(slot -> new StationWithScore.SlotInfo(
+                        slot.getId(),
+                        slot.getSlotLabel(),
+                        slot.getConnectorType(),
+                        slot.getPowerKw(),
+                        slot.getIsAvailable()
+                ))
+                .collect(Collectors.toList());
+        dto.setSlots(slotInfos);
+
+        return dto;
+    }
+
+    /**
+     * Haversine distance between two lat/lng points in kilometers.
+     */
+    private double calculateDistance(double lat1, double lng1, double lat2, double lng2) {
+        final double R = 6371; // Earth's radius in km
+        double dLat = Math.toRadians(lat2 - lat1);
+        double dLng = Math.toRadians(lng2 - lng1);
+        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
+                + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2))
+                * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+        double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return R * c;
+    }
+}
+```
+
+### Step 4.2 — Create StationController
+
+**File:** `station-finder-backend/src/main/java/com/ganesh/finder/controller/StationController.java`
+
+```java
+package com.ganesh.finder.controller;
+
+import com.ganesh.finder.dto.ApiResponse;
+import com.ganesh.finder.dto.StationMarker;
+import com.ganesh.finder.dto.StationWithScore;
+import com.ganesh.finder.service.StationService;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.util.Map;
+
+@RestController
+@RequestMapping("/api/stations")
+public class StationController {
+
+    private final StationService stationService;
+
+    public StationController(StationService stationService) {
+        this.stationService = stationService;
+    }
+
+    /**
+     * GET /api/stations/nearby?lat=19.0760&lng=72.8777&radius=50&limit=20
+     */
+    @GetMapping("/nearby")
+    public ResponseEntity<ApiResponse<?>> getNearbyStations(
+            @RequestParam double lat,
+            @RequestParam double lng,
+            @RequestParam(defaultValue = "50") double radius,
+            @RequestParam(defaultValue = "20") int limit) {
+        try {
+            List<StationWithScore> stations = stationService.getNearbyStations(lat, lng, radius, limit);
+            return ResponseEntity.ok(ApiResponse.success(
+                    "Found " + stations.size() + " nearby stations", stations));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError()
+                    .body(ApiResponse.error("Error: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * GET /api/stations/viewport?neLat=19.2&neLng=73.0&swLat=18.9&swLng=72.7
+     */
+    @GetMapping("/viewport")
+    public ResponseEntity<ApiResponse<?>> getStationsInViewport(
+            @RequestParam double neLat,
+            @RequestParam double neLng,
+            @RequestParam double swLat,
+            @RequestParam double swLng) {
+        try {
+            List<StationMarker> markers = stationService.getStationsInViewport(neLat, neLng, swLat, swLng);
+            return ResponseEntity.ok(ApiResponse.success(
+                    "Found " + markers.size() + " stations in viewport", markers));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError()
+                    .body(ApiResponse.error("Error: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * GET /api/stations/{id}/detail?lat=19.0760&lng=72.8777
+     */
+    @GetMapping("/{id}/detail")
+    public ResponseEntity<ApiResponse<?>> getStationDetail(
+            @PathVariable Long id,
+            @RequestParam double lat,
+            @RequestParam double lng) {
+        try {
+            var detail = stationService.getStationDetail(id, lat, lng);
+            if (detail.isPresent()) {
+                return ResponseEntity.ok(ApiResponse.success("Station found", detail.get()));
+            }
+            return ResponseEntity.status(404).body(ApiResponse.error("Station not found"));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError()
+                    .body(ApiResponse.error("Error: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * GET /api/stations/search?q=nexon&lat=19.0760&lng=72.8777&radius=50
+     */
+    @GetMapping("/search")
+    public ResponseEntity<ApiResponse<?>> searchStations(
+            @RequestParam String q,
+            @RequestParam double lat,
+            @RequestParam double lng,
+            @RequestParam(defaultValue = "50") double radius) {
+        try {
+            List<StationWithScore> results = stationService.searchStations(q, lat, lng, radius);
+            return ResponseEntity.ok(ApiResponse.success(
+                    "Found " + results.size() + " stations matching \"" + q + "\"", results));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError()
+                    .body(ApiResponse.error("Error: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * GET /api/stations/count
+     */
+    @GetMapping("/count")
+    public ResponseEntity<ApiResponse<?>> getStationCount() {
+        try {
+            long count = stationService.getStationCount();
+            return ResponseEntity.ok(ApiResponse.success("OK", Map.of("count", count)));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError()
+                    .body(ApiResponse.error("Error: " + e.getMessage()));
+        }
+    }
+}
+```
+
+### Step 4.3 — Create ImportController (Manual Trigger)
+
+**File:** `station-finder-backend/src/main/java/com/ganesh/finder/controller/ImportController.java`
+
+```java
+package com.ganesh.finder.controller;
+
+import com.ganesh.finder.dto.ApiResponse;
+import com.ganesh.finder.service.StationImportService;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.Map;
+
+@RestController
+@RequestMapping("/api/import")
+public class ImportController {
+
+    private final StationImportService stationImportService;
+
+    public ImportController(StationImportService stationImportService) {
+        this.stationImportService = stationImportService;
+    }
+
+    /**
+     * POST /api/import/trigger?lat=19.0760&lng=72.8777&radius=50
+     * Manually trigger an OCM import.
+     */
+    @PostMapping("/trigger")
+    public ResponseEntity<ApiResponse<?>> triggerImport(
+            @RequestParam double lat,
+            @RequestParam double lng,
+            @RequestParam(defaultValue = "50") int radius) {
+        try {
+            int count = stationImportService.importFromOCM(lat, lng, radius);
+            return ResponseEntity.ok(ApiResponse.success(
+                    "Imported " + count + " stations", Map.of("imported", count)));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError()
+                    .body(ApiResponse.error("Import failed: " + e.getMessage()));
+        }
+    }
+}
+```
+
+### ✅ Phase 4 Verification
+
+```bash
+cd station-finder-backend
+./mvnw compile -q 2>&1 | tail -10
+```
+
+Expected: `BUILD SUCCESS`
+
+---
+
+## Phase 5: StationSyncJob + Configuration
+
+**Estimated time:** 30 min
+
+### Step 5.1 — Create StationSyncJob
+
+**File:** `station-finder-backend/src/main/java/com/ganesh/finder/config/StationSyncJob.java`
+
+```java
+package com.ganesh.finder.config;
+
+import com.ganesh.finder.service.StationImportService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 @Component
-@EnableScheduling
 @ConditionalOnProperty(name = "ocm.sync.enabled", havingValue = "true", matchIfMissing = false)
 public class StationSyncJob {
 
     private static final Logger log = LoggerFactory.getLogger(StationSyncJob.class);
 
-    @Autowired
-    private StationImportService stationImportService;
+    private final StationImportService stationImportService;
 
     @Value("${ocm.sync.radius-km:500}")
     private int radiusKm;
 
-    @Value("${ocm.sync.country-id:101}")
-    private int countryId;
+    public StationSyncJob(StationImportService stationImportService) {
+        this.stationImportService = stationImportService;
+    }
 
     /**
      * Daily sync at 3:00 AM.
-     * Uses default center point (Mumbai) as the anchor for importing nearby stations.
-     * In production, you can make this smarter by syncing multiple regions.
+     * Syncs stations around 5 major Indian cities.
      */
     @Scheduled(cron = "${ocm.sync.interval-cron:0 0 3 * * ?}")
     public void syncStations() {
         log.info("Starting scheduled OCM station sync...");
 
-        // Mumbai region
-        int mumbaiCount = stationImportService.importFromOCM(19.0760, 72.8777, radiusKm);
-        log.info("Mumbai region: {} stations imported", mumbaiCount);
+        int total = 0;
 
-        // Bangalore region
-        int bangaloreCount = stationImportService.importFromOCM(12.9716, 77.5946, radiusKm);
-        log.info("Bangalore region: {} stations imported", bangaloreCount);
+        // Mumbai
+        total += stationImportService.importFromOCM(19.0760, 72.8777, radiusKm);
 
-        // Delhi region
-        int delhiCount = stationImportService.importFromOCM(28.7041, 77.1025, radiusKm);
-        log.info("Delhi region: {} stations imported", delhiCount);
+        // Bangalore
+        total += stationImportService.importFromOCM(12.9716, 77.5946, radiusKm);
 
-        // Hyderabad region
-        int hyderabadCount = stationImportService.importFromOCM(17.3850, 78.4867, radiusKm);
-        log.info("Hyderabad region: {} stations imported", hyderabadCount);
+        // Delhi
+        total += stationImportService.importFromOCM(28.7041, 77.1025, radiusKm);
 
-        // Chennai region
-        int chennaiCount = stationImportService.importFromOCM(13.0827, 80.2707, radiusKm);
-        log.info("Chennai region: {} stations imported", chennaiCount);
+        // Hyderabad
+        total += stationImportService.importFromOCM(17.3850, 78.4867, radiusKm);
 
-        int total = mumbaiCount + bangaloreCount + delhiCount + hyderabadCount + chennaiCount;
+        // Chennai
+        total += stationImportService.importFromOCM(13.0827, 80.2707, radiusKm);
+
         log.info("Scheduled OCM sync complete. Total new stations: {}", total);
     }
 }
 ```
 
-### Step 3.2 — Update DataSeeder (Optional Enhancement)
+### Step 5.2 — Configure application.properties
 
-**File path:** `backend/src/main/java/com/ganesh/EV_Project/config/DataSeeder.java`
-
-Add OCM import logic to seed real stations on first startup. Insert this at the end of the `run()` method (after existing seeding logic):
-
-```java
-// ====================================
-// 🗺️ OCM STATION IMPORT (First run only)
-// ====================================
-if (stationRepository.count() <= 3) { // Rough check for "no real data"
-    log.info("🗺️ SEEDING STATIONS FROM OPENCHARGEMAP");
-    try {
-        int mumbaiCount = stationImportService.importFromOCM(19.0760, 72.8777, 50);
-        log.info("Imported {} stations from Mumbai region", mumbaiCount);
-
-        int bangaloreCount = stationImportService.importFromOCM(12.9716, 77.5946, 50);
-        log.info("Imported {} stations from Bangalore region", bangaloreCount);
-    } catch (Exception e) {
-        log.warn("OCM seeding skipped (API key may not be configured): {}", e.getMessage());
-    }
-}
-```
-
-**Important:** You'll need to inject `StationImportService` and `StationRepository` into `DataSeeder.java`:
-
-```java
-@Autowired
-private StationImportService stationImportService;
-
-@Autowired
-private StationRepository stationRepository;
-```
-
-### Step 3.3 — Update application.properties
-
-**File path:** `backend/src/main/resources/application.properties`
-
-Add these lines at the end of the file:
+Already done in Phase 1 (Step 1.4). Just ensure these lines are present:
 
 ```properties
-# ========================================
 # OCM (OpenChargeMap) Import Configuration
-# ========================================
 ocm.api.key=${OCM_API_KEY:demo_key}
 ocm.sync.enabled=true
 ocm.sync.radius-km=500
@@ -734,10 +1543,10 @@ ocm.sync.country-id=101
 ocm.sync.interval-cron=0 0 3 * * ?
 ```
 
-### ✅ Phase 3 Verification
+### ✅ Phase 5 Verification
 
 ```bash
-cd backend
+cd station-finder-backend
 ./mvnw compile -q 2>&1 | tail -10
 ```
 
@@ -745,142 +1554,153 @@ Expected: `BUILD SUCCESS`
 
 ---
 
-## Phase 4: Backend Testing
+## Phase 6: Backend Testing
 
-> **Estimated time:** 1 hour
+**Estimated time:** 1 hour
 
-### Step 4.1 — Start Backend with OCM API Key
+### Step 6.1 — Create Dockerfile (for reference)
+
+**File:** `station-finder-backend/Dockerfile`
+
+```dockerfile
+FROM maven:3.9.6-eclipse-temurin-21-alpine AS build
+WORKDIR /app
+COPY pom.xml .
+RUN mvn dependency:go-offline -B
+COPY src ./src
+RUN mvn clean package -DskipTests
+
+FROM eclipse-temurin:21-jre-alpine
+WORKDIR /app
+COPY --from=build /app/target/ev-station-finder-0.0.1-SNAPSHOT.jar app.jar
+EXPOSE 8081
+ENTRYPOINT ["java", "-jar", "app.jar"]
+```
+
+### Step 6.2 — Start the Backend
 
 ```bash
-cd backend
-# Set your OCM API key (replace with your actual key)
-export OCM_API_KEY="your_ocm_api_key_here"
-# Or on Windows (cmd):
-# set OCM_API_KEY=your_ocm_api_key_here
-# Or on Windows (PowerShell):
-# $env:OCM_API_KEY="your_ocm_api_key_here"
+cd station-finder-backend
 
+# Set your OCM API key
+export OCM_API_KEY="your_ocm_api_key_here"
+# Windows CMD: set OCM_API_KEY=your_ocm_api_key_here
+# Windows PowerShell: $env:OCM_API_KEY="your_ocm_api_key_here"
+
+# Build and run
 ./mvnw spring-boot:run
 ```
 
-### Step 4.2 — Test Finder Endpoints
-
-Open a new terminal and test each endpoint:
-
-```bash
-# 1. Test nearby stations
-curl "http://localhost:8080/api/finder/stations/nearby?lat=19.0760&lng=72.8777&radius=50&limit=5"
-
-# 2. Test viewport markers
-curl "http://localhost:8080/api/finder/stations/viewport?neLat=19.2&neLng=73.0&swLat=18.9&swLng=72.7"
-
-# 3. Test count
-curl "http://localhost:8080/api/finder/stations/count"
-
-# 4. Test search
-curl "http://localhost:8080/api/finder/stations/search?q=nexon&lat=19.0760&lng=72.8777"
-
-# 5. Test detail (replace {id} with an actual station ID from step 1)
-curl "http://localhost:8080/api/finder/stations/detail/1?lat=19.0760&lng=72.8777"
+Wait for:
+```
+Started FinderApplication in X.XXX seconds
 ```
 
-### Step 4.3 — Verify Main App Endpoints Still Work
+### Step 6.3 — Test All Endpoints
+
+Open a new terminal and run:
 
 ```bash
-# GET stations (public endpoint for main app too)
-curl "http://localhost:8080/api/stations/viewport?neLat=19.2&neLng=73.0&swLat=18.9&swLng=72.7"
+# 1. Test station count (should print how many were seeded)
+curl -s "http://localhost:8081/api/stations/count" | json_pp
 
-# Login with test credentials
-curl -X POST "http://localhost:8080/api/auth/login" \
-  -H "Content-Type: application/json" \
-  -d '{"phone":"9999999999","otp":"000000"}'
+# 2. Test nearby stations (Mumbai)
+curl -s "http://localhost:8081/api/stations/nearby?lat=19.0760&lng=72.8777&radius=50&limit=5" | json_pp
 
-# Verify auth-protected endpoints still require token
-curl "http://localhost:8080/api/bookings"  # Should return 403
+# 3. Test viewport markers
+curl -s "http://localhost:8081/api/stations/viewport?neLat=19.2&neLng=73.0&swLat=18.9&swLng=72.7" | json_pp
+
+# 4. Test search
+curl -s "http://localhost:8081/api/stations/search?q=nexon&lat=19.0760&lng=72.8777&radius=50" | json_pp
+
+# 5. Test station detail (replace {id} with an actual ID from step 2)
+curl -s "http://localhost:8081/api/stations/detail/1?lat=19.0760&lng=72.8777" | json_pp
+
+# 6. Test manual import trigger (optional — may create duplicates)
+curl -s -X POST "http://localhost:8081/api/import/trigger?lat=19.0760&lng=72.8777&radius=50" | json_pp
 ```
 
 ### Expected Results
 
-| Test | Expected Status | Expected Response |
-|------|----------------|-------------------|
-| `nearby` | 200 | JSON with `success: true`, array of stations |
-| `viewport` | 200 | JSON with `success: true`, array of markers |
-| `count` | 200 | JSON with `data.count` = number |
-| `search` | 200 | Filtered results |
-| `detail` | 200 | Single station with full scoring |
-| Main app endpoints | 200 (GET) / 403 (POST without auth) | Unchanged behavior |
+| Test | Expected |
+|------|----------|
+| `count` | `{"success":true,"data":{"count":50}}` (or whatever was imported) |
+| `nearby` | Array of stations with distance, slots, connector types |
+| `viewport` | Array of `{id, name, lat, lng, available}` markers |
+| `search` | Filtered results matching query |
+| `detail` | Single station with full slot details and distance |
+| `import` | `{"success":true,"data":{"imported":0}}` (0 because already imported) |
 
 ### Troubleshooting
 
-- **OCM API returns empty**: Check the API key is valid and `country-id=101` (India) is correct
-- **Stations not imported**: Check backend logs for `OCM import complete` or error messages
-- **`/api/finder/` returns 401**: Make sure the `permitAll()` line was added in `SecurityConfig.java`
+| Problem | Likely Cause | Fix |
+|---------|-------------|-----|
+| Empty response | OCM API key not set | `export OCM_API_KEY=your_key` |
+| Stations not imported | DB not created yet | `psql -U postgres -c "CREATE DATABASE ev_station_finder;"` |
+| Port conflict | Main backend on 8081 too | Check port 8081 is free |
+| Import returns 0 | Country ID wrong or radius too small | Try `country-id=101` (India), radius=100 |
 
 ---
 
-## Phase 5: Station Finder — New Network Layer
+## Phase 7: Station Finder Android App Updates
 
-> **Files to create:** 2
-> **Files to modify:** 1 (build.gradle.kts)
-> **Estimated time:** 45 min
+**Estimated time:** 2-3 hours
 
-This phase replaces the direct OCM API calls with calls to the shared backend.
+### Step 7.1 — Create BackendApi.kt
 
-### Step 5.1 — Create BackendApi.kt
-
-**File path:** `station-finder/app/src/main/java/com/ganesh/stationfinder/data/network/BackendApi.kt`
+**File:** `station-finder/app/src/main/java/com/ganesh/stationfinder/data/network/BackendApi.kt`
 
 ```kotlin
 package com.ganesh.stationfinder.data.network
 
-import com.ganesh.stationfinder.data.model.BackendStationMarker
-import com.ganesh.stationfinder.data.model.BackendStationScore
 import com.ganesh.stationfinder.data.model.ApiResponse
+import com.ganesh.stationfinder.data.model.StationMarker
+import com.ganesh.stationfinder.data.model.StationWithScore
 import retrofit2.http.GET
 import retrofit2.http.Path
 import retrofit2.http.Query
 
 interface BackendApi {
 
-    @GET("api/finder/stations/nearby")
+    @GET("api/stations/nearby")
     suspend fun getNearbyStations(
         @Query("lat") lat: Double,
         @Query("lng") lng: Double,
         @Query("radius") radius: Double = 50.0,
         @Query("limit") limit: Int = 20
-    ): ApiResponse<List<BackendStationScore>>
+    ): ApiResponse<List<StationWithScore>>
 
-    @GET("api/finder/stations/viewport")
+    @GET("api/stations/viewport")
     suspend fun getStationsInViewport(
         @Query("neLat") neLat: Double,
         @Query("neLng") neLng: Double,
         @Query("swLat") swLat: Double,
         @Query("swLng") swLng: Double
-    ): ApiResponse<List<BackendStationMarker>>
+    ): ApiResponse<List<StationMarker>>
 
-    @GET("api/finder/stations/detail/{id}")
+    @GET("api/stations/{id}/detail")
     suspend fun getStationDetail(
         @Path("id") id: Long,
         @Query("lat") lat: Double,
         @Query("lng") lng: Double
-    ): ApiResponse<BackendStationScore>
+    ): ApiResponse<StationWithScore>
 
-    @GET("api/finder/stations/search")
+    @GET("api/stations/search")
     suspend fun searchStations(
         @Query("q") query: String,
         @Query("lat") lat: Double,
         @Query("lng") lng: Double,
         @Query("radius") radius: Double = 50.0
-    ): ApiResponse<List<BackendStationScore>>
+    ): ApiResponse<List<StationWithScore>>
 
-    @GET("api/finder/stations/count")
+    @GET("api/stations/count")
     suspend fun getStationCount(): ApiResponse<Map<String, Any>>
 }
 ```
 
-### Step 5.2 — Create BackendClient.kt
+### Step 7.2 — Create BackendClient.kt
 
-**File path:** `station-finder/app/src/main/java/com/ganesh/stationfinder/data/network/BackendClient.kt`
+**File:** `station-finder/app/src/main/java/com/ganesh/stationfinder/data/network/BackendClient.kt`
 
 ```kotlin
 package com.ganesh.stationfinder.data.network
@@ -905,7 +1725,7 @@ object BackendClient {
         .build()
 
     private val retrofit = Retrofit.Builder()
-        .baseUrl(BuildConfig.BACKEND_URL)
+        .baseUrl(BuildConfig.FINDER_BACKEND_URL)
         .addConverterFactory(GsonConverterFactory.create())
         .client(httpClient)
         .build()
@@ -914,9 +1734,9 @@ object BackendClient {
 }
 ```
 
-### Step 5.3 — Create BackendModels.kt
+### Step 7.3 — Create BackendModels.kt
 
-**File path:** `station-finder/app/src/main/java/com/ganesh/stationfinder/data/model/BackendModels.kt`
+**File:** `station-finder/app/src/main/java/com/ganesh/stationfinder/data/model/BackendModels.kt`
 
 ```kotlin
 package com.ganesh.stationfinder.data.model
@@ -924,7 +1744,7 @@ package com.ganesh.stationfinder.data.model
 import com.google.gson.annotations.SerializedName
 
 /**
- * Generic API response wrapper matching backend's APIResponse.
+ * Generic API response wrapper matching the finder backend's ApiResponse.
  */
 data class ApiResponse<T>(
     @SerializedName("success") val success: Boolean,
@@ -933,9 +1753,9 @@ data class ApiResponse<T>(
 )
 
 /**
- * Lightweight marker for map pins (from GET /api/finder/stations/viewport).
+ * Lightweight marker for map pins.
  */
-data class BackendStationMarker(
+data class StationMarker(
     @SerializedName("id") val id: Long,
     @SerializedName("name") val name: String,
     @SerializedName("latitude") val latitude: Double,
@@ -944,27 +1764,9 @@ data class BackendStationMarker(
 )
 
 /**
- * Full station score DTO (from GET /api/finder/stations/nearby and detail).
+ * Full station data with scoring and slot info.
  */
-data class BackendStationScore(
-    @SerializedName("station") val station: BackendStation,
-    @SerializedName("distance") val distance: Double?,
-    @SerializedName("score") val score: Double?,
-    @SerializedName("trafficScore") val trafficScore: Double?,
-    @SerializedName("gridScore") val gridScore: Double?,
-    @SerializedName("parkingScore") val parkingScore: Double?,
-    @SerializedName("accessScore") val accessScore: Double?,
-    @SerializedName("availableSlots") val availableSlots: Int?,
-    @SerializedName("totalSlots") val totalSlots: Int?,
-    @SerializedName("connectorTypes") val connectorTypes: List<String>?,
-    @SerializedName("lastActive") val lastActive: String?,
-    @SerializedName("rating") val rating: Double?
-)
-
-/**
- * Backend Station model.
- */
-data class BackendStation(
+data class StationWithScore(
     @SerializedName("id") val id: Long,
     @SerializedName("name") val name: String,
     @SerializedName("latitude") val latitude: Double,
@@ -972,177 +1774,104 @@ data class BackendStation(
     @SerializedName("address") val address: String,
     @SerializedName("operatingHours") val operatingHours: String?,
     @SerializedName("pricePerKwh") val pricePerKwh: Double?,
-    @SerializedName("truckPricePerKwh") val truckPricePerKwh: Double?,
     @SerializedName("rating") val rating: Double?,
-    @SerializedName("meta") val meta: String?,
     @SerializedName("isOpen") val isOpen: Boolean?,
-    @SerializedName("lastUsedTime") val lastUsedTime: String?
+    @SerializedName("meta") val meta: String?,
+
+    // Computed fields
+    @SerializedName("distance") val distance: Double?,
+    @SerializedName("availableSlots") val availableSlots: Int?,
+    @SerializedName("totalSlots") val totalSlots: Int?,
+    @SerializedName("connectorTypes") val connectorTypes: List<String>?,
+    @SerializedName("slots") val slots: List<SlotInfo>?
+)
+
+/**
+ * Individual slot info.
+ */
+data class SlotInfo(
+    @SerializedName("id") val id: Long,
+    @SerializedName("label") val label: String,
+    @SerializedName("connectorType") val connectorType: String,
+    @SerializedName("powerKw") val powerKw: Double?,
+    @SerializedName("isAvailable") val isAvailable: Boolean
 )
 ```
 
-### Step 5.4 — Update build.gradle.kts (Add BACKEND_URL)
+### Step 7.4 — Update StationRepository.kt
 
-**File path:** `station-finder/app/build.gradle.kts`
+**File:** `station-finder/app/src/main/java/com/ganesh/stationfinder/data/repository/StationRepository.kt`
 
-Add `BACKEND_URL` to the `buildConfigField` section:
-
-```kotlin
-// In the defaultConfig block, after the existing buildConfigField for OCM_API_KEY:
-defaultConfig {
-    // ... existing config ...
-
-    manifestPlaceholders["MAPS_API_KEY"] = mapsApiKey
-    buildConfigField("String", "OCM_API_KEY", "\"${ocmApiKey}\"")
-    buildConfigField("String", "BACKEND_URL", "\"${backendUrl}\"")  // <-- ADD THIS
-}
-```
-
-And add the `backendUrl` property at the top with the other properties:
-
-```kotlin
-val localProperties = Properties()
-val localPropertiesFile = rootProject.file("local.properties")
-if (localPropertiesFile.exists()) {
-    localPropertiesFile.inputStream().use { localProperties.load(it) }
-}
-val mapsApiKey: String = localProperties.getProperty("MAPS_API_KEY")?.trim() ?: ""
-val ocmApiKey: String = localProperties.getProperty("OCM_API_KEY")?.trim() ?: ""
-val backendUrl: String = localProperties.getProperty("BACKEND_URL")?.trim() ?: "http://10.0.2.2:8080/"
-```
-
-### Step 5.5 — Update local.properties (in station-finder)
-
-**File path:** `station-finder/local.properties`
-
-Add the backend URL:
-
-```properties
-MAPS_API_KEY=your_google_maps_key
-OCM_API_KEY=your_ocm_key
-BACKEND_URL=http://10.0.2.2:8080/
-```
-
-> **Note:** Use `10.0.2.2` for Android emulator (maps to host machine's localhost). Use your machine's actual IP (e.g., `http://192.168.1.100:8080/`) for physical device testing.
-
-### ✅ Phase 5 Verification
-
-```bash
-cd station-finder
-./gradlew assembleDebug 2>&1 | tail -20
-```
-
-Expected: `BUILD SUCCESSFUL`
-
----
-
-## Phase 6: Station Finder — Repository & ViewModel Updates
-
-> **Files to modify:** 2
-> **Estimated time:** 30 min
-
-### Step 6.1 — Update StationRepository.kt
-
-**File path:** `station-finder/app/src/main/java/com/ganesh/stationfinder/data/repository/StationRepository.kt`
-
-Replace the OCM API calls with backend API calls. The models change from `OCMStation` to `BackendStationScore`/`BackendStationMarker`.
+Replace the entire content with backend API calls:
 
 ```kotlin
 package com.ganesh.stationfinder.data.repository
 
 import android.util.Log
-import com.ganesh.stationfinder.data.model.BackendStationMarker
-import com.ganesh.stationfinder.data.model.BackendStationScore
+import com.ganesh.stationfinder.data.model.StationMarker
+import com.ganesh.stationfinder.data.model.StationWithScore
 import com.ganesh.stationfinder.data.network.BackendClient
 
 class StationRepository {
 
     private val api = BackendClient.api
 
-    /**
-     * Fetch nearby stations from the shared backend.
-     */
-    suspend fun getNearbyStations(lat: Double, lng: Double, distance: Double = 20.0): List<BackendStationScore> {
-        Log.d("Repository", "Fetching nearby stations at Lat: $lat, Lng: $lng (Radius: ${distance}km)")
+    suspend fun getNearbyStations(lat: Double, lng: Double, distance: Double = 20.0): List<StationWithScore> {
+        Log.d("Repository", "Fetching stations near Lat: $lat, Lng: $lng (Radius: ${distance}km)")
         return try {
             val response = api.getNearbyStations(lat, lng, distance)
             if (response.success && response.data != null) {
                 Log.d("Repository", "Backend returned ${response.data.size} stations")
                 response.data
             } else {
-                Log.w("Repository", "Backend returned error: ${response.message}")
+                Log.w("Repository", "Backend error: ${response.message}")
                 emptyList()
             }
         } catch (e: Exception) {
-            Log.e("Repository", "Error fetching stations from backend", e)
+            Log.e("Repository", "Error fetching stations", e)
             emptyList()
         }
     }
 
-    /**
-     * Fetch stations in a viewport (for map markers).
-     */
     suspend fun getStationsInViewport(
         neLat: Double, neLng: Double,
         swLat: Double, swLng: Double
-    ): List<BackendStationMarker> {
+    ): List<StationMarker> {
         return try {
             val response = api.getStationsInViewport(neLat, neLng, swLat, swLng)
-            if (response.success && response.data != null) {
-                response.data
-            } else {
-                emptyList()
-            }
+            if (response.success && response.data != null) response.data else emptyList()
         } catch (e: Exception) {
             Log.e("Repository", "Error fetching viewport stations", e)
             emptyList()
         }
     }
 
-    /**
-     * Fetch detail for a single station.
-     */
-    suspend fun getStationDetail(id: Long, lat: Double, lng: Double): BackendStationScore? {
+    suspend fun getStationDetail(id: Long, lat: Double, lng: Double): StationWithScore? {
         return try {
             val response = api.getStationDetail(id, lat, lng)
-            if (response.success && response.data != null) {
-                response.data
-            } else {
-                null
-            }
+            if (response.success && response.data != null) response.data else null
         } catch (e: Exception) {
             Log.e("Repository", "Error fetching station detail", e)
             null
         }
     }
 
-    /**
-     * Search stations by name/address.
-     */
-    suspend fun searchStations(query: String, lat: Double, lng: Double, radius: Double = 50.0): List<BackendStationScore> {
+    suspend fun searchStations(query: String, lat: Double, lng: Double, radius: Double = 50.0): List<StationWithScore> {
         return try {
             val response = api.searchStations(query, lat, lng, radius)
-            if (response.success && response.data != null) {
-                response.data
-            } else {
-                emptyList()
-            }
+            if (response.success && response.data != null) response.data else emptyList()
         } catch (e: Exception) {
             Log.e("Repository", "Error searching stations", e)
             emptyList()
         }
     }
 
-    /**
-     * Get total station count.
-     */
     suspend fun getStationCount(): Int {
         return try {
             val response = api.getStationCount()
             if (response.success && response.data != null) {
                 (response.data["count"] as? Double)?.toInt() ?: 0
-            } else {
-                0
-            }
+            } else 0
         } catch (e: Exception) {
             Log.e("Repository", "Error fetching station count", e)
             0
@@ -1151,18 +1880,18 @@ class StationRepository {
 }
 ```
 
-### Step 6.2 — Update StationViewModel.kt
+### Step 7.5 — Update StationViewModel.kt
 
-**File path:** `station-finder/app/src/main/java/com/ganesh/stationfinder/StationViewModel.kt`
+**File:** `station-finder/app/src/main/java/com/ganesh/stationfinder/StationViewModel.kt`
 
-Change the generic type parameter in `StationUiState` from `OCMStation` to `BackendStationScore`. The debounce and zoom logic stays the same.
+Change the `StationUiState` generic type from `OCMStation` to `StationWithScore`:
 
 ```kotlin
 package com.ganesh.stationfinder
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.ganesh.stationfinder.data.model.BackendStationScore
+import com.ganesh.stationfinder.data.model.StationWithScore
 import com.ganesh.stationfinder.data.repository.StationRepository
 import com.google.android.gms.maps.model.LatLng
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -1174,7 +1903,7 @@ import kotlinx.coroutines.delay
 
 sealed class StationUiState {
     object Loading : StationUiState()
-    data class Success(val stations: List<BackendStationScore>) : StationUiState()  // <-- TYPE CHANGED
+    data class Success(val stations: List<StationWithScore>) : StationUiState()
     data class Error(val message: String) : StationUiState()
 }
 
@@ -1188,7 +1917,6 @@ class StationViewModel : ViewModel() {
 
     fun fetchNearbyStations(location: LatLng, distance: Double = 20.0) {
         searchJob?.cancel()
-
         searchJob = viewModelScope.launch {
             _uiState.value = StationUiState.Loading
             try {
@@ -1237,27 +1965,11 @@ class StationViewModel : ViewModel() {
 }
 ```
 
-### ✅ Phase 6 Verification
+### Step 7.6 — Update StationDetailsSheet.kt
 
-```bash
-cd station-finder
-./gradlew assembleDebug 2>&1 | tail -20
-```
+**File:** `station-finder/app/src/main/java/com/ganesh/stationfinder/StationDetailsSheet.kt`
 
-Expected: `BUILD SUCCESSFUL`
-
----
-
-## Phase 7: Station Finder — UI Updates (StationDetailsSheet + MainActivity)
-
-> **Files to modify:** 2
-> **Estimated time:** 1 hour
-
-### Step 7.1 — Rewrite StationDetailsSheet.kt
-
-**File path:** `station-finder/app/src/main/java/com/ganesh/stationfinder/StationDetailsSheet.kt`
-
-The main change is accepting `BackendStationScore` instead of `OCMStation`, and displaying the **new data fields** (rating, distance, available slots, price, operating hours).
+Replace the content to accept `StationWithScore` and display all the new fields:
 
 ```kotlin
 package com.ganesh.stationfinder
@@ -1279,18 +1991,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.ganesh.stationfinder.data.model.BackendStationScore
+import com.ganesh.stationfinder.data.model.StationWithScore
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StationDetailsSheet(
-    stationScore: BackendStationScore,
+    station: StationWithScore,
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
-    val station = stationScore.station
 
-    // Parse meta JSON for operator name
+    // Parse operator name from meta JSON
     val operatorName = try {
         station.meta?.let { meta ->
             val regex = "\"ocm_operator\":\"([^\"]+)\"".toRegex()
@@ -1309,7 +2020,7 @@ fun StationDetailsSheet(
                 .padding(horizontal = 24.dp)
                 .padding(bottom = 40.dp)
         ) {
-            // ── Row 1: Icon + Name + Rating ──
+            // Row 1: Icon + Name + Rating
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
@@ -1337,15 +2048,10 @@ fun StationDetailsSheet(
                             style = MaterialTheme.typography.bodyMedium,
                             color = Color.Gray
                         )
-                        // Rating stars
-                        val rating = stationScore.rating ?: station.rating ?: 0.0
+                        val rating = station.rating ?: 0.0
                         if (rating > 0) {
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "★",
-                                color = Color(0xFFFFB300),
-                                fontSize = 14.sp
-                            )
+                            Text("★", color = Color(0xFFFFB300), fontSize = 14.sp)
                             Text(
                                 text = String.format("%.1f", rating),
                                 style = MaterialTheme.typography.bodySmall,
@@ -1359,75 +2065,48 @@ fun StationDetailsSheet(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // ── Row 2: Distance + Available Slots + Price ──
+            // Row 2: Distance + Available Slots + Price
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
-                // Distance
                 InfoChip(
                     icon = Icons.Default.NearMe,
-                    value = stationScore.distance?.let {
-                        String.format("%.1f km", it)
-                    } ?: "N/A",
+                    value = station.distance?.let { String.format("%.1f km", it) } ?: "N/A",
                     label = "Distance"
                 )
-                // Available Slots
                 InfoChip(
                     icon = Icons.Default.EvStation,
-                    value = "${stationScore.availableSlots ?: 0}/${stationScore.totalSlots ?: 0}",
+                    value = "${station.availableSlots ?: 0}/${station.totalSlots ?: 0}",
                     label = "Available"
                 )
-                // Price
                 InfoChip(
                     icon = Icons.Default.CurrencyRupee,
-                    value = station.pricePerKwh?.let {
-                        "₹${String.format("%.1f", it)}/kWh"
-                    } ?: "N/A",
+                    value = station.pricePerKwh?.let { "₹${String.format("%.1f", it)}/kWh" } ?: "N/A",
                     label = "Price"
                 )
             }
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // ── Row 3: Address ──
+            // Row 3: Address + Operating Hours
             Row(verticalAlignment = Alignment.Top) {
-                Icon(
-                    Icons.Default.LocationOn,
-                    null,
-                    modifier = Modifier.size(20.dp),
-                    tint = Color.Gray
-                )
+                Icon(Icons.Default.LocationOn, null, Modifier.size(20.dp), tint = Color.Gray)
                 Spacer(modifier = Modifier.width(8.dp))
                 Column {
-                    Text(
-                        text = station.address,
-                        style = MaterialTheme.typography.bodyLarge
-                    )
-                    // Operating hours
+                    Text(text = station.address, style = MaterialTheme.typography.bodyLarge)
                     station.operatingHours?.let { hours ->
                         Spacer(modifier = Modifier.height(4.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                Icons.Default.Schedule,
-                                null,
-                                modifier = Modifier.size(16.dp),
-                                tint = if (station.isOpen == true) Color(0xFF059669) else Color.Gray
-                            )
+                            Icon(Icons.Default.Schedule, null, Modifier.size(16.dp),
+                                tint = if (station.isOpen == true) Color(0xFF059669) else Color.Gray)
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = hours,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = if (station.isOpen == true) Color(0xFF059669) else Color.Gray
-                            )
+                            Text(text = hours, style = MaterialTheme.typography.bodySmall,
+                                color = if (station.isOpen == true) Color(0xFF059669) else Color.Gray)
                             if (station.isOpen == true) {
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "● Open",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = Color(0xFF059669),
-                                    fontWeight = FontWeight.Bold
-                                )
+                                Text("● Open", style = MaterialTheme.typography.bodySmall,
+                                    color = Color(0xFF059669), fontWeight = FontWeight.Bold)
                             }
                         }
                     }
@@ -1436,16 +2115,12 @@ fun StationDetailsSheet(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // ── Row 4: Connector Types ──
-            Text(
-                text = "Connectors",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
+            // Row 4: Connector Types
+            Text("Connectors", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(8.dp))
 
-            if (!stationScore.connectorTypes.isNullOrEmpty()) {
-                stationScore.connectorTypes.forEach { connType ->
+            if (!station.connectorTypes.isNullOrEmpty()) {
+                station.connectorTypes.forEach { connType ->
                     Card(
                         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                         colors = CardDefaults.cardColors(containerColor = Color(0xFFF1F5F9))
@@ -1455,10 +2130,7 @@ fun StationDetailsSheet(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = connType,
-                                fontWeight = FontWeight.SemiBold
-                            )
+                            Text(text = connType, fontWeight = FontWeight.SemiBold)
                             val isDC = connType.contains("CCS", ignoreCase = true)
                             Text(
                                 text = if (isDC) "⚡ DC Fast" else "🔌 AC",
@@ -1472,21 +2144,29 @@ fun StationDetailsSheet(
                 Text("Connector information not available", color = Color.Gray)
             }
 
-            // Last active info
-            stationScore.lastActive?.let { lastActive ->
-                if (lastActive != "Never") {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "Last active: $lastActive",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.Gray
-                    )
+            // Slot details
+            if (!station.slots.isNullOrEmpty()) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Text("Available Slots", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(4.dp))
+                station.slots.forEach { slot ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(text = slot.label, style = MaterialTheme.typography.bodySmall)
+                        Text(
+                            text = if (slot.isAvailable) "✅ Available" else "⛔ In Use",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (slot.isAvailable) Color(0xFF059669) else Color(0xFFDC2626)
+                        )
+                    }
                 }
             }
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // ── Navigate Button ──
+            // Navigate Button
             Button(
                 onClick = {
                     val gmmIntentUri = Uri.parse("google.navigation:q=${station.latitude},${station.longitude}")
@@ -1512,42 +2192,31 @@ private fun InfoChip(
     value: String,
     label: String
 ) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
             modifier = Modifier
                 .size(40.dp)
                 .background(Color(0xFFF1F5F9), RoundedCornerShape(12.dp)),
             contentAlignment = Alignment.Center
         ) {
-            Icon(icon, null, modifier = Modifier.size(20.dp), tint = Color(0xFF1A2234))
+            Icon(icon, null, Modifier.size(20.dp), tint = Color(0xFF1A2234))
         }
         Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            text = value,
-            fontWeight = FontWeight.Bold,
-            fontSize = 14.sp
-        )
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodySmall,
-            color = Color.Gray,
-            fontSize = 11.sp
-        )
+        Text(text = value, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+        Text(text = label, style = MaterialTheme.typography.bodySmall, color = Color.Gray, fontSize = 11.sp)
     }
 }
 ```
 
-### Step 7.2 — Update MainActivity.kt
+### Step 7.7 — Update MainActivity.kt
 
-**File path:** `station-finder/app/src/main/java/com/ganesh/stationfinder/MainActivity.kt`
+**File:** `station-finder/app/src/main/java/com/ganesh/stationfinder/MainActivity.kt`
 
-Changes needed:
-1. Import `BackendStationScore` instead of `OCMStation`
-2. Change the `selectedStation` type from `OCMStation?` to `BackendStationScore?`
-3. Update marker rendering to use `BackendStationScore.station` fields
-4. Pass `stationScore` to `StationDetailsSheet` instead of `station`
+Key changes:
+- Import `StationWithScore` instead of `OCMStation`
+- Change `selectedStation` type from `OCMStation?` to `StationWithScore?`
+- Update marker rendering to use `station` fields from `StationWithScore`
+- Pass `station` to `StationDetailsSheet`
 
 ```kotlin
 package com.ganesh.stationfinder
@@ -1555,6 +2224,7 @@ package com.ganesh.stationfinder
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -1573,10 +2243,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.ganesh.stationfinder.data.model.BackendStationScore  // <-- NEW IMPORT
+import com.ganesh.stationfinder.data.model.StationWithScore
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
-import com.maps.compose.*
 import com.google.maps.android.compose.*
 
 class MainActivity : ComponentActivity() {
@@ -1601,7 +2270,7 @@ fun MapScreen(viewModel: StationViewModel = viewModel()) {
     val uiState by viewModel.uiState.collectAsState()
 
     var userLocation by remember { mutableStateOf<LatLng?>(null) }
-    var selectedStation by remember { mutableStateOf<BackendStationScore?>(null) }  // <-- TYPE CHANGED
+    var selectedStation by remember { mutableStateOf<StationWithScore?>(null) }
 
     var hasLocationPermission by remember {
         mutableStateOf(
@@ -1635,21 +2304,13 @@ fun MapScreen(viewModel: StationViewModel = viewModel()) {
     }
 
     LaunchedEffect(uiState) {
-        when (uiState) {
+        when (val state = uiState) {
             is StationUiState.Error -> {
-                android.widget.Toast.makeText(
-                    context,
-                    "Error: ${(uiState as StationUiState.Error).message}",
-                    android.widget.Toast.LENGTH_LONG
-                ).show()
+                Toast.makeText(context, "Error: ${state.message}", Toast.LENGTH_LONG).show()
             }
             is StationUiState.Success -> {
-                if ((uiState as StationUiState.Success).stations.isEmpty()) {
-                    android.widget.Toast.makeText(
-                        context,
-                        "No stations found in this area",
-                        android.widget.Toast.LENGTH_LONG
-                    ).show()
+                if (state.stations.isEmpty()) {
+                    Toast.makeText(context, "No stations found in this area", Toast.LENGTH_LONG).show()
                 }
             }
             else -> {}
@@ -1669,22 +2330,18 @@ fun MapScreen(viewModel: StationViewModel = viewModel()) {
                 uiSettings = MapUiSettings(myLocationButtonEnabled = true)
             ) {
                 if (uiState is StationUiState.Success) {
-                    val stationScores = (uiState as StationUiState.Success).stations
-                    stationScores.forEach { stationScore ->
-                        val station = stationScore.station
+                    val stations = (uiState as StationUiState.Success).stations
+                    stations.forEach { station ->
                         Marker(
                             state = MarkerState(
-                                position = LatLng(
-                                    station.latitude,
-                                    station.longitude
-                                )
+                                position = LatLng(station.latitude, station.longitude)
                             ),
                             title = station.name,
-                            snippet = stationScore.distance?.let {
+                            snippet = station.distance?.let {
                                 String.format("%.1f km", it)
                             } ?: "",
                             onClick = {
-                                selectedStation = stationScore  // <-- TYPE UPDATED
+                                selectedStation = station
                                 true
                             }
                         )
@@ -1692,7 +2349,6 @@ fun MapScreen(viewModel: StationViewModel = viewModel()) {
                 }
             }
 
-            // Trigger fetch when camera stops
             LaunchedEffect(cameraPositionState.isMoving) {
                 if (!cameraPositionState.isMoving) {
                     val center = cameraPositionState.position.target
@@ -1701,11 +2357,9 @@ fun MapScreen(viewModel: StationViewModel = viewModel()) {
                 }
             }
 
-            // Top Search Button
+            // Search Button
             Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 16.dp),
+                modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
                 contentAlignment = Alignment.TopCenter
             ) {
                 Button(
@@ -1726,10 +2380,7 @@ fun MapScreen(viewModel: StationViewModel = viewModel()) {
                 }
             }
         } else {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     CircularProgressIndicator()
                     Spacer(modifier = Modifier.height(16.dp))
@@ -1738,15 +2389,15 @@ fun MapScreen(viewModel: StationViewModel = viewModel()) {
             }
         }
 
-        // Selected Station Details Sheet — Now passes stationScore
-        selectedStation?.let { stationScore ->
+        // Station Details Bottom Sheet
+        selectedStation?.let { station ->
             StationDetailsSheet(
-                stationScore = stationScore,  // <-- PARAMETER CHANGED
+                station = station,
                 onDismiss = { selectedStation = null }
             )
         }
 
-        // Loading indicator overlay
+        // Loading indicator
         if (uiState is StationUiState.Loading && userLocation != null) {
             LinearProgressIndicator(
                 modifier = Modifier.fillMaxWidth().align(Alignment.TopCenter),
@@ -1756,6 +2407,45 @@ fun MapScreen(viewModel: StationViewModel = viewModel()) {
     }
 }
 ```
+
+### Step 7.8 — Update build.gradle.kts
+
+**File:** `station-finder/app/build.gradle.kts`
+
+Add `FINDER_BACKEND_URL` build config:
+
+```kotlin
+// At the top, add backendUrl property after the existing OCM key
+val localProperties = Properties()
+val localPropertiesFile = rootProject.file("local.properties")
+if (localPropertiesFile.exists()) {
+    localPropertiesFile.inputStream().use { localProperties.load(it) }
+}
+val mapsApiKey: String = localProperties.getProperty("MAPS_API_KEY")?.trim() ?: ""
+val ocmApiKey: String = localProperties.getProperty("OCM_API_KEY")?.trim() ?: ""
+val backendUrl: String = localProperties.getProperty("FINDER_BACKEND_URL")?.trim() ?: "http://10.0.2.2:8081/"  // <-- ADD
+
+android {
+    // ...
+    defaultConfig {
+        // ...
+        buildConfigField("String", "OCM_API_KEY", "\"${ocmApiKey}\"")
+        buildConfigField("String", "FINDER_BACKEND_URL", "\"${backendUrl}\"")  // <-- ADD
+    }
+}
+```
+
+### Step 7.9 — Update local.properties
+
+**File:** `station-finder/local.properties`
+
+```properties
+MAPS_API_KEY=your_google_maps_key
+OCM_API_KEY=your_ocm_key
+FINDER_BACKEND_URL=http://10.0.2.2:8081/
+```
+
+> **Note:** Use `10.0.2.2` for Android emulator, use your machine's LAN IP for physical device testing.
 
 ### ✅ Phase 7 Verification
 
@@ -1770,133 +2460,116 @@ Expected: `BUILD SUCCESSFUL`
 
 ## Phase 8: Integration Testing
 
-> **Estimated time:** 1 hour
+**Estimated time:** 1 hour
 
-### Step 8.1 — Start Backend
+### Step 8.1 — Start Both Backends
 
+Terminal 1 — Main Backend (existing):
 ```bash
 cd backend
+./mvnw spring-boot:run
+```
+
+Terminal 2 — Finder Backend (new):
+```bash
+cd station-finder-backend
 export OCM_API_KEY="your_ocm_api_key_here"
 ./mvnw spring-boot:run
 ```
 
-Wait for: `Started EvProjectApplication in X.XXX seconds`
-
-### Step 8.2 — Configure Station Finder for Emulator
-
-Edit `station-finder/local.properties`:
-```properties
-BACKEND_URL=http://10.0.2.2:8080/
+Wait for both to show:
+```
+Started XXX in X.XXX seconds
 ```
 
-### Step 8.3 — Build and Install Station Finder
+### Step 8.2 — Verify Finder Backend Has Data
+
+```bash
+curl -s "http://localhost:8081/api/stations/count"
+# Should show: {"success":true,"data":{"count":XX}}
+
+curl -s "http://localhost:8081/api/stations/nearby?lat=19.0760&lng=72.8777&radius=50&limit=3" | head -c 500
+```
+
+### Step 8.3 — Verify Main Backend Unaffected
+
+```bash
+curl -s "http://localhost:8080/api/stations/viewport?neLat=19.2&neLng=73.0&swLat=18.9&swLng=72.7"
+# Should still work — completely independent
+```
+
+### Step 8.4 — Install and Test Station Finder App
 
 ```bash
 cd station-finder
 ./gradlew installDebug
 ```
 
-### Step 8.4 — Manual Test Checklist
+### Step 8.5 — Manual Test Checklist
 
 | # | Test Case | Steps | Expected |
 |---|-----------|-------|----------|
-| 1 | **App launches** | Open the app | Shows map centered on your location |
-| 2 | **Stations appear** | Wait for "Search this area" → tap it | Station markers appear on the map |
-| 3 | **Station detail** | Tap any marker | Bottom sheet opens with name, rating, distance, slots, price, connectors |
-| 4 | **Missing data** | Tap a station with `N/A` fields | Shows "N/A" gracefully |
-| 5 | **Navigate** | Tap "Start Navigation" | Google Maps opens with navigation |
-| 6 | **Open/Closed** | Check a station's operating hours badge | Shows "● Open" (green) or hours in gray |
-| 7 | **Search area** | Pan map, tap "Search this area" | New markers load for the new area |
-| 8 | **No stations** | Pan to remote area, search | Shows "No stations found" toast |
+| 1 | **App launches** | Open the app | Map centered on your location |
+| 2 | **Stations appear** | Wait + tap "Search this area" | Station markers on map |
+| 3 | **Station detail** | Tap any marker | Bottom sheet with name, rating, distance, slots, price, connectors |
+| 4 | **Missing data** | Tap station with N/A fields | Shows gracefully |
+| 5 | **Navigate** | Tap "Start Navigation" | Google Maps opens |
+| 6 | **Open/Closed badge** | Check operating hours | Shows "● Open" or hours in gray |
+| 7 | **Search area** | Pan map, tap search | New markers load |
+| 8 | **No stations** | Pan to remote area, search | "No stations found" toast |
 
-### Step 8.5 — Verify Main App Still Works
+### Step 8.6 — Verify Main EV App Still Works
 
 | # | Test | How |
 |---|------|-----|
-| 1 | Main EV app launches | Build and install the main `android/` app |
+| 1 | Main app launches | Build and install |
 | 2 | Login works | Login with OTP |
-| 3 | Station map works | Home screen map shows stations |
+| 3 | Station map works | Home screen shows stations |
 | 4 | No regression | All existing features work as before |
 
 ---
 
 ## Rollback Plan
 
-If something goes wrong during any phase, rollback is simple because all backend changes are **additive**:
-
-### Backend Rollback
+### If Finder Backend Has Issues
+Since it's a **completely separate project**, rollback is simply:
 ```bash
-cd backend
-git checkout -- src/main/java/com/ganesh/EV_Project/controller/StationFinderController.java
-git checkout -- src/main/java/com/ganesh/EV_Project/service/StationImportService.java
-git checkout -- src/main/java/com/ganesh/EV_Project/config/StationSyncJob.java
-git checkout -- src/main/java/com/ganesh/EV_Project/config/SecurityConfig.java
-git checkout -- src/main/resources/application.properties
-```
+# Stop the finder backend
+# Delete the project
+rm -rf station-finder-backend/
 
-### Station Finder Rollback
-```bash
+# Drop the database
+psql -U postgres -c "DROP DATABASE ev_station_finder;"
+
+# Station-finder app still works with OCM directly (if OCM_API_KEY set)
+# Just revert the git changes to station-finder/ folder
 cd station-finder
 git checkout -- .
 ```
 
----
+### If Station Finder App Changes Have Issues
+```bash
+cd station-finder
+git checkout -- .
+# Then restore OCM_API_KEY in local.properties
+```
 
-## Appendix: Full File Reference
-
-### Files Created
-
-| # | File | Phase | Purpose |
-|---|------|-------|---------|
-| 1 | `backend/.../controller/StationFinderController.java` | 1 | Public finder endpoints |
-| 2 | `backend/.../service/StationImportService.java` | 2 | OCM data import |
-| 3 | `backend/.../config/StationSyncJob.java` | 3 | Scheduled OCM sync |
-| 4 | `station-finder/.../network/BackendApi.kt` | 5 | Retrofit interface |
-| 5 | `station-finder/.../network/BackendClient.kt` | 5 | Retrofit client |
-| 6 | `station-finder/.../model/BackendModels.kt` | 5 | Backend response models |
-
-### Files Modified
-
-| # | File | Phase | Change |
-|---|------|-------|--------|
-| 1 | `backend/.../config/SecurityConfig.java` | 1 | Add `permitAll()` for `/api/finder/**` |
-| 2 | `backend/.../config/DataSeeder.java` | 3 | Optional OCM seed on startup |
-| 3 | `backend/src/main/resources/application.properties` | 3 | Add OCM config |
-| 4 | `station-finder/app/build.gradle.kts` | 5 | Add `BACKEND_URL` build config |
-| 5 | `station-finder/.../repository/StationRepository.kt` | 6 | Replace OCM calls with backend calls |
-| 6 | `station-finder/.../StationViewModel.kt` | 6 | Change types to `BackendStationScore` |
-| 7 | `station-finder/.../StationDetailsSheet.kt` | 7 | Accept `BackendStationScore`, show new fields |
-| 8 | `station-finder/.../MainActivity.kt` | 7 | Update types and marker rendering |
-
-### Files NOT Changed (Zero Disruption)
-
-All of these remain **untouched**:
-
-**Backend (existing auth logic):**
-- `JwtRequestFilter.java` — unchanged
-- `JwtUtil.java` — unchanged
-- `UserDetailsServiceImpl.java` — unchanged
-- All existing controllers — unchanged
-- All existing services — unchanged
-
-**Main Android App:**
-- `android/app/src/main/java/com/ganesh/ev/` — ALL files unchanged
-- `StationViewModel.kt` — unchanged
-- `ApiService.kt` — unchanged
-- `RetrofitClient.kt` — unchanged
-- All screens — unchanged
+### Main Backend & Main App
+**Nothing to roll back** — 0 files were changed.
 
 ---
 
-## Summary of What Each Phase Delivers
+## Summary
 
-| Phase | Delivers | You Can Demo After |
-|-------|----------|-------------------|
-| 1 | Backend endpoints ready (no data yet) | `curl` shows endpoints work but return empty |
-| 2 | OCM import service | Import stations from OCM on demand |
-| 3 | Auto-sync + config | Stations automatically seeded via DataSeeder |
-| 4 | Backend fully tested | `curl` shows real stations from OCM |
-| 5 | Station finder can talk to backend | App builds with new API client |
-| 6 | Data flowing through ViewModel | App shows station markers from backend |
-| 7 | Full UI with all new fields | Complete station finder with details, rating, price, etc. |
-| 8 | Both apps working together | Two Android apps sharing one backend |
+| Phase | What | Files Created | Files Modified | Est. Time |
+|-------|------|---------------|----------------|-----------|
+| 1 | New Spring Boot project | 5 (pom, application, ApiResponse, FinderApp, config) | 0 | 30 min |
+| 2 | Models + DTOs + Repos | 6 (Station, ChargerSlot, StationMarker, StationWithScore, 2 repos) | 0 | 45 min |
+| 3 | OCM Import + DataSeeder | 2 (StationImportService, DataSeeder) | 0 | 1-2 hr |
+| 4 | StationService + Controllers | 3 (StationService, StationController, ImportController) | 0 | 1 hr |
+| 5 | SyncJob + Config | 1 (StationSyncJob) | 0 | 30 min |
+| 6 | Backend testing | 1 (Dockerfile) | 0 | 1 hr |
+| 7 | Android app updates | 3 (BackendApi, BackendClient, BackendModels) | 4 (Repository, VM, Sheet, Activity, Gradle) | 2-3 hr |
+| 8 | Integration testing | 0 | 0 | 1 hr |
+
+**Total:** ~21 files created, ~5 files modified, **0 files changed in main backend or main app** ✅

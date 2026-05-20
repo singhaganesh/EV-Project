@@ -1,411 +1,280 @@
-# Station Finder — Backend Integration Plan
+# Station Finder — Separate Backend Integration Plan
 
 ## Goal
-Make the standalone **station-finder** Android app use the **shared backend** (instead of calling OpenChargeMap directly), without touching the main EV Android app's code or disrupting its backend logic.
+Create a **dedicated Spring Boot backend + separate PostgreSQL database** for the station-finder Android app, completely independent from the main EV-Project backend. The station-finder will import data from OpenChargeMap and serve it via its own REST API — without touching the main app or its database.
 
 ---
 
 ## 1. Architecture Overview
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                         SHARED BACKEND                                   │
-│                         (Spring Boot 3.3.5)                             │
-│                                                                         │
-│  ┌─────────────────┐    ┌───────────────────┐    ┌──────────────────┐  │
-│  │  Finder APIs    │    │  Authenticated APIs│    │  OCM Sync Svc   │  │
-│  │  (no auth)       │    │  (JWT required)    │    │  (scheduled)     │  │
-│  │                  │    │                    │    │                  │  │
-│  │  GET /finder/    │    │  GET /api/stations │    │  ─→ fetch OCM    │  │
-│  │    stations/*    │    │  POST /api/bookings│    │  ─→ save to DB   │  │
-│  │                  │    │  POST /api/charging│    │  ─→ update meta   │  │
-│  └────────┬─────────┘    └────────┬───────────┘    └──────────────────┘  │
-│           │                       │                                      │
-│           └───────────┬───────────┘                                      │
-│                       │                                                  │
-│              ┌────────▼────────┐                                         │
-│              │  PostgreSQL DB  │                                         │
-│              │  (stations +    │                                         │
-│              │   slots + books)│                                         │
-│              └─────────────────┘                                         │
-└──────────────────────────────────────────────────────────────────────────┘
-           │                                      ▲
-           │                                      │
-           ▼                                      │
-┌──────────────────────┐          ┌────────────────────────────┐
-│  Station Finder App  │          │  Main EV Android App       │
-│  (separate project)  │          │  (unchanged — untouched)   │
-│                      │          │                            │
-│  • No auth required  │          │  • JWT auth                │
-│  • Finder APIs only  │          │  • Full lifecycle          │
-│  • Map + details     │          │  • Bookings, charging,     │
-│  • Bottom sheet UI   │          │    payments, profile, etc. │
-└──────────────────────┘          └────────────────────────────┘
+┌─────────────────────────────────────┐     ┌─────────────────────────────────────┐
+│         MAIN EV BACKEND             │     │      STATION FINDER BACKEND         │
+│         (Spring Boot 3.3.5)         │     │      (New Spring Boot 3.3.5)        │
+│                                     │     │                                     │
+│  • JWT auth / OTP login             │     │  • No auth — fully public API      │
+│  • Station mgmt (owner stations)    │     │  • OCM import service              │
+│  • Bookings, payments, charging     │     │  • Station search / viewport      │
+│  • WebSocket telemetry              │     │  • Station scoring                 │
+│  • Owner dashboard, analytics       │     │  • Configurable sync schedule     │
+│                                     │     │                                     │
+│  DB: PostgreSQL (ev_project)        │     │  DB: PostgreSQL (ev_station_finder) │
+│  Tables: stations, bookings,        │     │  Tables: stations, charger_slots   │
+│          charger_slots, payments,   │     │         (simplified models only)    │
+│          users, sessions, etc.      │     │                                     │
+└────────────┬────────────────────────┘     └────────────┬────────────────────────┘
+             │                                           │
+             │                                           │
+             ▼                                           ▼
+┌──────────────────────┐                   ┌────────────────────────────┐
+│  MAIN EV APP         │                   │  STATION FINDER APP        │
+│  (Android, JWT auth) │                   │  (Android, no auth)         │
+│                      │                   │                            │
+│  • Full lifecycle    │                   │  • Map + station markers   │
+│  • Book, charge, pay │                   │  • Station detail + nav    │
+│  • Owner features    │                   │  • No auth needed          │
+└──────────────────────┘                   └────────────────────────────┘
+                                           ▲
+                                           │
+                                           ▼
+                               ┌──────────────────────┐
+                               │   OpenChargeMap API   │
+                               │   api.ocm.io/v3/poi   │
+                               │   (data source)       │
+                               └──────────────────────┘
 ```
 
 ### Key Principles
 
 | Principle | Why |
 |-----------|-----|
-| **Main app is NEVER touched** | Zero risk of breaking existing features |
-| **Backend gets new finder endpoints** | Station-finder calls these without auth |
-| **Backend owns OCM data** | API key stays server-side, not in the app |
-| **Same DB, same stations** | Both apps share real station data from one source |
+| **Main backend is NEVER touched** | Zero risk to existing auth, bookings, payments |
+| **Main database is NEVER touched** | Separate DB means zero schema conflicts |
+| **Finder backend is self-contained** | Own models, own DB, own OCM key, own deployment |
+| **No shared logic** | Simple, clean code with no `owner_id`, no JWT dependencies |
 
 ---
 
-## 2. Backend — New Code (Additive, No Breaking Changes)
+## 2. New Finder Backend — What It Contains
 
-### 2.1 New Finder Controller — `StationFinderController.java`
+### 2.1 Technology Stack (Same as Main)
 
-A new controller mapped to `/api/finder/stations` with **no authentication required**.
+| Component | Choice |
+|-----------|--------|
+| Framework | Spring Boot 3.3.5 |
+| Language | Java 21 |
+| Database | PostgreSQL (separate database) |
+| API | REST (no WebSocket, no STOMP needed) |
+| Auth | **None** — fully public API |
+| OCM Client | `RestTemplate` |
+| Port | **8081** (main backend uses 8080) |
 
-| Endpoint | Purpose | Returns |
-|----------|---------|---------|
-| `GET /api/finder/stations/viewport?neLat&neLng&swLat&swLng` | Map markers in viewport | `List<StationMarkerDTO>` (id, name, lat, lng, available) |
-| `GET /api/finder/stations/nearby?lat&lng&radius&limit` | Nearest stations with scores | `List<StationScoreDTO>` (full data with distance, slots, rating) |
-| `GET /api/finder/stations/{id}/detail?lat&lng` | Single station detail | `StationScoreDTO` |
-| `GET /api/finder/stations/search?q&lat&lng&radius` | Text search by name/address | `List<StationScoreDTO>` |
-| `GET /api/finder/stations/count` | Total station count | `{ count: number }` |
+### 2.2 Data Model (Simplified)
 
-These endpoints **internally call the same existing services** (`StationRecommendationService`, `StationService`). No logic duplication.
+Only **2 entities** — much simpler than the main backend:
 
-### 2.2 Security Config Update
+**`Station`** — Core entity
+| Field | Type | Notes |
+|-------|------|-------|
+| id | Long (PK) | Auto-generated |
+| name | String | Station name |
+| latitude | Double | |
+| longitude | Double | |
+| address | String | Full address |
+| operatingHours | String | e.g. "24 Hours", "6:00 AM - 10:00 PM" |
+| pricePerKwh | Double | Default 0.0 |
+| rating | Double | From OCM or default 0.0 |
+| isOpen | Boolean | Calculated from operating hours |
+| ocmId | Long | OCM's internal ID (for dedup) |
+| ocmUuid | String | OCM's UUID (for dedup) |
+| meta | String (JSON) | Extra OCM metadata (operator, usage type, etc.) |
+| lastSynced | LocalDateTime | When this was last refreshed from OCM |
+| createdAt | LocalDateTime | |
+| updatedAt | LocalDateTime | |
 
-In `SecurityConfig.java`, add:
-```java
-.requestMatchers("/api/finder/**").permitAll()
-```
+**`ChargerSlot`** — Per-connector slots
+| Field | Type | Notes |
+|-------|------|-------|
+| id | Long (PK) | |
+| stationId | Long (FK) | References station |
+| slotLabel | String | e.g. "CCS2 #1" |
+| connectorType | String | e.g. "CCS2", "TYPE_2", "CHAdeMO" |
+| powerKw | Double | |
+| isAvailable | Boolean | Default true |
 
-This is the **only change** to existing auth code — purely additive, doesn't affect any existing `/api/...` routes.
+No `User`, `Owner`, `Booking`, `Payment`, `ChargingSession`, `Dispensary`, etc. — none of that complexity.
 
-### 2.3 New Service — `StationImportService.java`
+### 2.3 API Endpoints
 
-A service that fetches stations from OpenChargeMap and stores them in the backend's PostgreSQL database.
+| Method | Endpoint | Purpose | Returns |
+|--------|----------|---------|---------|
+| GET | `/api/stations/viewport?neLat&neLng&swLat&swLng` | Map markers in viewport | `List<StationMarker>` |
+| GET | `/api/stations/nearby?lat&lng&radius&limit` | Nearest stations ranked by distance | `List<StationWithScore>` |
+| GET | `/api/stations/{id}/detail?lat&lng` | Single station detail | `StationWithScore` |
+| GET | `/api/stations/search?q&lat&lng&radius` | Text search by name/address | `List<StationWithScore>` |
+| GET | `/api/stations/count` | Total station count | `{ count: number }` |
+| POST | `/api/import/trigger?lat&lng&radius` | Manual OCM import trigger | `{ imported: number }` |
 
-**Responsibilities:**
-- Fetch from OCM API (`https://api.openchargemap.io/v3/poi`)
-- Transform OCM data → backend `Station` model
-- Deduplicate by OCM UUID (skip if already imported)
-- Create a default "dummy" `ChargerSlot` per connector (so slot availability logic works)
-- Store import metadata (source = "OCM", last synced timestamp)
-
-**OCM → Station Model Mapping:**
-
-| OCM Field | Backend Station Field | Notes |
-|-----------|----------------------|-------|
-| `AddressInfo.Title` | `name` | Station name |
-| `AddressInfo.Latitude` | `latitude` | |
-| `AddressInfo.Longitude` | `longitude` | |
-| `AddressInfo.AddressLine1 + Town` | `address` | Concatenated |
-| `OperatorInfo.Title` | `meta` (JSON) | Stored as `{"ocm_operator": "..."}` |
-| `UsageType.Title` | `meta` (JSON) | `{"ocm_usage_type": "..."}` |
-| `Connections[].PowerKW` | `pricePerKwh` | Set to 0 (pricing from OCM is unreliable) |
-| `GeneralComments` | `meta` (JSON) | `{"ocm_comments": "..."}` |
-| `Connections[].ConnectionType` | `ChargerSlot.connectorType` | Creates one slot per connection type |
-| `Connections[].StatusType.IsOperational` | — | Only imports operational stations |
-| (OCM ID) | `meta` (JSON) | `{"ocm_id": 123456}` — used for dedup |
-
-### 2.4 New Scheduled Task — `StationSyncJob.java`
-
-A scheduled job that periodically syncs new/updated stations from OpenChargeMap.
-
-```java
-@Scheduled(cron = "0 0 3 * * ?") // Every day at 3 AM
-public void syncStations() {
-    // 1. Fetch stations updated in last 24h from OCM
-    // 2. Upsert into local DB
-    // 3. Log stats
+All endpoints return a consistent `ApiResponse` wrapper:
+```json
+{
+  "success": true,
+  "message": "Found 12 nearby stations",
+  "data": [ ... ]
 }
 ```
 
-Configurable via `application.properties`:
-```properties
-ocm.api.key=${OCM_API_KEY}
-ocm.sync.enabled=true
-ocm.sync.radius-km=500  # Default search radius
-ocm.sync.country-id=101  # India
-```
+### 2.4 OCM Import Service
 
-### 2.5 DataSeeder Enhancement (Optional)
-
-Add a one-time import of popular Indian EV stations on first startup:
-```java
-if (stationRepository.count() == 0) {
-    stationImportService.importFromOCM(19.0760, 72.8777, 50); // Mumbai area
-    stationImportService.importFromOCM(12.9716, 77.5946, 50); // Bangalore area
-}
-```
+- Fetches from `https://api.openchargemap.io/v3/poi`
+- Maps OCM data → `Station` + `ChargerSlot` entities
+- Deduplicates by `ocmId` (skips if already imported)
+- Runs on startup via `DataSeeder` (first run) and on schedule (daily)
+- Can be triggered manually via POST endpoint
 
 ---
 
-## 3. Station Finder App — Code Changes
+## 3. Station Finder App — Changes
 
-### 3.1 Add Backend Retrofit Client
+The Android app currently calls OCM directly. It will be updated to call the **new finder backend** instead.
 
-Replace direct OCM API calls with calls to the shared backend.
+### 3.1 What Changes
 
-**New file: `data/network/BackendApi.kt`**
-```kotlin
-interface BackendApi {
-    @GET("api/finder/stations/viewport")
-    suspend fun getStationsInViewport(
-        @Query("neLat") neLat: Double,
-        @Query("neLng") neLng: Double,
-        @Query("swLat") swLat: Double,
-        @Query("swLng") swLng: Double
-    ): Response<ApiResponse<List<StationMarker>>>
+| File | What Changes |
+|------|-------------|
+| `data/network/OpenChargeMapApi.kt` | Replace with `BackendApi.kt` (calls new backend instead of OCM) |
+| `data/network/RetrofitClient.kt` | Replace with `BackendClient.kt` (points to `http://10.0.2.2:8081/`) |
+| `data/model/OCMModels.kt` | Replace with `BackendModels.kt` (simpler models matching backend) |
+| `data/repository/StationRepository.kt` | Change API calls from OCM to backend |
+| `StationViewModel.kt` | Update type references from `OCMStation` → new models |
+| `StationDetailsSheet.kt` | Accept new model type, display richer data |
+| `MainActivity.kt` | Minor type updates |
+| `build.gradle.kts` | Change `BACKEND_URL` endpoint |
 
-    @GET("api/finder/stations/nearby")
-    suspend fun getNearbyStations(
-        @Query("lat") lat: Double,
-        @Query("lng") lng: Double,
-        @Query("radius") radius: Double = 50.0,
-        @Query("limit") limit: Int = 10
-    ): Response<ApiResponse<List<StationScore>>>
+### 3.2 What Does NOT Change
 
-    @GET("api/finder/stations/{id}/detail")
-    suspend fun getStationDetail(
-        @Path("id") id: Long,
-        @Query("lat") lat: Double,
-        @Query("lng") lng: Double
-    ): Response<ApiResponse<StationScore>>
-}
-```
+- **Main Android app** (`android/`) — 0 files changed ✅
+- **Main backend** (`backend/`) — 0 files changed ✅
+- **Station Finder UI structure** — Map + bottom sheet stays the same
+- **Station Finder location logic** — Same LocationHelper, same GPS flow
 
-**New file: `data/network/BackendClient.kt`**
-```kotlin
-object BackendClient {
-    // URL configurable in local.properties or BuildConfig
-    private const val BASE_URL = BuildConfig.BACKEND_URL
-    
-    val api: BackendApi by lazy {
-        Retrofit.Builder()
-            .baseUrl(BASE_URL)
-            .client(OkHttpClient.Builder()
-                .addInterceptor(HttpLoggingInterceptor().apply { 
-                    level = HttpLoggingInterceptor.Level.BODY 
-                })
-                .build())
-            .addConverterFactory(GsonConverterFactory.create())
-            .build()
-            .create(BackendApi::class.java)
-    }
-}
-```
+### 3.3 Data Field Comparison
 
-### 3.2 Add Backend API Response Models
-
-**New file: `data/model/BackendModels.kt`**
-```kotlin
-// Generic wrapper matching backend's APIResponse
-data class ApiResponse<T>(
-    val success: Boolean,
-    val message: String?,
-    val data: T?
-)
-
-// Map marker (lightweight)
-data class StationMarker(
-    val id: Long,
-    val name: String,
-    val latitude: Double,
-    val longitude: Double,
-    val available: Boolean
-)
-
-// Full station data
-data class StationScore(
-    val station: Station,
-    val distance: Double,
-    val score: Double,
-    val availableSlots: Int,
-    val totalSlots: Int,
-    val connectorTypes: List<String>,
-    val rating: Double
-)
-
-// Backend Station model
-data class Station(
-    val id: Long,
-    val name: String,
-    val latitude: Double,
-    val longitude: Double,
-    val address: String,
-    val operatingHours: String?,
-    val pricePerKwh: Double?,
-    val rating: Double?,
-    val meta: String?,
-    val isOpen: Boolean?
-)
-```
-
-### 3.3 Update Repository
-
-**Modified: `data/repository/StationRepository.kt`**
-```kotlin
-class StationRepository {
-    private val backendApi = BackendClient.api
-    
-    suspend fun getNearbyStations(lat: Double, lng: Double, distance: Double = 20.0): List<StationScore> {
-        return try {
-            val response = backendApi.getNearbyStations(lat, lng, distance)
-            if (response.isSuccessful) {
-                response.body()?.data ?: emptyList()
-            } else emptyList()
-        } catch (e: Exception) {
-            Log.e("Repository", "Error fetching stations", e)
-            emptyList()
-        }
-    }
-    
-    // ... similar for viewport and detail
-}
-```
-
-### 3.4 Update ViewModel
-
-**Modified: `StationViewModel.kt`**
-- Keep the same `StationUiState` sealed class
-- Change repository calls from `OCMStation` to `StationScore`/`StationMarker`
-- Map `StationScore` to UI data (distance, available slots, etc.)
-
-### 3.5 Update UI (StationDetailsSheet)
-
-**Modified: `StationDetailsSheet.kt`**
-- Accept `StationScore` instead of `OCMStation`
-- Show:
-  - Station name ✅
-  - Operator (from `meta.ocm_operator` if available)
-  - Address ✅
-  - Connector types (from `connectorTypes` list)
-  - Rating (stars visual)
-  - Price per kWh
-  - Operating hours
-  - Available slots count
-- Keep the "Navigate" (Google Maps) button
-
-### 3.6 Update Screen (MainActivity)
-
-**Modified: `MainActivity.kt` / `MapScreen.kt`**
-- Minor changes to adapt from `OCMStation` to `StationScore`
-- Keep the same map + bottom sheet UX
-- Update type references only
-
-### 3.7 Build Config
-
-**Modified: `build.gradle.kts`**
-- Add `BACKEND_URL` to `buildConfigField`
-- Read from `local.properties` as `BACKEND_URL=http://10.0.2.2:8080/`
-
----
-
-## 4. What Does NOT Change
-
-### ❌ Main Android App (`android/`)
-- **No file edited**
-- `StationViewModel.kt` — unchanged  
-- `ApiService.kt` — unchanged  
-- `RetrofitClient.kt` — unchanged  
-- `HomeScreen.kt` — unchanged  
-- All booking/charging/payment screens — unchanged  
-- `AndroidManifest.xml` — unchanged  
-
-### ❌ Main Backend Auth Logic
-- `SecurityConfig.java` — only **adds** `permitAll()` for `/api/finder/**`, doesn't modify existing rules
-- `JwtRequestFilter.java` — unchanged
-- `JwtUtil.java` — unchanged
-- All existing controllers — unchanged
-
----
-
-## 5. Data Model Comparison
-
-| Info | OCM (Current) | Backend (New) | Station-Finder Shows |
-|------|---------------|---------------|---------------------|
-| Station name | ✅ `addressInfo.title` | ✅ `station.name` | ✅ Name |
+| Info | OCM (Current) | Finder Backend (New) | Station-Finder Shows |
+|------|---------------|---------------------|---------------------|
+| Name | ✅ `addressInfo.title` | ✅ `station.name` | ✅ Name |
 | Operator | ✅ `operatorInfo.title` | ✅ `meta.ocm_operator` | ✅ Badge text |
 | Address | ✅ `addressInfo.addressLine1` | ✅ `station.address` | ✅ Full address |
-| Latitude/Longitude | ✅ `addressInfo.latitude/longitude` | ✅ `station.latitude/longitude` | ✅ Map markers |
-| Connector types | ✅ `connections[].type.title` | ✅ `connectorTypes[]` | ✅ Chip list |
-| Power (kW) | ✅ `connections[].powerKw` | — (available per slot) | ⚠️ Show from slot data |
-| Operating status | ✅ `connections[].status.isOperational` | ✅ `station.isOpen` | ✅ Open/Closed badge |
+| Lat/Lng | ✅ `addressInfo.lat/lng` | ✅ `station.lat/lng` | ✅ Map markers |
+| Connector types | ✅ `connections[].type.title` | ✅ `connectorTypes[]` (computed from slots) | ✅ Chip list |
+| Power (kW) | ✅ `connections[].powerKw` | ✅ `slots[].powerKw` | ✅ Per-slot |
+| Operating status | ✅ `status.isOperational` | ✅ `station.isOpen` | ✅ Open/Closed badge |
 | Rating | ❌ Not available | ✅ `station.rating` | ✅ Stars (new!) |
-| Distance | ❌ Client computes | ✅ `stationScore.distance` | ✅ "X km away" |
-| Available slots | ❌ Not available | ✅ `stationScore.availableSlots` | ✅ "3/6 available" |
+| Distance | ❌ Client computes | ✅ `distance` | ✅ "X km away" |
+| Available slots | ❌ Not available | ✅ `availableSlots` | ✅ "3/6 available" |
 | Price/kWh | ❌ Rarely available | ✅ `station.pricePerKwh` | ✅ "₹16.5/kWh" |
 | Operating hours | ❌ Rarely available | ✅ `station.operatingHours` | ✅ "24 Hours" |
-| Navigation | ✅ Lat/Lng → Google Maps | ✅ Lat/Lng → Google Maps | ✅ Same button |
-
-**Net improvement:** The station-finder app gains **5 new data points** it didn't have before (rating, distance, available slots, price, operating hours) while losing nothing.
 
 ---
 
-## 6. Implementation Phases
+## 4. Project Structure
 
-### Phase 1 — Backend Foundation (Estimated: 2-3 hours)
-
-| Step | File | What |
-|------|------|------|
-| 1.1 | `StationImportService.java` | New service: fetch from OCM, transform, store, deduplicate |
-| 1.2 | `StationFinderController.java` | New controller: finder endpoints delegating to existing services |
-| 1.3 | `SecurityConfig.java` | Add `permitAll()` for `/api/finder/**` (1 line) |
-| 1.4 | `StationSyncJob.java` | New scheduled job for periodic OCM sync |
-| 1.5 | `application.properties` | Add `ocm.api.key`, `ocm.sync.*` config |
-
-### Phase 2 — Backend Testing (Estimated: 1 hour)
-
-| Step | What |
-|------|------|
-| 2.1 | Manual: Call `/api/finder/stations/nearby?lat=19.07&lng=72.87` |
-| 2.2 | Manual: Call `/api/finder/stations/viewport?neLat=...&neLng=...&swLat=...&swLng=...` |
-| 2.3 | Verify existing `/api/stations/...` endpoints still work (unchanged) |
-
-### Phase 3 — Station Finder App Update (Estimated: 2-3 hours)
-
-| Step | File | What |
-|------|------|------|
-| 3.1 | `data/network/BackendApi.kt` | New Retrofit interface |
-| 3.2 | `data/network/BackendClient.kt` | New Retrofit client |
-| 3.3 | `data/model/BackendModels.kt` | New response models |
-| 3.4 | `data/repository/StationRepository.kt` | Modify to call backend |
-| 3.5 | `StationViewModel.kt` | Update type references |
-| 3.6 | `StationDetailsSheet.kt` | Update to show new data fields |
-| 3.7 | `MainActivity.kt` / `MapScreen.kt` | Minor type updates |
-| 3.8 | `build.gradle.kts` | Add BACKEND_URL build config |
-
-### Phase 4 — Integration Test (Estimated: 1 hour)
-
-| Step | What |
-|------|------|
-| 4.1 | Start backend with OCM API key configured |
-| 4.2 | Run station-finder app pointing to local backend |
-| 4.3 | Verify map shows stations from OCM |
-| 4.4 | Tap station → verify bottom sheet with all data |
-| 4.5 | Navigate to station → verify Google Maps opens |
-
----
-
-## 7. Environment Configuration
-
-### `local.properties` (station-finder)
-
-```properties
-# Keep existing keys
-MAPS_API_KEY=your_google_maps_key
-OCM_API_KEY=your_ocm_key
-
-# NEW: Backend URL
-# Use 10.0.2.2 for Android emulator (maps to host localhost)
-# Use your machine's IP for physical device testing
-BACKEND_URL=http://10.0.2.2:8080/
+```
+ev-project/
+├── backend/                          ← UNCHANGED (main EV backend)
+│   └── src/main/java/com/ganesh/EV_Project/
+│       ├── controller/
+│       ├── service/
+│       ├── model/
+│       └── ...
+│
+├── station-finder-backend/           ← NEW (dedicated finder backend)
+│   ├── pom.xml
+│   ├── Dockerfile
+│   ├── src/main/java/com/ganesh/finder/
+│   │   ├── FinderApplication.java
+│   │   ├── config/
+│   │   │   ├── SecurityConfig.java      (no auth — permitAll)
+│   │   │   ├── DataSeeder.java          (seed OCM stations)
+│   │   │   └── StationSyncJob.java      (scheduled sync)
+│   │   ├── controller/
+│   │   │   ├── StationController.java   (finder API endpoints)
+│   │   │   └── ImportController.java    (manual import trigger)
+│   │   ├── model/
+│   │   │   ├── Station.java             (simplified entity)
+│   │   │   └── ChargerSlot.java         (simplified entity)
+│   │   ├── dto/
+│   │   │   ├── ApiResponse.java
+│   │   │   ├── StationMarker.java
+│   │   │   ├── StationWithScore.java
+│   │   │   └── StationDetail.java
+│   │   ├── repository/
+│   │   │   ├── StationRepository.java
+│   │   │   └── ChargerSlotRepository.java
+│   │   └── service/
+│   │       ├── StationImportService.java  (OCM fetch + transform)
+│   │       └── StationService.java        (queries + scoring)
+│   └── src/main/resources/
+│       └── application.properties
+│
+├── station-finder/                   ← MODIFIED (Android app)
+│   └── app/src/main/java/com/ganesh/stationfinder/
+│       ├── data/network/
+│       │   ├── BackendApi.kt         (NEW)
+│       │   └── BackendClient.kt      (NEW)
+│       ├── data/model/
+│       │   └── BackendModels.kt      (NEW)
+│       └── ...
+│
+├── android/                          ← UNCHANGED (main EV app)
+└── web/                              ← UNCHANGED (web dashboard)
 ```
 
-### `application.properties` (backend)
+---
+
+## 5. Implementation Phases
+
+| Phase | What | New Files | Modified Files | Est. Time |
+|-------|------|-----------|----------------|-----------|
+| **1** | Create new Spring Boot project (structure, pom.xml, config) | 5 | 0 | 30 min |
+| **2** | Data models + DTOs + Repositories | 8 | 0 | 45 min |
+| **3** | StationImportService + DataSeeder | 2 | 1 | 1-2 hr |
+| **4** | StationService (scoring, search) + StationController | 2 | 0 | 1 hr |
+| **5** | StationSyncJob + application.properties | 1 | 1 | 30 min |
+| **6** | Backend testing (curl all endpoints) | 0 | 0 | 1 hr |
+| **7** | Station Finder Android app updates | 3 | 5 | 2-3 hr |
+| **8** | Integration testing (both apps + both backends) | 0 | 0 | 1 hr |
+
+**Total: ~8-10 hours**
+
+---
+
+## 6. Database Setup
+
+### 6.1 Create Database
+
+```sql
+CREATE DATABASE ev_station_finder;
+```
+
+### 6.2 application.properties
 
 ```properties
-# NEW: OCM Import Configuration
-ocm.api.key=${OCM_API_KEY:demo_key}
+spring.application.name=ev-station-finder
+
+# PostgreSQL
+spring.datasource.url=jdbc:postgresql://localhost:5432/ev_station_finder
+spring.datasource.username=postgres
+spring.datasource.password=postgres
+spring.jpa.hibernate.ddl-auto=update
+spring.jpa.show-sql=true
+spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.PostgreSQLDialect
+
+# Server port (different from main backend's 8080)
+server.port=8081
+
+# OCM Configuration
+ocm.api.key=${OCM_API_KEY}
 ocm.sync.enabled=true
 ocm.sync.radius-km=500
 ocm.sync.country-id=101
@@ -414,46 +283,53 @@ ocm.sync.interval-cron=0 0 3 * * ?
 
 ---
 
-## 8. Edge Cases & Gotchas
+## 7. Edge Cases & Gotchas
 
 | Issue | Solution |
 |-------|----------|
-| **OCM API rate limits** | Backend caches results in DB; sync is daily, not per-request |
-| **Duplicate stations** | Dedup by OCM `UUID` stored in `meta` JSON field |
-| **Station has no slots** | Create 1 default "Unknown" slot with status AVAILABLE |
-| **Station-finder has no auth** | Public endpoints are truly anonymous — no token needed |
-| **Backend is offline** | Station-finder should show error toast + retry button |
-| **OCM data is sparse** | Backend's scored stations still work — missing fields show "N/A" |
+| **OCM API rate limits** | Backend caches in DB; sync is daily, not per-request |
+| **Duplicate stations** | Dedup by `ocmId` — skip if already in DB |
+| **OCM data is sparse** | Missing fields show "N/A" in the app |
+| **Backend is offline** | Station-finder shows error toast + retry |
+| **Two backends running** | Main on 8080, Finder on 8081 — no conflict |
 | **GPS not available** | Fall back to default location (Mumbai: 19.0760, 72.8777) |
-| **Main app's data** | Only main app's stations have owners/bookings; OCM stations won't |
-| **Production deployment** | Backend must set `ocm.api.key` via env var, not in code |
+| **Docker deployment** | Two separate services in `docker-compose.yml` |
+| **Production** | `ocm.api.key` must be set via env var, never hardcoded |
 
 ---
 
-## 9. Summary of Changes
+## 8. Summary of Changes
 
-### Backend (Additive — Nothing Removed)
-- **3 new files**: `StationImportService.java`, `StationFinderController.java`, `StationSyncJob.java`
-- **2 edited files**: `SecurityConfig.java` (+1 line), `application.properties` (+5 lines)
-- **0 deleted files**
+### Backend (New Project)
+- **~14 new files** in `station-finder-backend/`
+  - 1 `pom.xml`
+  - 1 `Dockerfile`
+  - 1 `FinderApplication.java`
+  - 2 config files
+  - 2 controllers
+  - 2 entities (Station, ChargerSlot)
+  - 4 DTOs
+  - 2 repositories
+  - 2 services
+  - 1 `application.properties`
 
-### Station Finder App (Replaces OCM Direct Calls)
+### Station Finder App
 - **3 new files**: `BackendApi.kt`, `BackendClient.kt`, `BackendModels.kt`
-- **4 edited files**: `StationRepository.kt`, `StationViewModel.kt`, `StationDetailsSheet.kt`, `MainActivity.kt`, `build.gradle.kts`
-- **0 deleted files** (can keep `OCMModels.kt` for future reference)
+- **5 modified files**: `StationRepository.kt`, `StationViewModel.kt`, `StationDetailsSheet.kt`, `MainActivity.kt`, `build.gradle.kts`
+- **0 deleted files** (can keep `OCMModels.kt` for reference)
 
-### Main Android App
-- **0 files changed**
+### Main Backend & Main Android App
+- **0 files changed** ✅
 
 ---
 
-## 10. Future Enhancements (After This Plan)
+## 9. Future Enhancements
 
 | Feature | Benefit |
 |---------|---------|
-| Station photos from OCM/Google Places | App shows station images |
-| User reviews (stored in backend) | Users rate stations they visit |
-| Filter by connector type | "Show only CCS2 stations" |
+| Station photos (OCM or Google Places) | Visual confirmation of stations |
+| User reviews (stored in finder DB) | Community ratings |
+| Filter by connector type | "Show only CCS2" |
 | Favorite stations | Pin frequently used stations |
-| Offline station cache | View last-seen stations without internet |
+| Offline cache | View last-seen stations without internet |
 | Price filter | "Show stations under ₹20/kWh" |
