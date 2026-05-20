@@ -25,14 +25,6 @@
 
 ## Phase 0: Setup & Preparation
 
-### Step 0.1 — Create Git Branch
-
-```bash
-# From project root
-cd D:\Ganesh\work\EV-Project
-git checkout -b feature/station-finder-backend
-```
-
 ### Step 0.2 — Verify Environment
 
 ```bash
