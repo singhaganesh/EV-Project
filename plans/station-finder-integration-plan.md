@@ -13,7 +13,7 @@ Make the standalone **station-finder** Android app use the **shared backend** (i
 │                         (Spring Boot 3.3.5)                             │
 │                                                                         │
 │  ┌─────────────────┐    ┌───────────────────┐    ┌──────────────────┐  │
-│  │  Finder APIs     │    │  Authenticated APIs│    │  OCM Sync Svc   │  │
+│  │  Finder APIs    │    │  Authenticated APIs│    │  OCM Sync Svc   │  │
 │  │  (no auth)       │    │  (JWT required)    │    │  (scheduled)     │  │
 │  │                  │    │                    │    │                  │  │
 │  │  GET /finder/    │    │  GET /api/stations │    │  ─→ fetch OCM    │  │
