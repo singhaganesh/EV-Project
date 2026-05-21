@@ -117,8 +117,7 @@ public class StationImportService {
                 + "&distanceunit=KM"
                 + "&maxresults=100"
                 + "&compact=true"
-                + "&verbose=false"
-                + "&countryid=" + countryId;
+                + "&verbose=false";
     }
 
     @Transactional
