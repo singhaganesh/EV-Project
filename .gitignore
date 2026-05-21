@@ -23,5 +23,6 @@ android/nul
 .git/index.lock
 
 /backend/src/main/resources/application-dev.properties
+/station-finder-backend/src/main/resources/application-dev.properties
 # Added by code-review-graph
 .code-review-graph/
