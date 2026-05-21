@@ -122,11 +122,11 @@ fun MapScreen(viewModel: StationViewModel = viewModel()) {
                         Marker(
                             state = MarkerState(
                                 position = LatLng(
-                                    station.addressInfo.latitude,
-                                    station.addressInfo.longitude
+                                    station.latitude,
+                                    station.longitude
                                 )
                             ),
-                            title = station.addressInfo.title,
+                            title = station.name,
                             onClick = {
                                 selectedStation = station
                                 true // consume the click

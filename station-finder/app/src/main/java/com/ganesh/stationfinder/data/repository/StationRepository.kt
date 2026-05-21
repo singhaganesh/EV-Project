@@ -13,10 +13,15 @@ class StationRepository {
             val response = api.getNearbyStations(
                 lat = lat,
                 lng = lng,
-                distance = distance
+                radius = distance
             )
-            android.util.Log.d("Repository", "API returned ${response.size} stations")
-            response
+            if (response.success) {
+                android.util.Log.d("Repository", "API returned ${response.data.size} stations: ${response.message}")
+                response.data
+            } else {
+                android.util.Log.e("Repository", "API returned failure: ${response.message}")
+                emptyList()
+            }
         } catch (e: Exception) {
             android.util.Log.e("Repository", "Error fetching stations", e)
             emptyList()

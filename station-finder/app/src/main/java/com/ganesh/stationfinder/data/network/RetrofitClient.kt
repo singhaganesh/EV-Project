@@ -8,20 +8,13 @@ import retrofit2.converter.gson.GsonConverterFactory
 import java.util.concurrent.TimeUnit
 
 object RetrofitClient {
-    private const val BASE_URL = "https://api.openchargemap.io/"
+    private const val BASE_URL = "http://10.0.2.2:8081/"
 
     private val logging = HttpLoggingInterceptor().apply {
         level = HttpLoggingInterceptor.Level.BODY
     }
 
     private val httpClient = OkHttpClient.Builder()
-        .addInterceptor { chain ->
-            val request = chain.request().newBuilder()
-                .header("User-Agent", "StationFinder-Android-App")
-                .header("X-API-Key", BuildConfig.OCM_API_KEY)
-                .build()
-            chain.proceed(request)
-        }
         .addInterceptor(logging)
         .protocols(listOf(okhttp3.Protocol.HTTP_1_1)) 
         .connectTimeout(60, TimeUnit.SECONDS)

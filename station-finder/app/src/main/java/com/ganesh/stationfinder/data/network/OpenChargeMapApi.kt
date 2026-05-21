@@ -1,19 +1,18 @@
 package com.ganesh.stationfinder.data.network
 
+import com.ganesh.stationfinder.data.model.ApiResponse
 import com.ganesh.stationfinder.data.model.OCMStation
 import retrofit2.http.GET
 import retrofit2.http.Query
 
 interface OpenChargeMapApi {
     
-    @GET("v3/poi")
+    @GET("api/stations/nearby")
     suspend fun getNearbyStations(
-        @Query("latitude") lat: Double,
-        @Query("longitude") lng: Double,
-        @Query("distance") distance: Double,
-        @Query("distanceunit") unit: String = "KM",
-        @Query("maxresults") maxResults: Int = 20,
-        @Query("compact") compact: Boolean = true,
-        @Query("verbose") verbose: Boolean = false
-    ): List<OCMStation>
+        @Query("lat") lat: Double,
+        @Query("lng") lng: Double,
+        @Query("radius") radius: Double,
+        @Query("limit") limit: Int = 20
+    ): ApiResponse<List<OCMStation>>
 }
+
