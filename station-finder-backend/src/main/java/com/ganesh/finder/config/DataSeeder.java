@@ -7,6 +7,7 @@ import com.ganesh.finder.repository.StationRepository;
 import com.ganesh.finder.service.StationImportService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
 
@@ -21,6 +22,9 @@ public class DataSeeder implements CommandLineRunner {
     private final StationRepository stationRepository;
     private final ChargerSlotRepository chargerSlotRepository;
 
+    @Value("${app.seeding.enabled:true}")
+    private boolean seedingEnabled;
+
     public DataSeeder(StationImportService stationImportService, 
                       StationRepository stationRepository,
                       ChargerSlotRepository chargerSlotRepository) {
@@ -31,6 +35,13 @@ public class DataSeeder implements CommandLineRunner {
 
     @Override
     public void run(String... args) {
+        if (!seedingEnabled) {
+            log.info("====================================");
+            log.info("🔍 DataSeeder: Seeding is disabled via configuration. No station data will be inserted.");
+            log.info("====================================");
+            return;
+        }
+
         long currentCount = stationRepository.count();
         if (currentCount > 0) {
             log.info("====================================");
