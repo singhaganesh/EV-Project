@@ -26,7 +26,11 @@ class StationViewModel : ViewModel() {
     private val _uiState = MutableStateFlow<StationUiState>(StationUiState.Loading)
     val uiState: StateFlow<StationUiState> = _uiState.asStateFlow()
 
-    fun fetchNearbyStations(location: LatLng, distance: Double = 20.0) {
+    var isManualSearch: Boolean = false
+        private set
+
+    fun fetchNearbyStations(location: LatLng, distance: Double = 20.0, manual: Boolean = false) {
+        isManualSearch = manual
         // Cancel previous search if still running
         searchJob?.cancel()
         
@@ -54,13 +58,13 @@ class StationViewModel : ViewModel() {
         searchJob = viewModelScope.launch {
             delay(1500) // 1.5 second debounce
             val radius = calculateRadiusFromZoom(zoom)
-            fetchNearbyStations(location, radius)
+            fetchNearbyStations(location, radius, manual = false)
         }
     }
 
-    fun fetchNearbyStationsForZoom(location: LatLng, zoom: Float) {
+    fun fetchNearbyStationsForZoom(location: LatLng, zoom: Float, manual: Boolean = false) {
         val radius = calculateRadiusFromZoom(zoom)
-        fetchNearbyStations(location, radius)
+        fetchNearbyStations(location, radius, manual)
     }
 
     private fun calculateRadiusFromZoom(zoom: Float): Double {

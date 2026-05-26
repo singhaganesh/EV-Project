@@ -12,8 +12,14 @@ import androidx.compose.material.icons.filled.Directions
 import androidx.compose.material.icons.filled.EvStation
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -22,6 +28,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ganesh.stationfinder.data.model.OCMStation
+import com.ganesh.stationfinder.util.FavoriteManager
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -56,7 +63,7 @@ fun StationDetailsSheet(
                     Icon(Icons.Default.EvStation, null, tint = Color(0xFF00BCD4))
                 }
                 Spacer(modifier = Modifier.width(16.dp))
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = station.name,
                         style = MaterialTheme.typography.titleLarge,
@@ -88,6 +95,20 @@ fun StationDetailsSheet(
                             )
                         }
                     }
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                var isFavorited by remember { mutableStateOf(FavoriteManager.isFavorite(context, station.id)) }
+                IconButton(
+                    onClick = {
+                        isFavorited = FavoriteManager.toggleFavorite(context, station.id)
+                    }
+                ) {
+                    Icon(
+                        imageVector = if (isFavorited) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                        contentDescription = "Favorite",
+                        tint = if (isFavorited) Color(0xFF0F766E) else Color.LightGray,
+                        modifier = Modifier.size(28.dp)
+                    )
                 }
             }
 
