@@ -69,6 +69,9 @@ dependencies {
     // ViewModel Compose
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")
     
+    // Navigation Compose
+    implementation(libs.androidx.navigation.compose)
+    
     // Maps & Location
     implementation("com.google.maps.android:maps-compose:4.3.0")
     implementation("com.google.android.gms:play-services-maps:18.2.0")

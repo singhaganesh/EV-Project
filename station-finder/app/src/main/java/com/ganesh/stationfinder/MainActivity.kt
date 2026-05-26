@@ -155,7 +155,8 @@ fun MapScreen(viewModel: StationViewModel = viewModel()) {
                 Button(
                     onClick = {
                         val center = cameraPositionState.position.target
-                        viewModel.fetchNearbyStations(center)
+                        val zoom = cameraPositionState.position.zoom
+                        viewModel.fetchNearbyStationsForZoom(center, zoom)
                     },
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Color.White,

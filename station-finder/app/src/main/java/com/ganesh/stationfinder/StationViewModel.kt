@@ -58,12 +58,20 @@ class StationViewModel : ViewModel() {
         }
     }
 
+    fun fetchNearbyStationsForZoom(location: LatLng, zoom: Float) {
+        val radius = calculateRadiusFromZoom(zoom)
+        fetchNearbyStations(location, radius)
+    }
+
     private fun calculateRadiusFromZoom(zoom: Float): Double {
         return when {
             zoom >= 15f -> 5.0
             zoom >= 12f -> 15.0
             zoom >= 10f -> 30.0
-            else -> 50.0
+            zoom >= 8f -> 100.0
+            zoom >= 6f -> 300.0
+            zoom >= 4f -> 1000.0
+            else -> 3000.0
         }
     }
 

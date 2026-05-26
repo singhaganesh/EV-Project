@@ -7,6 +7,8 @@ import com.ganesh.finder.service.StationService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import java.util.List;
 import java.util.Map;
 
@@ -14,6 +16,7 @@ import java.util.Map;
 @RequestMapping("/api/stations")
 public class StationController {
 
+    private static final Logger log = LoggerFactory.getLogger(StationController.class);
     private final StationService stationService;
 
     public StationController(StationService stationService) {
@@ -30,7 +33,9 @@ public class StationController {
             @RequestParam(defaultValue = "50") double radius,
             @RequestParam(defaultValue = "20") int limit) {
         try {
+            log.info("Received nearby search request: lat={}, lng={}, radius={}km, limit={}", lat, lng, radius, limit);
             List<StationWithScore> stations = stationService.getNearbyStations(lat, lng, radius, limit);
+            log.info("Found {} stations near lat={}, lng={}", stations.size(), lat, lng);
             return ResponseEntity.ok(ApiResponse.success(
                     "Found " + stations.size() + " nearby stations", stations));
         } catch (Exception e) {
