@@ -120,6 +120,70 @@ public class StationImportService {
                 + "&verbose=false";
     }
 
+    /**
+     * Fetch stations from OCM for a specific country code.
+     *
+     * @param countryCode Country code (e.g. "IN")
+     * @param maxResults  Maximum number of results to fetch
+     * @return Number of stations imported
+     */
+    @Transactional
+    public int importForCountry(String countryCode, int maxResults) {
+        int imported = 0;
+        int skipped = 0;
+
+        try {
+            String url = buildOCMCountryUrl(countryCode, maxResults);
+            log.info("Fetching OCM stations for country {} from: {}", countryCode, url);
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("User-Agent", "station-finder-backend/1.0");
+            HttpEntity<String> entity = new HttpEntity<>(headers);
+
+            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
+            if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
+                log.error("OCM API returned status: {}", response.getStatusCode());
+                return 0;
+            }
+
+            JsonNode root = objectMapper.readTree(response.getBody());
+            if (!root.isArray()) {
+                log.error("OCM response is not an array");
+                return 0;
+            }
+
+            for (JsonNode node : root) {
+                try {
+                    if (transformAndSave(node)) {
+                        imported++;
+                    } else {
+                        skipped++;
+                    }
+                } catch (Exception e) {
+                    log.warn("Failed to import OCM station: {}", e.getMessage());
+                    skipped++;
+                }
+            }
+
+            log.info("OCM country import complete: {} imported, {} skipped (total {})",
+                    imported, skipped, root.size());
+
+        } catch (Exception e) {
+            log.error("OCM country import failed: {}", e.getMessage(), e);
+        }
+
+        return imported;
+    }
+
+    private String buildOCMCountryUrl(String countryCode, int maxResults) {
+        String baseUrl = "https://api.openchargemap.io/v3/poi";
+        return baseUrl + "?key=" + URLEncoder.encode(ocmApiKey, StandardCharsets.UTF_8)
+                + "&countrycode=" + countryCode
+                + "&maxresults=" + maxResults
+                + "&compact=true"
+                + "&verbose=false";
+    }
+
     @Transactional
     public boolean transformAndSave(JsonNode ocmNode) {
         // Extract OCM ID for deduplication
