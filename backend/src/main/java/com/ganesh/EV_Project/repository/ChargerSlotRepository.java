@@ -50,4 +50,9 @@ public interface ChargerSlotRepository extends JpaRepository<ChargerSlot, Long> 
     List<ChargerSlot> findAvailableSlotsForUpdate(
             @Param("stationId") Long stationId,
             @Param("connectorType") ConnectorType connectorType);
+
+    // Pessimistic lock on a single slot (used for the admin slotId override path)
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT s FROM ChargerSlot s WHERE s.id = :id")
+    java.util.Optional<ChargerSlot> findByIdForUpdate(@Param("id") Long id);
 }

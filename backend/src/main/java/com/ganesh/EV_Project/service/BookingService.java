@@ -69,9 +69,10 @@ public class BookingService {
         LocalDateTime expiresAt = now.plusMinutes(expirationMinutes);
         ChargerSlot assignedSlot;
 
-        // Admin override: if slotId is provided, use it directly
+        // Admin override: if slotId is provided, use it directly (with a row lock
+        // so two simultaneous requests can't both pass the AVAILABLE check)
         if (request.getSlotId() != null) {
-            assignedSlot = slotRepository.findById(request.getSlotId())
+            assignedSlot = slotRepository.findByIdForUpdate(request.getSlotId())
                     .orElseThrow(() -> new APIException("Slot not found"));
             if (assignedSlot.getStatus() != SlotStatus.AVAILABLE) {
                 throw new APIException("Selected slot is not available");
