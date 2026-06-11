@@ -11,16 +11,20 @@ import com.ganesh.EV_Project.repository.IoTSensorDataRepository;
 import com.ganesh.EV_Project.repository.StationRepository;
 import com.ganesh.EV_Project.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Profile;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
 import java.util.*;
 
 @Component
+@Profile("dev") // Never auto-seed an admin in production
 @RequiredArgsConstructor
 public class DataSeeder implements CommandLineRunner {
 
@@ -31,6 +35,13 @@ public class DataSeeder implements CommandLineRunner {
         private final IoTSensorDataRepository ioTSensorDataRepository;
         private final UserRepository userRepository;
         private final PasswordEncoder passwordEncoder;
+
+        @Value("${seed.admin.email:admin@ev.com}")
+        private String adminEmail;
+
+        // No default: if SEED_ADMIN_PASSWORD is unset, admin seeding is skipped.
+        @Value("${seed.admin.password:}")
+        private String adminPassword;
 
         private final Random random = new Random();
 
@@ -49,12 +60,15 @@ public class DataSeeder implements CommandLineRunner {
         }
 
         private void seedAdminUser() {
-                String adminEmail = "admin@ev.com";
+                if (!StringUtils.hasText(adminPassword)) {
+                        log.warn("⚠️ SEED_ADMIN_PASSWORD not set — skipping admin seeding.");
+                        return;
+                }
                 if (userRepository.findByEmail(adminEmail).isEmpty()) {
                         User admin = new User();
                         admin.setName("System Admin");
                         admin.setEmail(adminEmail);
-                        admin.setPassword(passwordEncoder.encode("admin123"));
+                        admin.setPassword(passwordEncoder.encode(adminPassword));
                         admin.setRole(User.Role.ADMIN);
                         admin.setIsFirstTimeUser(false);
                         userRepository.save(admin);
