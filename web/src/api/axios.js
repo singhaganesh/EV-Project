@@ -1,5 +1,6 @@
 import axios from 'axios';
 import toast from 'react-hot-toast';
+import { tokenStorage } from './tokenStorage';
 
 const api = axios.create({
     baseURL: import.meta.env.VITE_API_BASE_URL,
@@ -10,7 +11,7 @@ const api = axios.create({
 
 api.interceptors.request.use(
     (config) => {
-        const token = localStorage.getItem('token');
+        const token = tokenStorage.getToken();
         if (token) {
             config.headers.Authorization = `Bearer ${token}`;
         }
@@ -29,7 +30,7 @@ api.interceptors.response.use(
     (error) => {
         if (error.response?.status === 401) {
             // Auto logout if 401 response returned from api
-            localStorage.removeItem('token');
+            tokenStorage.clear();
             localStorage.removeItem('user');
             window.location.href = '/login';
             toast.error('Session expired. Please log in again.');
