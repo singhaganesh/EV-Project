@@ -33,7 +33,7 @@ public class Payment {
     private String transactionId;
 
     @Column
-    private String gateway; // e.g., "STRIPE", "RAZORPAY"
+    private String gateway = "RAZORPAY";
     
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)

@@ -86,7 +86,6 @@ public class SecurityConfig {
                     // Public System Endpoints
                     auth.requestMatchers("/api/public/**").permitAll();
                     auth.requestMatchers("/ws/**").permitAll();
-                    auth.requestMatchers("/api/payments/webhook").permitAll();
                     auth.requestMatchers("/h2-console/**").permitAll();
                     auth.requestMatchers("/error").permitAll();
                     
