@@ -14,6 +14,9 @@ if (localPropertiesFile.exists()) {
 val mapsApiKey: String = localProperties.getProperty("MAPS_API_KEY")?.trim() ?: ""
 val baseUrl: String = localProperties.getProperty("BASE_URL")?.trim() ?: ""
 val razorpayKeyId: String = localProperties.getProperty("RAZORPAY_KEY_ID")?.trim() ?: ""
+// Release always targets HTTPS; override via RELEASE_BASE_URL in local.properties/CI if needed.
+val releaseBaseUrl: String = localProperties.getProperty("RELEASE_BASE_URL")?.trim()
+    ?.takeIf { it.isNotEmpty() } ?: "https://api.plugsy.in/"
 
 android {
     namespace = "com.ganesh.ev"
@@ -29,6 +32,8 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         
         manifestPlaceholders["MAPS_API_KEY"] = mapsApiKey
+        // Cleartext allowed by default (debug); release overrides to false below.
+        manifestPlaceholders["usesCleartextTraffic"] = "true"
         buildConfigField("String", "BASE_URL", "\"${baseUrl}\"")
         buildConfigField("String", "RAZORPAY_KEY_ID", "\"${razorpayKeyId}\"")
     }
@@ -40,6 +45,12 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            // Production: HTTPS only, no cleartext.
+            manifestPlaceholders["usesCleartextTraffic"] = "false"
+            buildConfigField("String", "BASE_URL", "\"${releaseBaseUrl}\"")
+        }
+        debug {
+            buildConfigField("String", "BASE_URL", "\"${baseUrl}\"")
         }
     }
     
