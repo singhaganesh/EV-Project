@@ -68,15 +68,38 @@ public class BookingController {
     }
 
     @PostMapping
-    public ResponseEntity<Booking> createBooking(@RequestBody BookingRequest request) {
-            Booking savedBooking = bookingService.createBooking(request);
-        return new ResponseEntity<>(savedBooking,HttpStatus.CREATED);
+    public ResponseEntity<?> createBooking(@RequestBody BookingRequest request,
+                                           Authentication authentication) {
+        User currentUser = userService.getAuthenticatedUser(authentication);
+        if (currentUser == null) {
+            return new ResponseEntity<>("Unauthorized", HttpStatus.UNAUTHORIZED);
+        }
+        // Always bind the booking to the authenticated user; never trust body userId
+        request.setUserId(currentUser.getId());
+        // Only admins may force a specific slot; ignore the override for everyone else
+        if (request.getSlotId() != null && currentUser.getRole() != User.Role.ADMIN) {
+            request.setSlotId(null);
+        }
+        Booking savedBooking = bookingService.createBooking(request);
+        return new ResponseEntity<>(savedBooking, HttpStatus.CREATED);
     }
 
     @PutMapping("/{bookingId}/cancel")
-    public ResponseEntity<String> cancelBooking(@PathVariable Long bookingId) {
+    public ResponseEntity<String> cancelBooking(@PathVariable Long bookingId,
+                                                Authentication authentication) {
+        User currentUser = userService.getAuthenticatedUser(authentication);
+        if (currentUser == null) {
+            return new ResponseEntity<>("Unauthorized", HttpStatus.UNAUTHORIZED);
+        }
+        Booking booking = bookingService.getBookingById(bookingId);
+        boolean isAdmin = currentUser.getRole() == User.Role.ADMIN;
+        boolean isOwner = booking.getUser() != null
+                && booking.getUser().getId().equals(currentUser.getId());
+        if (!isAdmin && !isOwner) {
+            return new ResponseEntity<>("Access Denied: not your booking", HttpStatus.FORBIDDEN);
+        }
         bookingService.cancelBooking(bookingId);
-        return new ResponseEntity<>("Your booking is canceled successfully",HttpStatus.OK);
+        return new ResponseEntity<>("Your booking is canceled successfully", HttpStatus.OK);
     }
 }
 

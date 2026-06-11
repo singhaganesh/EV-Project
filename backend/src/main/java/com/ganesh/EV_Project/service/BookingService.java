@@ -168,6 +168,11 @@ public class BookingService {
         return bookingRepository.findAll();
     }
 
+    public Booking getBookingById(Long id) {
+        return bookingRepository.findById(id)
+                .orElseThrow(() -> new APIException("Booking not found"));
+    }
+
     public List<Booking> getBookingsByUser(Long userId) {
         return bookingRepository.findByUserId(userId);
     }
