@@ -29,7 +29,7 @@ public class Payment {
     @Column(nullable = false)
     private String currency = "INR";
     
-    @Column(name = "transaction_id")
+    @Column(name = "transaction_id", unique = true)
     private String transactionId;
 
     @Column

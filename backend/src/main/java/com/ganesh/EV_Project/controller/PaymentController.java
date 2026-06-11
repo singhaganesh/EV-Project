@@ -57,7 +57,17 @@ public class PaymentController {
             if (session == null) {
                 throw new RuntimeException("Session not found for verification");
             }
-            
+
+            // Idempotency: if this session is already paid, return success without
+            // re-writing (handles client retries / duplicate webhook deliveries).
+            if ("PAID".equals(session.getPaymentStatus())) {
+                return ResponseEntity.ok(APIResponse.builder()
+                        .success(true)
+                        .message("Payment already verified")
+                        .data(session)
+                        .build());
+            }
+
             // 1. Update Session
             session.setPaymentStatus("PAID");
             sessionRepository.save(session);
