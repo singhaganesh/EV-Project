@@ -12,6 +12,11 @@ public interface ChargingSessionRepository extends JpaRepository<ChargingSession
 
     java.util.List<ChargingSession> findByStatus(String status);
 
+    @org.springframework.data.jpa.repository.Query("SELECT s FROM ChargingSession s " +
+            "WHERE s.paymentStatus <> 'PAID' AND s.status = 'COMPLETED' AND s.endTime < :cutoff")
+    java.util.List<ChargingSession> findUnpaidEndedBefore(
+            @org.springframework.data.repository.query.Param("cutoff") java.time.LocalDateTime cutoff);
+
     java.util.Optional<ChargingSession> findByBookingId(Long bookingId);
 
     java.util.Optional<ChargingSession> findByRazorpayOrderId(String orderId);

@@ -1,8 +1,11 @@
 package com.ganesh.EV_Project.controller;
 
+import com.ganesh.EV_Project.enums.SlotStatus;
+import com.ganesh.EV_Project.model.ChargerSlot;
 import com.ganesh.EV_Project.model.ChargingSession;
 import com.ganesh.EV_Project.model.Payment;
 import com.ganesh.EV_Project.payload.APIResponse;
+import com.ganesh.EV_Project.repository.ChargerSlotRepository;
 import com.ganesh.EV_Project.repository.ChargingSessionRepository;
 import com.ganesh.EV_Project.repository.PaymentRepository;
 import com.ganesh.EV_Project.service.RazorpayService;
@@ -25,6 +28,9 @@ public class PaymentController {
 
     @Autowired
     private PaymentRepository paymentRepository;
+
+    @Autowired
+    private ChargerSlotRepository slotRepository;
 
     @PostMapping("/verify")
     public ResponseEntity<?> verifyPayment(@RequestBody Map<String, String> data) {
@@ -55,6 +61,13 @@ public class PaymentController {
             // 1. Update Session
             session.setPaymentStatus("PAID");
             sessionRepository.save(session);
+
+            // Release the held slot now that payment is confirmed
+            ChargerSlot slot = session.getBooking() != null ? session.getBooking().getSlot() : null;
+            if (slot != null && slot.getStatus() == SlotStatus.PAYMENT_PENDING) {
+                slot.setStatus(SlotStatus.AVAILABLE);
+                slotRepository.save(slot);
+            }
 
             // 2. Create and Save Payment Record
             Payment payment = paymentRepository.findByBookingId(session.getBooking().getId())

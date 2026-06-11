@@ -191,15 +191,16 @@ public class ChargingSessionController {
 
             ChargingSession savedSession = chargingSessionRepository.save(session);
 
-            // Release Booking and Slot
+            // Release Booking; hold the slot in PAYMENT_PENDING until payment
+            // is verified so another driver can't grab it before this one pays.
             Booking booking = session.getBooking();
             booking.setStatus(BookingStatus.COMPLETED);
             booking.setActualEndTime(endTime);
             bookingRepository.save(booking);
 
-            // Update slot status
+            // Update slot status — held, not yet available
             ChargerSlot slot = booking.getSlot();
-            slot.setStatus(SlotStatus.AVAILABLE);
+            slot.setStatus(SlotStatus.PAYMENT_PENDING);
             slotRepository.save(slot);
 
             // ── UPDATE STATION AND DISPENSARY LAST USED TIME ──

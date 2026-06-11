@@ -8,6 +8,7 @@ public enum SlotStatus {
     RESERVED, // reserved for a user but not started
     BOOKED, // booked and active
     CHARGING, // currently charging
+    PAYMENT_PENDING, // charging stopped, awaiting payment before release
     MAINTENANCE, // under maintenance or offline
     OCCUPIED // occupied by non-EV or unauthorized
 }

@@ -7,6 +7,7 @@ import com.ganesh.EV_Project.enums.VehicleType;
 import com.ganesh.EV_Project.exception.APIException;
 import com.ganesh.EV_Project.model.Booking;
 import com.ganesh.EV_Project.model.ChargerSlot;
+import com.ganesh.EV_Project.model.ChargingSession;
 import com.ganesh.EV_Project.model.User;
 import com.ganesh.EV_Project.repository.BookingRepository;
 import com.ganesh.EV_Project.repository.ChargerSlotRepository;
@@ -31,6 +32,9 @@ public class BookingService {
 
     @Value("${app.booking.expiration-minutes:20}")
     private int expirationMinutes;
+
+    @Value("${app.payment.pending-ttl-minutes:30}")
+    private int paymentPendingTtlMinutes;
 
     @Autowired
     private BookingRepository bookingRepository;
@@ -219,6 +223,24 @@ public class BookingService {
                 booking.setStatus(BookingStatus.EXPIRED);
                 booking.getSlot().setStatus(SlotStatus.AVAILABLE);
                 bookingRepository.save(booking);
+            }
+        }
+    }
+
+    /**
+     * Release slots stuck in PAYMENT_PENDING when payment was never completed
+     * within the TTL, so the slot does not stay blocked indefinitely.
+     */
+    @Scheduled(fixedRate = 60000)
+    @Transactional
+    public void releaseStalePaymentPendingSlots() {
+        LocalDateTime cutoff = LocalDateTime.now().minusMinutes(paymentPendingTtlMinutes);
+        List<ChargingSession> stale = chargingSessionRepository.findUnpaidEndedBefore(cutoff);
+        for (ChargingSession session : stale) {
+            ChargerSlot slot = session.getBooking() != null ? session.getBooking().getSlot() : null;
+            if (slot != null && slot.getStatus() == SlotStatus.PAYMENT_PENDING) {
+                slot.setStatus(SlotStatus.AVAILABLE);
+                slotRepository.save(slot);
             }
         }
     }
