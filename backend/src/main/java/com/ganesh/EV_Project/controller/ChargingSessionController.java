@@ -13,11 +13,15 @@ import com.ganesh.EV_Project.repository.ChargerSlotRepository;
 import com.ganesh.EV_Project.repository.ChargingSessionRepository;
 import com.ganesh.EV_Project.repository.StationRepository;
 import com.ganesh.EV_Project.controller.WebSocketController;
+import com.ganesh.EV_Project.model.User;
 import com.ganesh.EV_Project.service.ChargingSimulatorService;
 import com.ganesh.EV_Project.service.RazorpayService;
+import com.ganesh.EV_Project.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
@@ -55,11 +59,35 @@ public class ChargingSessionController {
     @Autowired
     private ChargingSimulatorService simulatorService;
 
+    @Autowired
+    private UserService userService;
+
+    /** True if the user owns the booking behind this session, or is an admin. */
+    private boolean ownsBooking(User user, Booking booking) {
+        return user != null && booking != null && booking.getUser() != null
+                && (user.getRole() == User.Role.ADMIN
+                    || booking.getUser().getId().equals(user.getId()));
+    }
+
+    private ResponseEntity<?> forbidden() {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(APIResponse.builder()
+                .success(false)
+                .message("Access denied: this resource does not belong to you")
+                .build());
+    }
+
     @PostMapping("/start")
-    public ResponseEntity<?> startCharging(@RequestBody ChargingSessionRequest request) {
+    public ResponseEntity<?> startCharging(@RequestBody ChargingSessionRequest request,
+                                           Authentication authentication) {
         try {
             Booking booking = bookingRepository.findById(request.getBookingId())
                     .orElseThrow(() -> new RuntimeException("Booking not found"));
+
+            // Ownership: caller must own the booking (or be admin)
+            User currentUser = userService.getAuthenticatedUser(authentication);
+            if (!ownsBooking(currentUser, booking)) {
+                return forbidden();
+            }
 
             // Verify booking is confirmed and start time has arrived
             if (booking.getStatus() != BookingStatus.CONFIRMED) {
@@ -128,10 +156,17 @@ public class ChargingSessionController {
     }
 
     @PostMapping("/stop/{sessionId}")
-    public ResponseEntity<?> stopCharging(@PathVariable Long sessionId) {
+    public ResponseEntity<?> stopCharging(@PathVariable Long sessionId,
+                                          Authentication authentication) {
         try {
             ChargingSession session = chargingSessionRepository.findById(sessionId)
                     .orElseThrow(() -> new RuntimeException("Charging session not found"));
+
+            // Ownership: caller must own the session (or be admin)
+            User currentUser = userService.getAuthenticatedUser(authentication);
+            if (!ownsBooking(currentUser, session.getBooking())) {
+                return forbidden();
+            }
 
             if (session.getEndTime() != null || "COMPLETED".equals(session.getStatus())) {
                 return ResponseEntity.badRequest().body(APIResponse.builder()
@@ -225,10 +260,15 @@ public class ChargingSessionController {
     }
 
     @GetMapping("/session/{sessionId}")
-    public ResponseEntity<?> getSession(@PathVariable Long sessionId) {
+    public ResponseEntity<?> getSession(@PathVariable Long sessionId,
+                                        Authentication authentication) {
         try {
             ChargingSession session = chargingSessionRepository.findById(sessionId)
                     .orElseThrow(() -> new RuntimeException("Session not found"));
+            User currentUser = userService.getAuthenticatedUser(authentication);
+            if (!ownsBooking(currentUser, session.getBooking())) {
+                return forbidden();
+            }
             return ResponseEntity.ok(APIResponse.builder()
                     .success(true)
                     .data(session)
@@ -242,10 +282,15 @@ public class ChargingSessionController {
     }
 
     @GetMapping("/booking/{bookingId}")
-    public ResponseEntity<?> getSessionByBooking(@PathVariable Long bookingId) {
+    public ResponseEntity<?> getSessionByBooking(@PathVariable Long bookingId,
+                                                 Authentication authentication) {
         try {
             ChargingSession session = chargingSessionRepository.findByBookingId(bookingId)
                     .orElseThrow(() -> new RuntimeException("Session not found for booking"));
+            User currentUser = userService.getAuthenticatedUser(authentication);
+            if (!ownsBooking(currentUser, session.getBooking())) {
+                return forbidden();
+            }
             return ResponseEntity.ok(APIResponse.builder()
                     .success(true)
                     .data(session)
@@ -259,8 +304,14 @@ public class ChargingSessionController {
     }
 
     @GetMapping("/user/{userId}")
-    public ResponseEntity<?> getUserChargingHistory(@PathVariable Long userId) {
+    public ResponseEntity<?> getUserChargingHistory(@PathVariable Long userId,
+                                                    Authentication authentication) {
         try {
+            User currentUser = userService.getAuthenticatedUser(authentication);
+            if (currentUser == null
+                    || (currentUser.getRole() != User.Role.ADMIN && !currentUser.getId().equals(userId))) {
+                return forbidden();
+            }
             List<ChargingSession> sessions = chargingSessionRepository.findByBookingUserId(userId);
             return ResponseEntity.ok(APIResponse.builder()
                     .success(true)

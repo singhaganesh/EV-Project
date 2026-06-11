@@ -4,6 +4,7 @@ import com.ganesh.EV_Project.exception.APIException;
 import com.ganesh.EV_Project.model.User;
 import com.ganesh.EV_Project.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 
 import java.util.Optional;
@@ -13,6 +14,22 @@ public class UserService {
 
     @Autowired
     UserRepository userRepository;
+
+    /**
+     * Resolves the authenticated principal (mobile number or email) to a User.
+     * Returns null when unauthenticated or no matching user exists.
+     */
+    public User getAuthenticatedUser(Authentication authentication) {
+        if (authentication == null || authentication.getName() == null) {
+            return null;
+        }
+        String principal = authentication.getName();
+        User user = findByPhoneNumber(principal);
+        if (user == null) {
+            user = findByEmail(principal);
+        }
+        return user;
+    }
 
     public User findByPhoneNumber(String mobileNumber) {
         Optional<User> user = userRepository.findByMobileNumber(mobileNumber);
