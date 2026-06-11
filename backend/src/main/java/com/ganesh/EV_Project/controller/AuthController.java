@@ -10,6 +10,7 @@ import com.ganesh.EV_Project.service.RefreshTokenService;
 import com.ganesh.EV_Project.service.UserService;
 import com.ganesh.EV_Project.service.LoginAttemptService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -41,6 +42,11 @@ public class AuthController {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
+    // Dev-only: when true, the generated OTP is returned in the response for
+    // local testing. Defaults to false so production never leaks the OTP.
+    @Value("${otp.expose-in-response:false}")
+    private boolean exposeOtpInResponse;
+
     @PostMapping("/send-otp")
     public ResponseEntity<?> sendOtp(@RequestParam String mobileNumber) {
         if (loginAttemptService.isBlocked(mobileNumber)) {
@@ -52,10 +58,13 @@ public class AuthController {
         }
 
         String otp = otpService.generateOtp(mobileNumber);
+        // Never return the OTP in production responses; only expose under the
+        // dev flag for local testing. Real delivery must go via SMS.
+        Object data = exposeOtpInResponse ? Map.of("otp", otp) : null;
         return ResponseEntity.ok(APIResponse.builder()
                 .success(true)
                 .message("OTP sent successfully")
-                .data(Map.of("otp", otp))
+                .data(data)
                 .build());
     }
 
