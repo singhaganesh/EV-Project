@@ -68,7 +68,7 @@ public class BookingController {
     }
 
     @PostMapping
-    public ResponseEntity<?> createBooking(@RequestBody BookingRequest request,
+    public ResponseEntity<?> createBooking(@jakarta.validation.Valid @RequestBody BookingRequest request,
                                            Authentication authentication) {
         User currentUser = userService.getAuthenticatedUser(authentication);
         if (currentUser == null) {

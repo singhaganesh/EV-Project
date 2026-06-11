@@ -231,7 +231,7 @@ public class AuthController {
         return refreshTokenService.findByToken(requestRefreshToken)
                 .map(refreshTokenService::verifyExpiration)
                 .map(RefreshToken::getUser)
-                .map(user -> {
+                .<ResponseEntity<?>>map(user -> {
                     Map<String, Object> claims = new HashMap<>();
                     claims.put("userId", user.getId());
                     claims.put("role", user.getRole().name());
@@ -245,7 +245,11 @@ public class AuthController {
                                     "refreshToken", requestRefreshToken))
                             .build());
                 })
-                .orElseThrow(() -> new RuntimeException("Refresh token is not in database!"));
+                .orElseGet(() -> ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body(APIResponse.builder()
+                                .success(false)
+                                .message("Invalid or expired refresh token")
+                                .build()));
     }
 
     @PostMapping("/logout")

@@ -10,7 +10,7 @@ import com.ganesh.EV_Project.enums.VehicleType;
 @Setter
 public class BookingRequest {
 
-    @NotNull(message = "User ID is required")
+    // Server-set from the authenticated principal; not required in the request body.
     private Long userId;
 
     @NotNull(message = "Station ID is required")

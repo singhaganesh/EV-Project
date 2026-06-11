@@ -77,7 +77,7 @@ public class ChargingSessionController {
     }
 
     @PostMapping("/start")
-    public ResponseEntity<?> startCharging(@RequestBody ChargingSessionRequest request,
+    public ResponseEntity<?> startCharging(@jakarta.validation.Valid @RequestBody ChargingSessionRequest request,
                                            Authentication authentication) {
         try {
             Booking booking = bookingRepository.findById(request.getBookingId())
