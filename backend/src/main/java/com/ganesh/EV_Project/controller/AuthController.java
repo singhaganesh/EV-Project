@@ -149,9 +149,8 @@ public class AuthController {
         }
 
         boolean passwordMatches = passwordEncoder.matches(request.getPassword(), user.getPassword());
-        boolean isTestPassword = "password123".equals(request.getPassword());
 
-        if (!passwordMatches && !isTestPassword) {
+        if (!passwordMatches) {
             loginAttemptService.loginFailed(key);
             int remaining = loginAttemptService.getRemainingAttempts(key);
             return ResponseEntity.ok(APIResponse.builder()
