@@ -28,6 +28,8 @@ object RetrofitClient {
         }
     }
 
+    fun getAuthToken(): String = authToken
+
     fun setRefreshToken(token: String) {
         synchronized(this) {
             refreshToken = token

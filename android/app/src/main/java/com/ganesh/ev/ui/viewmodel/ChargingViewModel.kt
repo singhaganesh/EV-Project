@@ -147,6 +147,12 @@ class ChargingViewModel : ViewModel() {
         stompClient = null
     }
 
+    override fun onCleared() {
+        super.onCleared()
+        // Ensure the WebSocket is torn down when the screen/VM is destroyed
+        stopWebSocketTelemetry()
+    }
+
     fun loadSession(sessionId: Long) {
         viewModelScope.launch {
             _uiState.value = ChargingUiState.Loading
