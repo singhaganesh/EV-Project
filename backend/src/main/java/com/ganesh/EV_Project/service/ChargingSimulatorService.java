@@ -35,6 +35,10 @@ public class ChargingSimulatorService {
     // can resume from the last known state instead of orphaning the session.
     private static final int SNAPSHOT_EVERY_TICKS = 6;
 
+    // Hard cap on session length so a forgotten session can't accrue cost forever.
+    @org.springframework.beans.factory.annotation.Value("${app.charging.max-session-minutes:240}")
+    private long maxSessionMinutes;
+
     // Track active sessions: <BookingId, SimulatedSession>
     private final Map<Long, SimulatedSession> activeSessions = new ConcurrentHashMap<>();
 
@@ -142,10 +146,25 @@ public class ChargingSimulatorService {
             .connectorTempC(28.0)
             .energyDispensedKwh(cs.getEnergyKwh() != null ? cs.getEnergyKwh() : 0.0)
             .totalCost(cs.getTotalCost() != null ? cs.getTotalCost() : 0.0)
+            .startedAt(cs.getStartTime() != null ? cs.getStartTime() : java.time.LocalDateTime.now())
             .build();
     }
 
     private void updateSessionVitals(SimulatedSession session, int carsAtStation) {
+        // Stop accruing energy/cost once the battery is full or the session has
+        // run past the hard duration cap. This bounds cost for forgotten sessions.
+        boolean full = session.socPercentage >= 100.0;
+        boolean overtime = session.startedAt != null
+                && java.time.Duration.between(session.startedAt, java.time.LocalDateTime.now()).toMinutes() >= maxSessionMinutes;
+        if (full || overtime) {
+            session.powerKw = 0.0;
+            session.currentA = 0.0;
+            session.minutesRemaining = 0.0;
+            session.socPercentage = Math.min(100.0, session.socPercentage);
+            session.completedReady = true;
+            return; // freeze energy and cost
+        }
+
         // Use the full power of the specific gun (maxPowerKw)
         // In real hardware, guns are often rated for half the dispensary's total (e.g. 240kW dispensary has two 120kW guns)
         double availablePower = session.maxPowerKw;
@@ -247,9 +266,10 @@ public class ChargingSimulatorService {
             .batteryCapacityKwh(isTruck ? 250.0 : 65.0) 
             .socPercentage(ThreadLocalRandom.current().nextDouble(10.0, 40.0)) 
             .pricePerKwh(price)
-            .connectorTempC(28.0) 
+            .connectorTempC(28.0)
             .energyDispensedKwh(0.0)
             .totalCost(0.0)
+            .startedAt(java.time.LocalDateTime.now())
             .build();
     }
 
@@ -279,5 +299,10 @@ public class ChargingSimulatorService {
         // Snapshot cadence counter (not broadcast)
         @Builder.Default
         private int ticksSinceSnapshot = 0;
+
+        // Session start (for the max-duration cap) and full/complete flag
+        private java.time.LocalDateTime startedAt;
+        @Builder.Default
+        private boolean completedReady = false;
     }
 }
