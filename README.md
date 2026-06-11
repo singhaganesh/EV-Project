@@ -5,7 +5,7 @@
 [![Build Status](https://img.shields.io/badge/build-beta-blue?style=flat-square)](https://github.com)
 [![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
 [![Version](https://img.shields.io/badge/version-0.0.1--SNAPSHOT-orange?style=flat-square)](https://github.com)
-[![Last Commit](https://img.shields.io/badge/last%20commit-March%202026-lightgrey?style=flat-square)](https://github.com)
+[![Last Commit](https://img.shields.io/badge/last%20commit-June%202026-lightgrey?style=flat-square)](https://github.com)
 [![Contributors](https://img.shields.io/badge/contributors-1-blue?style=flat-square)](https://github.com)
 
 ![EV Charging Banner](https://via.placeholder.com/1200x400?text=Smart+EV+Charging+Station+Network)
@@ -81,7 +81,7 @@ Think of it like **Uber meets your EV charging network** — seamless booking, t
 We created a **smart, automated platform** that:
 - ✅ Instantly shows available chargers **with real-time updates**
 - ✅ Handles **all bookings automatically** — no calls needed
-- ✅ **Processes payments instantly** via Stripe
+- ✅ **Processes payments instantly** via Razorpay
 - ✅ Supports **both cars and trucks** with different pricing
 - ✅ Gives owners a **complete dashboard** to manage their business
 
@@ -119,7 +119,7 @@ We created a **smart, automated platform** that:
 7. STOP & PAY
    → When done, tap "Stop Charging"
    → You see your final bill: (Energy Used × Price per Unit)
-   → Stripe handles payment securely
+   → Razorpay handles payment securely
 
 8. RECEIPT
    → You get an email receipt
@@ -138,7 +138,7 @@ We created a **smart, automated platform** that:
 ✅ **Save Money:** Competitive pricing from multiple stations — choose the cheapest  
 ✅ **Never Hunt Again:** Real-time availability means no more "charger not available" surprises  
 ✅ **Transparent Pricing:** Know your cost upfront — no hidden fees  
-✅ **Seamless Payment:** One tap to pay; secure Stripe integration  
+✅ **Seamless Payment:** One tap to pay; secure Razorpay integration  
 ✅ **Track Your History:** See all your charging sessions, costs, and carbon saved  
 
 ### For Charging Station Owners 📊
@@ -216,10 +216,10 @@ Our platform helps manage public charging networks efficiently and fairly.
 You don't need to install anything special — just download from App Store / Google Play or visit our website.
 
 ### 💳 **Q: How do I pay? Is it safe?**
-**A:** We use **Stripe**, the world's most trusted payment processor. Your card details are never stored on our servers. Payment is instant and secure. You can pay with:
-- Credit cards (Visa, Mastercard, American Express)
-- UPI (in India)
-- Digital wallets
+**A:** We use **Razorpay**, India's leading payment processor. Your card details are never stored on our servers. Payment is instant and secure. You can pay with:
+- Credit & debit cards (Visa, Mastercard, RuPay, American Express)
+- UPI (Google Pay, PhonePe, Paytm, etc.)
+- Net banking & digital wallets
 
 ### 🤔 **Q: What if I book a slot but can't make it?**
 **A:** No problem. You can **cancel anytime before the 15-minute booking window closes**. If you cancel, the slot immediately opens for other users, and you're not charged.
@@ -330,7 +330,7 @@ The EV Project is built as a **monolithic backend** with **distributed client ap
 | Database | PostgreSQL | 12+ | Primary data store |
 | Database (Cloud | **Supabase** | Latest | Managed PostgreSQL hosting |
 | Validation | Javax Validation API | Part of Boot | Input validation annotations |
-| Payment | **Stripe SDK** | 2.9+ | Payment processing |
+| Payment | **Razorpay Java SDK** | 1.4.7 | Payment processing (orders + signature verification) |
 | Scheduling | Spring Tasks | Part of Boot | @Scheduled booking expiry cleanup |
 | | | | |
 | Mobile OS | Android | 8.0+ | Mobile platform |
@@ -379,7 +379,7 @@ React 19 + Redux: Modern component-based architecture with predictable state man
 
 Jetpack Compose: Google's modern, declarative UI framework for Android with hot reloading and reactive programming.
 
-Stripe: Industry-leading payment processor with webhooks, idempotency, and PCI compliance built-in.
+Razorpay: India-focused payment gateway with first-class UPI/cards/net-banking support, server-side order creation, and HMAC-SHA256 signature verification for tamper-proof confirmation.
 
 ---
 
@@ -410,7 +410,7 @@ graph TD
 
     %% External Services
     subgraph Third-Party Integrations
-        Stripe[Payment Gateways<br/>Stripe & Razorpay]
+        Razorpay[Payment Gateway<br/>Razorpay]
         Maps[Mapping Services<br/>Google Maps / Nominatim]
         SMS[SMS Provider<br/>OTP Auth]
     end
@@ -428,7 +428,7 @@ graph TD
     REST_API <-->|JPA / Hibernate| Postgres
     WebSocket -->|Reads Data| Postgres
 
-    REST_API <-->|Processes Transactions & Webhooks| Stripe
+    REST_API <-->|Creates Orders & Verifies Signatures| Razorpay
     REST_API -->|Triggers Login Texts| SMS
     MobileApp -->|Renders UI Location Data| Maps
     WebApp -->|Reverse Geocoding| Maps
@@ -505,11 +505,11 @@ graph TD
 
 ### External Integrations
 
-**Stripe Payment Gateway**
+**Razorpay Payment Gateway**
 - **Purpose:** Secure payment processing
-- **Flow:** Create Intent → Client processes → Webhook updates → DB records payment
-- **Webhook URL:** `POST /api/payments/webhook`
-- **Events:** `payment_intent.succeeded`, `payment_intent.payment_failed`
+- **Flow:** Session stops → backend creates a Razorpay **order** (`razorpayOrderId` returned to the client) → client completes payment in the Razorpay checkout → client calls `POST /api/payments/verify` → backend verifies the HMAC-SHA256 signature, marks the session `PAID`, releases the slot, and records the `Payment`
+- **Verify endpoint:** `POST /api/payments/verify` (idempotent — duplicate calls return success without re-writing)
+- **No webhook:** confirmation is signature-verified on the client-initiated verify call, not via a server callback
 
 **SMS OTP Provider**
 - **Purpose:** Two-factor authentication via mobile
@@ -594,18 +594,24 @@ git checkout develop
 Create a `.env` file in the `backend/` directory:
 
 ```bash
-# Database (Supabase PostgreSQL)
+# Active profile — defaults to `dev` locally; set `prod` in production
+SPRING_PROFILES_ACTIVE=dev
+
+# Database (Supabase PostgreSQL) — REQUIRED, no defaults baked in
 DB_URL=jdbc:postgresql://db.example.supabase.co:5432/postgres
 DB_USERNAME=postgres
 DB_PASSWORD=your_secure_password_here
 
-# JWT
+# JWT — REQUIRED, no default (app fails fast on startup if missing)
 JWT_SECRET=your-super-secret-jwt-key-at-least-256-bits-long-for-security
-JWT_EXPIRATION=86400000
+JWT_EXPIRATION=3600000
 
-# Stripe
-STRIPE_API_KEY=sk_test_your_stripe_secret_key_here
-STRIPE_WEBHOOK_SECRET=whsec_your_webhook_secret_here
+# Razorpay — REQUIRED (use test keys locally)
+RAZORPAY_KEY_ID=rzp_test_your_key_id
+RAZORPAY_KEY_SECRET=your_razorpay_key_secret
+
+# Dev admin seeding (dev profile only) — leave blank to skip seeding the admin
+SEED_ADMIN_PASSWORD=
 
 # Booking Expiration (minutes)
 APP_BOOKING_EXPIRATION_MINUTES=15
@@ -615,23 +621,31 @@ SERVER_PORT=8080
 SERVER_ADDRESS=0.0.0.0
 ```
 
+> **No secret has a default.** `JWT_SECRET`, `DB_*`, and `RAZORPAY_*` must be
+> supplied via the environment — the app fails fast on startup if any are
+> missing, so a public/committed key can never be used by accident.
+
 Alternatively, update `backend/src/main/resources/application.properties`:
 
 ```properties
-spring.datasource.url=${DB_URL:jdbc:postgresql://localhost:5432/ev_project}
-spring.datasource.username=${DB_USERNAME:postgres}
-spring.datasource.password=${DB_PASSWORD:password}
+# Secrets have NO defaults — they must come from the environment.
+spring.datasource.url=${DB_URL}
+spring.datasource.username=${DB_USERNAME}
+spring.datasource.password=${DB_PASSWORD}
 spring.datasource.driver-class-name=org.postgresql.Driver
 
 spring.jpa.hibernate.ddl-auto=update
 spring.jpa.show-sql=true
 spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.PostgreSQLDialect
 
-jwt.secret=${JWT_SECRET:your-default-secret-key}
-jwt.expiration=${JWT_EXPIRATION:86400000}
+jwt.secret=${JWT_SECRET}
+jwt.expiration=${JWT_EXPIRATION:3600000}
 
-stripe.api.key=${STRIPE_API_KEY:sk_test_default}
-stripe.webhook.secret=${STRIPE_WEBHOOK_SECRET:whsec_default}
+razorpay.key.id=${RAZORPAY_KEY_ID}
+razorpay.key.secret=${RAZORPAY_KEY_SECRET}
+
+# OTP is never returned in API responses except in the dev profile
+otp.expose-in-response=false
 
 app.booking.expiration-minutes=${APP_BOOKING_EXPIRATION_MINUTES:15}
 
@@ -810,7 +824,8 @@ services:
       DB_USERNAME: postgres
       DB_PASSWORD: dev_password_insecure
       JWT_SECRET: your-secret-key-change-in-production
-      STRIPE_API_KEY: sk_test_your_key_here
+      RAZORPAY_KEY_ID: rzp_test_your_key_id
+      RAZORPAY_KEY_SECRET: your_razorpay_key_secret
     ports:
       - "8080:8080"
     depends_on:
@@ -1049,8 +1064,8 @@ Response:
   "isFirstTime": false
 }
 
-// Store token
-localStorage.setItem('token', token);
+// Store token (web keeps it in memory + sessionStorage, not localStorage)
+sessionStorage.setItem('token', token);
 
 // Use in subsequent requests
 GET /api/bookings/user/1
@@ -1256,23 +1271,33 @@ curl -X POST http://localhost:8080/api/charging/stop/201 \
 
 | Method | Endpoint | Auth | Purpose |
 |--------|----------|------|---------|
-| POST | `/payments/create-intent/{bookingId}` | ✅ | Create Stripe payment intent |
-| GET | `/payments/booking/{bookingId}` | ✅ | Get payment status |
-| POST | `/payments/webhook` | ❌ | Stripe webhook (signature verified) |
+| POST | `/payments/verify` | ✅ | Verify a Razorpay payment signature, mark the session `PAID`, release the slot, and record the `Payment` (idempotent) |
+
+> The Razorpay **order** is created server-side when a charging session is
+> stopped — the stop response returns a `razorpayOrderId`. The client opens the
+> Razorpay checkout with that order, then calls `/payments/verify` with the
+> returned `razorpay_order_id`, `razorpay_payment_id`, and `razorpay_signature`.
+> There is no Stripe-style `create-intent` endpoint and no server webhook.
 
 **Request Example:**
 ```bash
-curl -X POST "http://localhost:8080/api/payments/create-intent/101" \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+curl -X POST "http://localhost:8080/api/payments/verify" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+        "razorpay_order_id": "order_ABC123",
+        "razorpay_payment_id": "pay_XYZ789",
+        "razorpay_signature": "generated_hmac_sha256_signature",
+        "sessionId": "501"
+      }'
 ```
 
 **Response (200 OK):**
 ```json
 {
   "success": true,
-  "clientSecret": "pi_test123_secret_456",
-  "amount": 25000,
-  "currency": "INR"
+  "message": "Payment verified and recorded successfully",
+  "data": { "id": 501, "paymentStatus": "PAID", "totalCost": 250.0 }
 }
 ```
 
@@ -1338,7 +1363,7 @@ EV-Project/
 │   │   ├── service/                              # Business Logic
 │   │   │   ├── BookingService.java               # ⭐ Booking logic (15-min expiry, conflict detection)
 │   │   │   ├── ChargingSessionService.java       # Charging session & cost calculation
-│   │   │   ├── PaymentService.java               # Stripe integration
+│   │   │   ├── RazorpayService.java              # Razorpay order creation + signature verification
 │   │   │   ├── StationService.java               # Station CRUD
 │   │   │   ├── UserService.java                  # User management
 │   │   │   ├── OtpService.java                   # OTP generation/validation
@@ -1351,7 +1376,7 @@ EV-Project/
 │   │   │   ├── ChargerSlot.java                  # Individual charger connector
 │   │   │   ├── Booking.java                      # Booking with 15-min expiry ⭐
 │   │   │   ├── ChargingSession.java              # Active charging session
-│   │   │   ├── Payment.java                      # Stripe payment record
+│   │   │   ├── Payment.java                      # Razorpay payment record
 │   │   │   ├── IoTSensorData.java                # Energy/voltage readings
 │   │   │   └── Otp.java                          # OTP tokens
 │   │   │
@@ -1372,8 +1397,8 @@ EV-Project/
 │   │   │   └── [other DTOs]
 │   │   │
 │   │   ├── enums/                                # Enumerations
-│   │   │   ├── BookingStatus.java                # PENDING, CONFIRMED, ONGOING, COMPLETED, EXPIRED, CANCELLED
-│   │   │   ├── SlotStatus.java                   # AVAILABLE, BOOKED, CHARGING, MAINTENANCE
+│   │   │   ├── BookingStatus.java                # CONFIRMED, ONGOING, COMPLETED, CANCELLED, EXPIRED
+│   │   │   ├── SlotStatus.java                   # AVAILABLE, RESERVED, BOOKED, CHARGING, PAYMENT_PENDING, MAINTENANCE, OCCUPIED
 │   │   │   ├── VehicleType.java                  # CAR, TRUCK (affects pricing & eligibility)
 │   │   │   ├── SlotType.java                     # AC, DC charger types
 │   │   │   └── ConnectorType.java                # CCS2, TYPE_2, CHAdeMO
@@ -1387,10 +1412,10 @@ EV-Project/
 │   │       └── [other payload classes]
 │   │
 │   ├── src/main/resources/
-│   │   ├── application.properties                # ⭐ Server config (database, JWT, Stripe)
+│   │   ├── application.properties                # ⭐ Server config (database, JWT, Razorpay)
 │   │   └── [other configs]
 │   │
-│   ├── pom.xml                                   # Maven dependencies (Spring Boot, Stripe, JWT, etc.)
+│   ├── pom.xml                                   # Maven dependencies (Spring Boot, Razorpay, JWT, Flyway, etc.)
 │   ├── mvnw                                      # Maven wrapper (Linux/Mac)
 │   ├── mvnw.cmd                                  # Maven wrapper (Windows)
 │   └── Dockerfile                                # Docker image for backend
@@ -1405,7 +1430,7 @@ EV-Project/
 │   │   │   │   ├── HomeScreen.kt                 # Station listing
 │   │   │   │   ├── SlotBookingScreen.kt          # ⭐ Vehicle selection (CAR/TRUCK) and booking
 │   │   │   │   ├── ChargingScreen.kt             # Start/stop charging UI
-│   │   │   │   ├── PaymentScreen.kt              # Stripe payment UI
+│   │   │   │   ├── PaymentScreen.kt              # Razorpay payment UI
 │   │   │   │   └── HistoryScreen.kt              # Booking history
 │   │   │   │
 │   │   │   ├── viewmodel/
@@ -1519,21 +1544,21 @@ EV-Project/
 All configuration lives in `application.properties` or environment variables:
 
 ```properties
-# Database
-spring.datasource.url=jdbc:postgresql://localhost:5432/ev_project
-spring.datasource.username=postgres
-spring.datasource.password=password
+# Database (supplied via environment; no defaults)
+spring.datasource.url=${DB_URL}
+spring.datasource.username=${DB_USERNAME}
+spring.datasource.password=${DB_PASSWORD}
 
-# JWT (24-hour expiration)
-jwt.secret=your-256-bit-secret-key-here
-jwt.expiration=86400000  # milliseconds (24 hours)
+# JWT (1-hour expiration by default; no default secret)
+jwt.secret=${JWT_SECRET}
+jwt.expiration=${JWT_EXPIRATION:3600000}  # milliseconds (1 hour)
 
 # Booking Expiration (15 minutes)
 app.booking.expiration-minutes=15
 
-# Stripe
-stripe.api.key=sk_test_your_key
-stripe.webhook.secret=whsec_your_secret
+# Razorpay
+razorpay.key.id=${RAZORPAY_KEY_ID}
+razorpay.key.secret=${RAZORPAY_KEY_SECRET}
 
 # Server
 server.port=8080
@@ -1750,7 +1775,8 @@ ExecStart=/usr/lib/jvm/java-21-openjdk-amd64/bin/java \
   --spring.datasource.username=ev_app \
   --spring.datasource.password=secure_password_here \
   --jwt.secret=your-production-secret \
-  --stripe.api.key=sk_live_your_production_key
+  --razorpay.key.id=rzp_live_your_key_id \
+  --razorpay.key.secret=your_live_razorpay_key_secret
 
 Restart=always
 RestartSec=10
@@ -1916,7 +1942,8 @@ services:
       DB_USERNAME: postgres
       DB_PASSWORD: ${DB_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
-      STRIPE_API_KEY: ${STRIPE_API_KEY}
+      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID}
+      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET}
     ports:
       - "8080:8080"
     depends_on:
@@ -1964,7 +1991,8 @@ cd ev-project
 cat > .env << EOF
 DB_PASSWORD=secure_postgres_password
 JWT_SECRET=your-production-secret-key
-STRIPE_API_KEY=sk_live_your_key
+RAZORPAY_KEY_ID=rzp_live_your_key_id
+RAZORPAY_KEY_SECRET=your_live_razorpay_key_secret
 EOF
 
 # Start all services
@@ -2093,10 +2121,10 @@ Step 3: User receives SMS and enters OTP
   Body: { "mobileNumber": "919876543210", "otp": "123456" }
 
 Step 4: Backend validates OTP
-  ├─ Check OTP matches stored value
+  ├─ Compare against the BCrypt-hashed OTP (never stored in plaintext)
   ├─ Check OTP hasn't expired
   ├─ Create/update User in database
-  └─ Generate JWT token
+  └─ Generate JWT token (invalid OTP → 401)
 
 Step 5: Backend returns JWT
   Response: { 
@@ -2105,7 +2133,8 @@ Step 5: Backend returns JWT
   }
 
 Step 6: Client stores JWT
-  localStorage.setItem('token', token)
+  Web: in-memory + sessionStorage (not localStorage — survives reload,
+       cleared when the tab closes); Android: encrypted DataStore
 
 Step 7: Client sends JWT in all future requests
   Headers: Authorization: Bearer eyJhbGc...
@@ -2113,7 +2142,7 @@ Step 7: Client sends JWT in all future requests
 Step 8: JwtRequestFilter validates token
   ├─ Extract token from header
   ├─ Verify signature (HMAC-SHA256 with JWT_SECRET)
-  ├─ Check expiration (24-hour TTL)
+  ├─ Check expiration (1-hour TTL by default; configurable via JWT_EXPIRATION)
   ├─ Extract userId and role
   └─ Set SecurityContext if valid
 
@@ -2166,8 +2195,8 @@ public ResponseEntity<?> createBooking(
 
 **JWT Token Security:**
 - ✅ Signed with HMAC-SHA256
-- ✅ 256-bit secret key (minimum)
-- ✅ 24-hour expiration TTL
+- ✅ 256-bit secret key (minimum), required from the environment — no committed default
+- ✅ 1-hour expiration TTL by default (configurable via `JWT_EXPIRATION`)
 - ✅ Includes userId, email, role claims
 - ✅ Signature verified on every request
 
@@ -2359,7 +2388,7 @@ git push origin feature/add-vehicle-type-filter
 |------|-----------|---------|
 | Feature | `feature/` | `feature/add-referral-rewards` |
 | Bug Fix | `bugfix/` | `bugfix/fix-booking-expiry-logic` |
-| Hot Fix | `hotfix/` | `hotfix/stripe-webhook-issue` |
+| Hot Fix | `hotfix/` | `hotfix/payment-signature-verification` |
 | Chore | `chore/` | `chore/update-dependencies` |
 | Docs | `docs/` | `docs/api-reference` |
 
@@ -2382,7 +2411,7 @@ if charging session hasn't started.
 
 Closes #123
 
-fix(payment): handle Stripe webhook errors gracefully
+fix(payment): make Razorpay signature verification idempotent
 
 refactor(auth): extract JWT validation to utility class
 
