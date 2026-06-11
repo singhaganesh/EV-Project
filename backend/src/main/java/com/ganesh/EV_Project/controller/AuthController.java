@@ -82,7 +82,7 @@ public class AuthController {
         boolean isValid = otpService.validateOtp(mobileNumber, otp);
         if (!isValid) {
             int remaining = loginAttemptService.getRemainingAttempts(mobileNumber);
-            return ResponseEntity.ok(APIResponse.builder()
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(APIResponse.builder()
                     .success(false)
                     .message("Invalid or expired OTP. " + remaining + " attempts remaining.")
                     .build());
@@ -151,7 +151,7 @@ public class AuthController {
 
         if (user == null) {
             loginAttemptService.loginFailed(key);
-            return ResponseEntity.ok(APIResponse.builder()
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(APIResponse.builder()
                     .success(false)
                     .message("Invalid email or password")
                     .build());
@@ -162,7 +162,7 @@ public class AuthController {
         if (!passwordMatches) {
             loginAttemptService.loginFailed(key);
             int remaining = loginAttemptService.getRemainingAttempts(key);
-            return ResponseEntity.ok(APIResponse.builder()
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(APIResponse.builder()
                     .success(false)
                     .message("Invalid email or password. " + remaining + " attempts remaining.")
                     .build());
