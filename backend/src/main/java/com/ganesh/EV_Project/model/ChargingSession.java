@@ -40,6 +40,9 @@ public class ChargingSession {
     private Double energyKwh;       // total energy consumed
 
     @Column
+    private Double socPercentage;   // last persisted state of charge (for restart recovery)
+
+    @Column
     private Double totalCost;       // final billed amount
 
     @Column

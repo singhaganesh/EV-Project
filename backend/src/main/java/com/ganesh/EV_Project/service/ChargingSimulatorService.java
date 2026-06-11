@@ -2,17 +2,22 @@ package com.ganesh.EV_Project.service;
 
 import com.ganesh.EV_Project.model.Booking;
 import com.ganesh.EV_Project.model.ChargerSlot;
+import com.ganesh.EV_Project.model.ChargingSession;
 import com.ganesh.EV_Project.model.Station;
 import com.ganesh.EV_Project.repository.BookingRepository;
+import com.ganesh.EV_Project.repository.ChargingSessionRepository;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
@@ -24,9 +29,37 @@ public class ChargingSimulatorService {
 
     private final SimpMessagingTemplate messagingTemplate;
     private final BookingRepository bookingRepository;
+    private final ChargingSessionRepository chargingSessionRepository;
+
+    // Persist a snapshot of progress roughly every 6 ticks (~30s) so a restart
+    // can resume from the last known state instead of orphaning the session.
+    private static final int SNAPSHOT_EVERY_TICKS = 6;
 
     // Track active sessions: <BookingId, SimulatedSession>
     private final Map<Long, SimulatedSession> activeSessions = new ConcurrentHashMap<>();
+
+    /**
+     * On startup, rebuild in-memory simulators for any session left ONGOING by a
+     * previous run, resuming from the last persisted SoC/energy/cost.
+     */
+    @EventListener(ApplicationReadyEvent.class)
+    public void recoverActiveSessions() {
+        List<ChargingSession> ongoing = chargingSessionRepository.findByStatus("ONGOING");
+        for (ChargingSession cs : ongoing) {
+            try {
+                if (cs.getBooking() == null) continue;
+                SimulatedSession session = rebuildSession(cs);
+                activeSessions.put(cs.getBooking().getId(), session);
+                log.info("Recovered active simulation for Booking {} (SoC {}%)",
+                        cs.getBooking().getId(), Math.round(session.socPercentage));
+            } catch (Exception e) {
+                log.error("Failed to recover session {}: {}", cs.getId(), e.getMessage());
+            }
+        }
+        if (!ongoing.isEmpty()) {
+            log.info("Recovered {} active charging session(s) after restart", ongoing.size());
+        }
+    }
 
     /**
      * Starts the smart simulation for a new charging session.
@@ -63,7 +96,53 @@ public class ChargingSimulatorService {
         activeSessions.forEach((bookingId, session) -> {
             updateSessionVitals(session, stationChargingCount.get(session.stationId));
             broadcastTelemetry(session);
+            if (++session.ticksSinceSnapshot >= SNAPSHOT_EVERY_TICKS) {
+                session.ticksSinceSnapshot = 0;
+                persistSnapshot(session);
+            }
         });
+    }
+
+    /** Persist live progress so a restart can resume this session authoritatively. */
+    private void persistSnapshot(SimulatedSession session) {
+        try {
+            chargingSessionRepository.findByBookingId(session.bookingId).ifPresent(cs -> {
+                cs.setEnergyKwh(session.energyDispensedKwh);
+                cs.setSocPercentage(session.socPercentage);
+                cs.setTotalCost(session.totalCost);
+                chargingSessionRepository.save(cs);
+            });
+        } catch (Exception e) {
+            log.warn("Failed to snapshot session for booking {}: {}", session.bookingId, e.getMessage());
+        }
+    }
+
+    /** Rebuilds a simulator session from a persisted (ONGOING) ChargingSession. */
+    private SimulatedSession rebuildSession(ChargingSession cs) {
+        Booking booking = cs.getBooking();
+        ChargerSlot slot = booking.getSlot();
+        Station station = slot.getDispensary() != null ? slot.getDispensary().getStation() : slot.getStation();
+        boolean isTruck = booking.getVehicleType() == com.ganesh.EV_Project.enums.VehicleType.TRUCK;
+
+        double maxPower = slot.getPowerKw() != null ? slot.getPowerKw() : 22.0;
+        double price = 15.0;
+        if (station != null) {
+            Double p = isTruck ? station.getTruckPricePerKwh() : station.getPricePerKwh();
+            if (p != null) price = p;
+        }
+
+        return SimulatedSession.builder()
+            .bookingId(booking.getId())
+            .slotId(slot.getId())
+            .stationId(station != null ? station.getId() : 0L)
+            .maxPowerKw(maxPower)
+            .batteryCapacityKwh(isTruck ? 250.0 : 65.0)
+            .socPercentage(cs.getSocPercentage() != null ? cs.getSocPercentage() : 20.0)
+            .pricePerKwh(price)
+            .connectorTempC(28.0)
+            .energyDispensedKwh(cs.getEnergyKwh() != null ? cs.getEnergyKwh() : 0.0)
+            .totalCost(cs.getTotalCost() != null ? cs.getTotalCost() : 0.0)
+            .build();
     }
 
     private void updateSessionVitals(SimulatedSession session, int carsAtStation) {
@@ -196,5 +275,9 @@ public class ChargingSimulatorService {
         private double maxPowerKw;
         private double batteryCapacityKwh;
         private double pricePerKwh;
+
+        // Snapshot cadence counter (not broadcast)
+        @Builder.Default
+        private int ticksSinceSnapshot = 0;
     }
 }

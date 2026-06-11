@@ -10,6 +10,8 @@ public interface ChargingSessionRepository extends JpaRepository<ChargingSession
 
     boolean existsByBookingId(Long id);
 
+    java.util.List<ChargingSession> findByStatus(String status);
+
     java.util.Optional<ChargingSession> findByBookingId(Long bookingId);
 
     java.util.Optional<ChargingSession> findByRazorpayOrderId(String orderId);
