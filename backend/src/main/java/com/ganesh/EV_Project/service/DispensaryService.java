@@ -3,6 +3,7 @@ package com.ganesh.EV_Project.service;
 import com.ganesh.EV_Project.exception.APIException;
 import com.ganesh.EV_Project.model.Dispensary;
 import com.ganesh.EV_Project.model.Station;
+import com.ganesh.EV_Project.model.User;
 import com.ganesh.EV_Project.model.ChargerSlot;
 import com.ganesh.EV_Project.enums.SlotStatus;
 import com.ganesh.EV_Project.enums.SlotType;
@@ -30,6 +31,26 @@ public class DispensaryService {
 
     public List<Dispensary> getByStation(Long stationId) {
         return dispensaryRepository.findByStationIdOrderByIdAsc(stationId);
+    }
+
+    private boolean owns(Station station, User user) {
+        return user != null && station != null
+                && (user.getRole() == User.Role.ADMIN
+                    || (station.getOwner() != null && station.getOwner().getId().equals(user.getId())));
+    }
+
+    @Transactional(readOnly = true)
+    public boolean isStationOwnedBy(Long stationId, User user) {
+        Station station = stationRepository.findById(stationId)
+                .orElseThrow(() -> new APIException("Station not found"));
+        return owns(station, user);
+    }
+
+    @Transactional(readOnly = true)
+    public boolean isDispensaryOwnedBy(Long dispensaryId, User user) {
+        Dispensary dispensary = dispensaryRepository.findById(dispensaryId)
+                .orElseThrow(() -> new APIException("Dispensary not found"));
+        return owns(dispensary.getStation(), user);
     }
 
     @Transactional

@@ -74,23 +74,42 @@ public class StationController {
 
     @PostMapping
     @PreAuthorize("hasAnyRole('ADMIN', 'STATION_OWNER')")
-    public ResponseEntity<Station> addStation(@RequestBody Station station) {
+    public ResponseEntity<Station> addStation(@RequestBody Station station, Authentication authentication) {
+        User currentUser = userService.getAuthenticatedUser(authentication);
+        // Bind ownership to the creator; only an admin may set a different owner explicitly
+        if (currentUser != null && (currentUser.getRole() != User.Role.ADMIN || station.getOwner() == null)) {
+            station.setOwner(currentUser);
+        }
         Station savedStation = stationService.addStation(station);
         return new ResponseEntity<>(savedStation, HttpStatus.CREATED);
     }
 
     @PutMapping("/{id}")
     @PreAuthorize("hasAnyRole('ADMIN', 'STATION_OWNER')")
-    public ResponseEntity<Station> updateStation(@PathVariable Long id, @RequestBody Station station) {
-        // Note: In production, we should verify the station belongs to the authenticated user
+    public ResponseEntity<?> updateStation(@PathVariable Long id, @RequestBody Station station,
+                                           Authentication authentication) {
+        Station existing = stationService.getStationById(id);
+        if (!canManage(userService.getAuthenticatedUser(authentication), existing)) {
+            return new ResponseEntity<>("Access Denied: not your station", HttpStatus.FORBIDDEN);
+        }
         Station updatedStation = stationService.updateStation(id, station);
         return new ResponseEntity<>(updatedStation, HttpStatus.OK);
     }
 
     @DeleteMapping("/{id}")
     @PreAuthorize("hasAnyRole('ADMIN', 'STATION_OWNER')")
-    public ResponseEntity<String> deleteStation(@PathVariable Long id) {
+    public ResponseEntity<String> deleteStation(@PathVariable Long id, Authentication authentication) {
+        Station existing = stationService.getStationById(id);
+        if (!canManage(userService.getAuthenticatedUser(authentication), existing)) {
+            return new ResponseEntity<>("Access Denied: not your station", HttpStatus.FORBIDDEN);
+        }
         stationService.deleteStation(id);
         return new ResponseEntity<>("Station deleted successfully", HttpStatus.OK);
+    }
+
+    /** True if the user owns the station, or is an admin. */
+    private boolean canManage(User user, Station station) {
+        return user != null && (user.getRole() == User.Role.ADMIN
+                || (station.getOwner() != null && station.getOwner().getId().equals(user.getId())));
     }
 }
