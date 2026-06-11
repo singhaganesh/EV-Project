@@ -3,6 +3,7 @@ import { MapContainer, TileLayer, Marker, useMap, useMapEvents } from 'react-lea
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { MapPin, Search, Navigation, Loader2, X } from 'lucide-react';
+import api from '../../api/axios';
 
 // Fix Leaflet's default icon issue with bundlers
 delete L.Icon.Default.prototype._getIconUrl;
@@ -16,15 +17,11 @@ const INDIA_CENTER = [20.5937, 78.9629];
 const DEFAULT_ZOOM = 5;
 const LOCATED_ZOOM = 16;
 
-// Reverse geocode a lat/lng into a readable address string via Nominatim
+// Reverse geocode a lat/lng into a readable address string via the backend proxy
 async function reverseGeocode(lat, lng) {
     try {
-        const res = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&addressdetails=1`,
-            { headers: { 'Accept-Language': 'en' } }
-        );
-        const data = await res.json();
-        return data.display_name || '';
+        const res = await api.get(`/geocode/reverse?lat=${lat}&lon=${lng}`);
+        return res.data?.display_name || '';
     } catch {
         return '';
     }
@@ -33,11 +30,8 @@ async function reverseGeocode(lat, lng) {
 // Forward geocode a query string into a list of suggestions (India-scoped)
 async function forwardGeocode(query) {
     try {
-        const res = await fetch(
-            `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&countrycodes=in&limit=5&addressdetails=1`,
-            { headers: { 'Accept-Language': 'en' } }
-        );
-        return await res.json();
+        const res = await api.get(`/geocode/search?q=${encodeURIComponent(query)}`);
+        return Array.isArray(res.data) ? res.data : [];
     } catch {
         return [];
     }
