@@ -19,6 +19,11 @@ public interface ChargingSessionRepository extends JpaRepository<ChargingSession
 
     java.util.Optional<ChargingSession> findByBookingId(Long bookingId);
 
+    @org.springframework.data.jpa.repository.Query("SELECT s FROM ChargingSession s " +
+            "WHERE s.booking.slot.id = :slotId AND s.status = 'ONGOING'")
+    java.util.Optional<ChargingSession> findOngoingBySlot(
+            @org.springframework.data.repository.query.Param("slotId") Long slotId);
+
     java.util.Optional<ChargingSession> findByRazorpayOrderId(String orderId);
 
     java.util.List<ChargingSession> findByBookingUserId(Long userId);

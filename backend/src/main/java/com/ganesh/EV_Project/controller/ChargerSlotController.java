@@ -3,11 +3,14 @@ package com.ganesh.EV_Project.controller;
 import com.ganesh.EV_Project.enums.ConnectorType;
 import com.ganesh.EV_Project.enums.SlotStatus;
 import com.ganesh.EV_Project.model.ChargerSlot;
+import com.ganesh.EV_Project.model.User;
 import com.ganesh.EV_Project.service.ChargerSlotService;
+import com.ganesh.EV_Project.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -18,6 +21,17 @@ public class ChargerSlotController {
 
     @Autowired
     private ChargerSlotService slotService;
+
+    @Autowired
+    private UserService userService;
+
+    /** True if the user owns the station behind this slot, or is an admin. */
+    private boolean canManage(User user, ChargerSlot slot) {
+        return user != null && slot.getStation() != null
+                && (user.getRole() == User.Role.ADMIN
+                    || (slot.getStation().getOwner() != null
+                        && slot.getStation().getOwner().getId().equals(user.getId())));
+    }
 
     @GetMapping
     public ResponseEntity<List<ChargerSlot>> getAllSlots() {
@@ -45,14 +59,24 @@ public class ChargerSlotController {
 
     @PutMapping("/{id}/status")
     @PreAuthorize("hasAnyRole('ADMIN', 'STATION_OWNER')")
-    public ResponseEntity<ChargerSlot> updateSlotStatus(@PathVariable Long id, @RequestParam SlotStatus status) {
+    public ResponseEntity<?> updateSlotStatus(@PathVariable Long id, @RequestParam SlotStatus status,
+                                              Authentication authentication) {
+        ChargerSlot slot = slotService.getSlotById(id);
+        if (!canManage(userService.getAuthenticatedUser(authentication), slot)) {
+            return new ResponseEntity<>("Access Denied: not your slot", HttpStatus.FORBIDDEN);
+        }
         ChargerSlot updatedSlot = slotService.updateSlotStatus(id, status);
         return new ResponseEntity<>(updatedSlot, HttpStatus.OK);
     }
 
     @PutMapping("/{id}/connectorType")
     @PreAuthorize("hasAnyRole('ADMIN', 'STATION_OWNER')")
-    public ResponseEntity<ChargerSlot> updateSlotConnectorType(@PathVariable Long id, @RequestParam ConnectorType connectorType) {    
+    public ResponseEntity<?> updateSlotConnectorType(@PathVariable Long id, @RequestParam ConnectorType connectorType,
+                                                     Authentication authentication) {
+        ChargerSlot slot = slotService.getSlotById(id);
+        if (!canManage(userService.getAuthenticatedUser(authentication), slot)) {
+            return new ResponseEntity<>("Access Denied: not your slot", HttpStatus.FORBIDDEN);
+        }
         ChargerSlot updatedSlot = slotService.updateSlotConnectorType(id, connectorType);
         return new ResponseEntity<>(updatedSlot, HttpStatus.OK);
     }
