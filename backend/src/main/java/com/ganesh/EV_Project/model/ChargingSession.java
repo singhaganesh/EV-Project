@@ -42,7 +42,7 @@ public class ChargingSession {
     @Column
     private Double socPercentage;   // last persisted state of charge (for restart recovery)
 
-    @Column
+    @Column(columnDefinition = "NUMERIC(10,2)")
     private Double totalCost;       // final billed amount
 
     @Column

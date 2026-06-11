@@ -182,7 +182,8 @@ public class ChargingSessionController {
             LocalDateTime endTime = LocalDateTime.now();
             double hours = java.time.Duration.between(session.getStartTime(), endTime).toMinutes() / 60.0;
             double energyConsumed = (finalVitals != null) ? finalVitals.getEnergyDispensedKwh() : (hours * session.getBooking().getSlot().getPowerKw());
-            double cost = (finalVitals != null) ? finalVitals.getTotalCost() : (energyConsumed * 15.0);
+            double cost = com.ganesh.EV_Project.util.MoneyUtil.round2(
+                    (finalVitals != null) ? finalVitals.getTotalCost() : (energyConsumed * 15.0));
 
             session.setEndTime(endTime);
             session.setEnergyKwh(energyConsumed);

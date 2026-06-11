@@ -23,7 +23,7 @@ public class Payment {
     @JoinColumn(name = "booking_id", nullable = false)
     private Booking booking;
     
-    @Column(nullable = false)
+    @Column(nullable = false, columnDefinition = "NUMERIC(10,2)")
     private Double amount;
     
     @Column(nullable = false)

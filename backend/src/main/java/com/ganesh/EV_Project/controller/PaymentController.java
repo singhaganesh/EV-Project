@@ -84,7 +84,8 @@ public class PaymentController {
                     .orElse(new Payment());
             
             payment.setBooking(session.getBooking());
-            payment.setAmount(session.getTotalCost());
+            payment.setAmount(com.ganesh.EV_Project.util.MoneyUtil.round2(
+                    session.getTotalCost() != null ? session.getTotalCost() : 0.0));
             payment.setCurrency("INR");
             payment.setTransactionId(paymentId);
             payment.setGateway("RAZORPAY");
