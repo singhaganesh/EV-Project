@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
-import { Zap, Mail, Lock, User, Loader2, Building2, Hash, Phone, Banknote, FileText, ShieldCheck, Wand2, Eye, EyeOff } from 'lucide-react';
+import { Zap, Mail, Lock, User, Loader2, Building2, Hash, Phone, Banknote, FileText, ShieldCheck, Wand2, Eye, EyeOff, ArrowRight, ArrowLeft } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../api/axios';
 import { selectCurrentUser } from '../../store/authSlice';
@@ -21,7 +21,7 @@ const EMPTY_FORM = {
 const mockPdf = (name) => new File([new Blob(['mock content'], { type: 'application/pdf' })], name, { type: 'application/pdf' });
 
 const inputClass =
-    'block w-full pl-10 sm:text-sm border-slate-200 rounded-lg py-3 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-colors';
+    'block w-full pl-10 pr-4 py-3 sm:text-sm border-0 bg-slate-50/50 focus:bg-white focus:ring-0 placeholder:text-slate-400 text-slate-800 focus:outline-none transition-colors';
 
 const TextField = ({ icon: Icon, disabled, ...props }) => {
     const [showPassword, setShowPassword] = useState(false);
@@ -29,7 +29,7 @@ const TextField = ({ icon: Icon, disabled, ...props }) => {
     const inputType = isPassword ? (showPassword ? 'text' : 'password') : props.type;
 
     return (
-        <div className="mt-2 relative rounded-md shadow-sm">
+        <div className="mt-2 relative rounded-lg shadow-sm border border-slate-200 focus-within:ring-2 focus-within:ring-cyan-500/20 focus-within:border-cyan-500 transition-colors overflow-hidden">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                 <Icon className="h-5 w-5 text-slate-400" />
             </div>
@@ -65,6 +65,7 @@ export default function RegisterPage() {
     const [step, setStep] = useState(1);
     const [userId, setUserId] = useState(null);
     const [otp, setOtp] = useState('');
+    const [otpDigits, setOtpDigits] = useState(Array(6).fill(''));
 
     const navigate = useNavigate();
     const user = useSelector(selectCurrentUser);
@@ -75,6 +76,13 @@ export default function RegisterPage() {
             else if (user.role === 'STATION_OWNER') navigate('/owner', { replace: true });
         }
     }, [user, navigate]);
+
+    useEffect(() => {
+        if (step === 4) {
+            setOtpDigits(Array(6).fill(''));
+            setOtp('');
+        }
+    }, [step]);
 
     const updateField = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
     const updateFile = (key) => (e) => setFiles((f) => ({ ...f, [key]: e.target.files?.[0] || null }));
@@ -194,59 +202,116 @@ export default function RegisterPage() {
         }
     };
 
+    const handleOtpDigitChange = (index, value) => {
+        if (value && !/^[0-9]$/.test(value)) return;
+
+        const newDigits = [...otpDigits];
+        newDigits[index] = value;
+        setOtpDigits(newDigits);
+
+        const combinedOtp = newDigits.join('');
+        setOtp(combinedOtp);
+
+        if (value && index < 5) {
+            document.getElementById(`otp-${index + 1}`)?.focus();
+        }
+    };
+
+    const handleOtpKeyDown = (index, e) => {
+        if (e.key === 'Backspace') {
+            if (!otpDigits[index] && index > 0) {
+                const newDigits = [...otpDigits];
+                newDigits[index - 1] = '';
+                setOtpDigits(newDigits);
+                setOtp(newDigits.join(''));
+                document.getElementById(`otp-${index - 1}`)?.focus();
+            } else {
+                const newDigits = [...otpDigits];
+                newDigits[index] = '';
+                setOtpDigits(newDigits);
+                setOtp(newDigits.join(''));
+            }
+        }
+    };
+
     const stepsInfo = [
-        { id: 1, label: 'Contact Details' },
-        { id: 2, label: 'Business & Bank' },
+        { id: 1, label: 'Contact' },
+        { id: 2, label: 'Business' },
         { id: 3, label: 'Documents' },
     ];
 
-    const heading = step === 4 ? 'Verify your email' : 'Partner with Plugsy';
+    const heading = step === 4 ? 'Verify your email' : 'Register your Business';
     const subHeading = step === 4 ? (
-        <>Enter the 6-digit code we emailed to <span className="font-medium">{form.email}</span></>
+        <>Enter the 6-digit code we emailed to <span className="font-semibold text-slate-700">{form.email}</span></>
     ) : (
         <>
-            Register your station business or{' '}
-            <Link to="/login" className="font-medium text-cyan-600 hover:text-cyan-500 transition-colors">
-                sign in to your existing account
-            </Link>
+            Set up your infrastructure provider account in three simple steps.
         </>
     );
 
     return (
-        <div className="min-h-screen bg-[#F4F7FE] flex flex-col justify-center py-12 sm:px-6 lg:px-8">
-            <div className="sm:mx-auto sm:w-full sm:max-w-lg text-center">
-                <div className="w-16 h-16 rounded-full bg-[#1A2234] mx-auto flex items-center justify-center shadow-lg shadow-slate-900/20">
-                    {step === 4 ? <ShieldCheck className="w-8 h-8 text-cyan-400" /> : <Zap className="w-8 h-8 text-cyan-400" />}
+        <div className="min-h-screen bg-[#F4F7FE] flex w-full font-sans overflow-hidden">
+            {/* Left Side: Brand Hero Panel (Hidden on Mobile) */}
+            <div className="hidden lg:flex w-[45%] relative bg-slate-900 overflow-hidden flex-col justify-between p-12">
+                {/* Background Image */}
+                <div className="absolute inset-0 z-0">
+                    <img 
+                        alt="Sleek electric vehicle charging cable render" 
+                        className="w-full h-full object-cover opacity-70" 
+                        src="https://lh3.googleusercontent.com/aida/AP1WRLuzFpAHULWS4KA0uWbokCFbjXO7nkm6Mkfl1LJdp8qwofBSenSxQDMdPQnL3zq8AQgy0BqYtmT7kWv6-d5avx9qO9Mkcg3I7Q9I6wq5IEehWXu0Vdy7U2rU-MuHfy2H-NGPTUDSwyEUZ4Qq7fb8_pmE9iLffbuQ-uSXq8RxtyeDKoHZKzJS_NgaTNYT5NSkjJt38j7_Yj5ZJdTUIkCOg_0pgM1LsMutlqpY24C7ydvX2mpthI0ds6UQJQUF"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-transparent to-transparent opacity-90" />
                 </div>
-                <h2 className="mt-6 text-center text-3xl font-extrabold text-[#1A2234]">
-                    {heading}
-                </h2>
-                <p className="mt-2 text-center text-sm text-slate-500">
-                    {subHeading}
-                </p>
+
+                {/* Brand Header */}
+                <div className="relative z-10 flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-r from-cyan-400 to-cyan-500 flex items-center justify-center shadow-lg shadow-cyan-500/25">
+                        <Zap className="h-6 w-6 text-white" />
+                    </div>
+                    <span className="text-2xl font-bold text-white tracking-tight">Plugsy</span>
+                </div>
+
+                {/* Telemetry/Branding Text */}
+                <div className="relative z-10 max-w-lg mb-12">
+                    <h1 className="text-4xl font-extrabold text-white tracking-tight leading-tight mb-4">
+                        Powering the Future of Mobility
+                    </h1>
+                    <p className="text-lg text-slate-300">
+                        Intelligent infrastructure management for next-generation electric vehicle fleets.
+                    </p>
+                </div>
             </div>
 
-            <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-lg">
-                <div className="bg-white py-8 px-4 shadow-xl shadow-slate-200/40 sm:rounded-2xl sm:px-10 border border-slate-100">
+            {/* Right Side: Form Panel */}
+            <div className="w-full lg:w-[55%] flex items-center justify-center p-6 sm:p-12 bg-[#F4F7FE] overflow-y-auto">
+                <div className="w-full max-w-[550px] bg-white rounded-[24px] shadow-xl shadow-slate-200/40 p-8 sm:p-10 border border-slate-100 relative z-10 my-4">
+                    
+                    {/* Dev Autofill Shortcut */}
                     {import.meta.env.DEV && step <= 3 && (
                         <button
                             type="button"
                             onClick={handleAutofill}
-                            className="mb-6 w-full flex justify-center items-center gap-2 py-2 px-4 rounded-lg text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 hover:bg-amber-100 transition-colors"
+                            className="mb-6 w-full flex justify-center items-center gap-2 py-2 px-4 rounded-lg text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 hover:bg-amber-100 transition-colors"
                         >
-                            <Wand2 className="w-4 h-4" /> Dev: fill test data
+                            <Wand2 className="w-4 h-4" /> Dev Mode: Autofill test details
                         </button>
                     )}
 
+                    {/* Form Header */}
+                    <div className="mb-6">
+                        <h2 className="text-2xl font-bold text-[#1A2234]">{heading}</h2>
+                        <p className="mt-1.5 text-sm text-slate-500">{subHeading}</p>
+                    </div>
+
                     {/* Progress Step Indicator */}
                     {step <= 3 && (
-                        <div className="mb-8 relative px-4">
+                        <div className="mb-8 relative px-2">
                             <div className="flex items-center justify-between relative">
                                 {/* Background Line */}
-                                <div className="absolute top-4 left-0 right-0 h-0.5 bg-slate-100 z-0" />
+                                <div className="absolute top-4 left-0 right-0 h-1 bg-slate-100 rounded-full z-0" />
                                 {/* Active Progress Line */}
                                 <div 
-                                    className="absolute top-4 left-0 h-0.5 bg-cyan-500 transition-all duration-300 z-0"
+                                    className="absolute top-4 left-0 h-1 bg-cyan-400 rounded-full transition-all duration-500 ease-in-out z-0"
                                     style={{ width: `${((step - 1) / (stepsInfo.length - 1)) * 100}%` }}
                                 />
                                 
@@ -257,13 +322,13 @@ export default function RegisterPage() {
                                         <div key={s.id} className="flex flex-col items-center z-10 relative">
                                             <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-300 ${
                                                 isCompleted ? 'bg-cyan-500 text-white' : 
-                                                isActive ? 'bg-[#1A2234] text-white ring-4 ring-cyan-100 border-2 border-cyan-400' : 
+                                                isActive ? 'bg-[#1A2234] text-white ring-4 ring-cyan-100 border-2 border-cyan-400 animate-pulse' : 
                                                 'bg-white border-2 border-slate-200 text-slate-400'
                                             }`}>
                                                 {isCompleted ? '✓' : s.id}
                                             </div>
-                                            <span className={`mt-2 text-[11px] font-semibold transition-colors duration-300 hidden sm:block ${
-                                                isActive ? 'text-[#1A2234]' : isCompleted ? 'text-cyan-600' : 'text-slate-400'
+                                            <span className={`mt-2 text-[11px] font-semibold transition-colors duration-300 ${
+                                                isActive ? 'text-[#1A2234]' : isCompleted ? 'text-cyan-500' : 'text-slate-400'
                                             }`}>
                                                 {s.label}
                                             </span>
@@ -274,72 +339,81 @@ export default function RegisterPage() {
                         </div>
                     )}
 
+                    {/* Forms */}
                     {step === 1 && (
                         <div className="space-y-5">
                             <div>
-                                <label className="block text-sm font-medium text-slate-700">Owner / contact name</label>
-                                <TextField icon={User} type="text" required value={form.name} onChange={updateField('name')} placeholder="Your name" disabled={loading} />
+                                <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider">Full Legal Name</label>
+                                <TextField icon={User} type="text" required value={form.name} onChange={updateField('name')} placeholder="Jane Doe" disabled={loading} />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-slate-700">Email address</label>
-                                <TextField icon={Mail} type="email" required value={form.email} onChange={updateField('email')} placeholder="business@example.com" disabled={loading} />
+                                <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider">Work Email Address</label>
+                                <TextField icon={Mail} type="email" required value={form.email} onChange={updateField('email')} placeholder="jane@infrastructure.co" disabled={loading} />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-slate-700">Password</label>
+                                <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider">Account Password</label>
                                 <TextField icon={Lock} type="password" required minLength={6} value={form.password} onChange={updateField('password')} placeholder="••••••••" disabled={loading} />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-slate-700">Phone number</label>
-                                <TextField icon={Phone} type="tel" required value={form.phoneNumber} onChange={updateField('phoneNumber')} placeholder="9876543210" disabled={loading} />
+                                <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider">Primary Phone Number</label>
+                                <TextField icon={Phone} type="tel" required value={form.phoneNumber} onChange={updateField('phoneNumber')} placeholder="+1 (555) 000-0000" disabled={loading} />
                             </div>
 
-                            <button
-                                type="button"
-                                disabled={!isStep1Valid()}
-                                onClick={() => setStep(2)}
-                                className="w-full flex justify-center items-center gap-2 py-3 px-4 border border-transparent rounded-xl shadow-md shadow-slate-900/20 text-sm font-medium text-white bg-[#1A2234] hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-900 transition-all active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
-                            >
-                                Next Step
-                            </button>
+                            <div className="pt-2 border-t border-slate-100 flex justify-between items-center text-sm">
+                                <Link to="/login" className="text-slate-500 hover:text-slate-700 transition-colors font-medium">
+                                    Already registered? Sign in
+                                </Link>
+                                <button
+                                    type="button"
+                                    disabled={!isStep1Valid()}
+                                    onClick={() => setStep(2)}
+                                    className="py-3 px-5 border border-transparent rounded-lg shadow-lg shadow-cyan-500/10 text-sm font-semibold text-white bg-gradient-to-r from-cyan-600 to-cyan-500 hover:opacity-95 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-cyan-500 transition-all active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
+                                >
+                                    Continue
+                                    <ArrowRight className="w-4 h-4" />
+                                </button>
+                            </div>
                         </div>
                     )}
 
                     {step === 2 && (
                         <div className="space-y-5">
                             <div>
-                                <label className="block text-sm font-medium text-slate-700">Company name</label>
-                                <TextField icon={Building2} type="text" required value={form.companyName} onChange={updateField('companyName')} placeholder="Your Stations Pvt Ltd" disabled={loading} />
+                                <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider">Registered Company Name</label>
+                                <TextField icon={Building2} type="text" required value={form.companyName} onChange={updateField('companyName')} placeholder="Nexus Energy Solutions LLC" disabled={loading} />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-slate-700">Tax ID (GSTIN / PAN)</label>
-                                <TextField icon={Hash} type="text" required value={form.taxId} onChange={updateField('taxId')} placeholder="22AAAAA0000A1Z5" disabled={loading} />
+                                <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider">Tax ID / EIN</label>
+                                <TextField icon={Hash} type="text" required value={form.taxId} onChange={updateField('taxId')} placeholder="XX-XXXXXXX" disabled={loading} />
                             </div>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700">Bank account no.</label>
-                                    <TextField icon={Banknote} type="text" required value={form.bankAccountNumber} onChange={updateField('bankAccountNumber')} placeholder="1234567890" disabled={loading} />
+                                    <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider">Bank account no.</label>
+                                    <TextField icon={Banknote} type="text" required value={form.bankAccountNumber} onChange={updateField('bankAccountNumber')} placeholder="0000 0000 0000" disabled={loading} />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700">IFSC code</label>
-                                    <TextField icon={Hash} type="text" required value={form.bankIfscCode} onChange={updateField('bankIfscCode')} placeholder="HDFC0001234" disabled={loading} />
+                                    <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider">IFSC / Routing Code</label>
+                                    <TextField icon={Hash} type="text" required value={form.bankIfscCode} onChange={updateField('bankIfscCode')} placeholder="ROUT0000123" disabled={loading} />
                                 </div>
                             </div>
 
-                            <div className="flex gap-4">
+                            <div className="pt-2 border-t border-slate-100 flex gap-4">
                                 <button
                                     type="button"
                                     onClick={() => setStep(1)}
-                                    className="flex-1 py-3 px-4 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-500 transition-all active:scale-[0.98]"
+                                    className="flex-1 py-3 px-4 border border-slate-200 rounded-lg text-sm font-semibold text-slate-600 bg-white hover:bg-slate-50 transition-colors flex items-center justify-center gap-2"
                                 >
+                                    <ArrowLeft className="w-4 h-4" />
                                     Back
                                 </button>
                                 <button
                                     type="button"
                                     disabled={!isStep2Valid()}
                                     onClick={() => setStep(3)}
-                                    className="flex-1 flex justify-center items-center gap-2 py-3 px-4 border border-transparent rounded-xl shadow-md shadow-slate-900/20 text-sm font-medium text-white bg-[#1A2234] hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-900 transition-all active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
+                                    className="flex-1 py-3 px-4 border border-transparent rounded-lg shadow-lg shadow-cyan-500/10 text-sm font-semibold text-white bg-gradient-to-r from-cyan-600 to-cyan-500 hover:opacity-95 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-cyan-500 transition-all active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                                 >
-                                    Next Step
+                                    Continue
+                                    <ArrowRight className="w-4 h-4" />
                                 </button>
                             </div>
                         </div>
@@ -347,45 +421,92 @@ export default function RegisterPage() {
 
                     {step === 3 && (
                         <form className="space-y-5" onSubmit={handleRegister}>
-                            <div className="space-y-3">
-                                <p className="text-sm font-medium text-slate-700">Business documents (PDF / image)</p>
-                                {[
-                                    ['registrationDoc', 'Business registration'],
-                                    ['electricityDoc', 'Electricity bill'],
-                                    ['bankDoc', 'Bank proof (cancelled cheque)'],
-                                ].map(([key, label]) => (
-                                    <div key={key} className="flex items-center gap-3">
-                                        <FileText className="h-5 w-5 text-slate-400 shrink-0" />
-                                        <div className="flex-1">
-                                            <label className="block text-xs text-slate-500">{label}</label>
-                                            <input
-                                                type="file"
-                                                accept="application/pdf,image/*"
-                                                onChange={updateFile(key)}
-                                                disabled={loading}
-                                                className="block w-full text-xs text-slate-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-medium file:bg-cyan-50 file:text-cyan-700 hover:file:bg-cyan-100"
-                                            />
-                                            {files[key] && <span className="text-[11px] text-emerald-600">{files[key].name}</span>}
+                            <div className="space-y-4">
+                                <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">Upload Verification Documents</label>
+                                
+                                {/* Large Dropzone: Business Registration */}
+                                <div className="group relative border-2 border-dashed border-slate-200 hover:border-cyan-400 bg-slate-50/50 hover:bg-white rounded-xl p-5 text-center cursor-pointer transition-all duration-200">
+                                    <input 
+                                        accept="application/pdf,image/*" 
+                                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" 
+                                        type="file" 
+                                        disabled={loading}
+                                        onChange={updateFile('registrationDoc')} 
+                                    />
+                                    <div className="flex flex-col items-center justify-center space-y-2">
+                                        <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center group-hover:bg-cyan-50 group-hover:text-cyan-500 transition-colors">
+                                            <FileText className="h-6 w-6 text-slate-400 group-hover:text-cyan-500" />
+                                        </div>
+                                        <div>
+                                            <p className="text-xs font-semibold text-slate-700">Business Registration Certificate</p>
+                                            <p className="text-[10px] text-slate-400 truncate max-w-[300px]">
+                                                {files.registrationDoc ? files.registrationDoc.name : 'Drag & drop or click to browse'}
+                                            </p>
                                         </div>
                                     </div>
-                                ))}
+                                </div>
+
+                                {/* Two smaller Dropzones side-by-side */}
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    {/* Electricity Bill */}
+                                    <div className="group relative border-2 border-dashed border-slate-200 hover:border-cyan-400 bg-slate-50/50 hover:bg-white rounded-xl p-4 text-center cursor-pointer transition-all duration-200">
+                                        <input 
+                                            accept="application/pdf,image/*" 
+                                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" 
+                                            type="file" 
+                                            disabled={loading}
+                                            onChange={updateFile('electricityDoc')} 
+                                        />
+                                        <div className="flex flex-col items-center justify-center space-y-1">
+                                            <FileText className="h-5 w-5 text-slate-400 group-hover:text-cyan-500 transition-colors" />
+                                            <p className="text-xs font-semibold text-slate-700">Electricity Bill</p>
+                                            <p className="text-[10px] text-slate-400 truncate max-w-[150px]">
+                                                {files.electricityDoc ? files.electricityDoc.name : 'Browse...'}
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    {/* Cancelled Cheque */}
+                                    <div className="group relative border-2 border-dashed border-slate-200 hover:border-cyan-400 bg-slate-50/50 hover:bg-white rounded-xl p-4 text-center cursor-pointer transition-all duration-200">
+                                        <input 
+                                            accept="application/pdf,image/*" 
+                                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" 
+                                            type="file" 
+                                            disabled={loading}
+                                            onChange={updateFile('bankDoc')} 
+                                        />
+                                        <div className="flex flex-col items-center justify-center space-y-1">
+                                            <FileText className="h-5 w-5 text-slate-400 group-hover:text-cyan-500 transition-colors" />
+                                            <p className="text-xs font-semibold text-slate-700">Cancelled Cheque</p>
+                                            <p className="text-[10px] text-slate-400 truncate max-w-[150px]">
+                                                {files.bankDoc ? files.bankDoc.name : 'Browse...'}
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
 
-                            <div className="flex gap-4">
+                            <div className="pt-2 border-t border-slate-100 flex gap-4">
                                 <button
                                     type="button"
                                     disabled={loading}
                                     onClick={() => setStep(2)}
-                                    className="flex-1 py-3 px-4 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-500 transition-all active:scale-[0.98] disabled:opacity-60"
+                                    className="flex-1 py-3 px-4 border border-slate-200 rounded-lg text-sm font-semibold text-slate-600 bg-white hover:bg-slate-50 transition-colors flex items-center justify-center gap-2"
                                 >
+                                    <ArrowLeft className="w-4 h-4" />
                                     Back
                                 </button>
                                 <button
                                     type="submit"
                                     disabled={loading || !isStep3Valid()}
-                                    className="flex-1 flex justify-center items-center gap-2 py-3 px-4 border border-transparent rounded-xl shadow-md shadow-slate-900/20 text-sm font-medium text-white bg-[#1A2234] hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-900 transition-all active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
+                                    className="flex-1 py-3 px-4 border border-transparent rounded-lg shadow-lg shadow-slate-900/10 text-sm font-semibold text-white bg-slate-900 hover:bg-slate-800 transition-all active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                                 >
-                                    {loading ? (<><Loader2 className="w-4 h-4 animate-spin" /> Submitting...</>) : 'Register'}
+                                    {loading ? (<><Loader2 className="w-4 h-4 animate-spin" /> Registering...</>) : (
+                                        <>
+                                            Register Business
+                                            <ShieldCheck className="w-4 h-4" />
+                                        </>
+                                    )}
                                 </button>
                             </div>
                         </form>
@@ -394,41 +515,56 @@ export default function RegisterPage() {
                     {step === 4 && (
                         <form className="space-y-6" onSubmit={handleVerify}>
                             <div>
-                                <label className="block text-sm font-medium text-slate-700">6-digit code</label>
-                                <div className="mt-2 relative rounded-md shadow-sm">
-                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                        <ShieldCheck className="h-5 w-5 text-slate-400" />
-                                    </div>
-                                    <input
-                                        type="text"
-                                        inputMode="numeric"
-                                        autoComplete="one-time-code"
-                                        maxLength={6}
-                                        required
-                                        value={otp}
-                                        onChange={(e) => setOtp(e.target.value)}
-                                        className="block w-full pl-10 tracking-[0.5em] text-center sm:text-sm border-slate-200 rounded-lg py-3 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-colors"
-                                        placeholder="••••••"
-                                        disabled={loading}
-                                    />
+                                <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider text-center">Enter Verification Code</label>
+                                
+                                {/* 6-Digit OTP Box Grid */}
+                                <div className="flex justify-between gap-2 sm:gap-3 my-6">
+                                    {otpDigits.map((digit, idx) => (
+                                        <input
+                                            key={idx}
+                                            id={`otp-${idx}`}
+                                            type="text"
+                                            inputMode="numeric"
+                                            maxLength={1}
+                                            value={digit}
+                                            onChange={(e) => handleOtpDigitChange(idx, e.target.value)}
+                                            onKeyDown={(e) => handleOtpKeyDown(idx, e)}
+                                            className="w-11 h-14 sm:w-12 sm:h-16 text-center text-2xl font-bold border border-slate-200 rounded-lg bg-slate-50 focus:bg-white focus:outline-none focus:border-cyan-500 focus:ring-4 focus:ring-cyan-500/10 transition-all text-[#1A2234]"
+                                            disabled={loading}
+                                        />
+                                    ))}
                                 </div>
                             </div>
 
                             <button
                                 type="submit"
-                                disabled={loading}
-                                className="w-full flex justify-center items-center gap-2 py-3 px-4 border border-transparent rounded-xl shadow-md shadow-slate-900/20 text-sm font-medium text-white bg-[#1A2234] hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-900 transition-all active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
+                                disabled={loading || otp.length < 6}
+                                className="w-full flex justify-center items-center gap-2 py-3 px-4 border border-transparent rounded-lg shadow-lg shadow-cyan-500/10 text-sm font-semibold text-white bg-gradient-to-r from-cyan-600 to-cyan-500 hover:opacity-95 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-cyan-500 transition-all active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed"
                             >
-                                {loading ? (<><Loader2 className="w-4 h-4 animate-spin" /> Verifying...</>) : 'Verify email'}
+                                {loading ? (<><Loader2 className="w-4 h-4 animate-spin" /> Verifying...</>) : (
+                                    <>
+                                        Verify email
+                                        <ArrowRight className="w-4 h-4" />
+                                    </>
+                                )}
                             </button>
 
-                            <button
-                                type="button"
-                                onClick={handleResend}
-                                className="w-full text-sm font-medium text-cyan-600 hover:text-cyan-500"
-                            >
-                                Resend code
-                            </button>
+                            <div className="flex items-center justify-between text-sm pt-2">
+                                <button 
+                                    type="button" 
+                                    onClick={() => setStep(1)} 
+                                    className="text-slate-500 hover:text-slate-700 transition-colors font-medium"
+                                >
+                                    Back to details
+                                </button>
+                                <button 
+                                    type="button" 
+                                    onClick={handleResend} 
+                                    className="font-semibold text-cyan-500 hover:text-cyan-600 transition-colors"
+                                >
+                                    Resend code
+                                </button>
+                            </div>
                         </form>
                     )}
                 </div>

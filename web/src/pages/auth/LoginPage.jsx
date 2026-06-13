@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
-import { Zap, Mail, Lock, Loader2, ShieldCheck, Eye, EyeOff } from 'lucide-react';
+import { Zap, Mail, Lock, Loader2, ShieldCheck, Eye, EyeOff, ArrowRight } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../api/axios';
 import { setCredentials, selectCurrentUser } from '../../store/authSlice';
@@ -15,6 +15,7 @@ export default function LoginPage() {
     // view: 'login' | 'mfa' | 'verify'
     const [view, setView] = useState('login');
     const [otp, setOtp] = useState('');
+    const [otpDigits, setOtpDigits] = useState(Array(6).fill(''));
     const [tempLoginToken, setTempLoginToken] = useState('');
     const [verifyUserId, setVerifyUserId] = useState(null);
 
@@ -30,9 +31,16 @@ export default function LoginPage() {
         }
     }, [user, navigate]);
 
+    // Reset OTP digits when view changes
+    useEffect(() => {
+        setOtpDigits(Array(6).fill(''));
+        setOtp('');
+    }, [view]);
+
     const resetToLogin = () => {
         setView('login');
         setOtp('');
+        setOtpDigits(Array(6).fill(''));
         setTempLoginToken('');
         setVerifyUserId(null);
     };
@@ -142,39 +150,108 @@ export default function LoginPage() {
         }
     };
 
+    const handleOtpDigitChange = (index, value) => {
+        // Only allow single digit numbers
+        if (value && !/^[0-9]$/.test(value)) return;
+
+        const newDigits = [...otpDigits];
+        newDigits[index] = value;
+        setOtpDigits(newDigits);
+
+        const combinedOtp = newDigits.join('');
+        setOtp(combinedOtp);
+
+        // Auto-focus next field
+        if (value && index < 5) {
+            document.getElementById(`otp-${index + 1}`)?.focus();
+        }
+    };
+
+    const handleOtpKeyDown = (index, e) => {
+        if (e.key === 'Backspace') {
+            if (!otpDigits[index] && index > 0) {
+                const newDigits = [...otpDigits];
+                newDigits[index - 1] = '';
+                setOtpDigits(newDigits);
+                setOtp(newDigits.join(''));
+                document.getElementById(`otp-${index - 1}`)?.focus();
+            } else {
+                const newDigits = [...otpDigits];
+                newDigits[index] = '';
+                setOtpDigits(newDigits);
+                setOtp(newDigits.join(''));
+            }
+        }
+    };
+
     const isOtpView = view === 'mfa' || view === 'verify';
     const heading = view === 'mfa' ? 'Two-factor verification'
         : view === 'verify' ? 'Verify your email'
         : 'Sign in to your account';
 
     return (
-        <div className="min-h-screen bg-[#F4F7FE] flex flex-col justify-center py-12 sm:px-6 lg:px-8">
-            <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
-                <div className="w-16 h-16 rounded-full bg-cyan-500 mx-auto flex items-center justify-center shadow-lg shadow-cyan-500/30">
-                    {isOtpView ? <ShieldCheck className="w-8 h-8 text-white" /> : <Zap className="w-8 h-8 text-white" />}
+        <div className="min-h-screen bg-[#F4F7FE] flex w-full font-sans overflow-hidden">
+            {/* Left Side: Brand Hero Panel (Hidden on Mobile) */}
+            <div className="hidden lg:flex w-1/2 relative bg-slate-900 overflow-hidden flex-col justify-between p-12">
+                {/* Background Image */}
+                <div className="absolute inset-0 z-0">
+                    <img 
+                        alt="Sleek electric vehicle charging cable render" 
+                        className="w-full h-full object-cover opacity-70" 
+                        src="https://lh3.googleusercontent.com/aida/AP1WRLuzFpAHULWS4KA0uWbokCFbjXO7nkm6Mkfl1LJdp8qwofBSenSxQDMdPQnL3zq8AQgy0BqYtmT7kWv6-d5avx9qO9Mkcg3I7Q9I6wq5IEehWXu0Vdy7U2rU-MuHfy2H-NGPTUDSwyEUZ4Qq7fb8_pmE9iLffbuQ-uSXq8RxtyeDKoHZKzJS_NgaTNYT5NSkjJt38j7_Yj5ZJdTUIkCOg_0pgM1LsMutlqpY24C7ydvX2mpthI0ds6UQJQUF"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-transparent to-transparent opacity-90" />
                 </div>
-                <h2 className="mt-6 text-center text-3xl font-extrabold text-[#1A2234]">{heading}</h2>
-                <p className="mt-2 text-center text-sm text-slate-500">
-                    {isOtpView ? (
-                        <>We emailed a 6-digit code to <span className="font-medium">{email}</span></>
-                    ) : (
-                        <>
-                            Or{' '}
-                            <Link to="/register" className="font-medium text-cyan-600 hover:text-cyan-500 transition-colors">
-                                register as a new Pump Owner
-                            </Link>
-                        </>
-                    )}
-                </p>
+
+                {/* Brand Header */}
+                <div className="relative z-10 flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-r from-cyan-400 to-cyan-500 flex items-center justify-center shadow-lg shadow-cyan-500/25">
+                        <Zap className="h-6 w-6 text-white" />
+                    </div>
+                    <span className="text-2xl font-bold text-white tracking-tight">Plugsy</span>
+                </div>
+
+                {/* Telemetry/Branding Text */}
+                <div className="relative z-10 max-w-lg mb-12">
+                    <h1 className="text-4xl font-extrabold text-white tracking-tight leading-tight mb-4">
+                        Powering the Future of Mobility
+                    </h1>
+                    <p className="text-lg text-slate-300">
+                        Intelligent infrastructure management for next-generation electric vehicle fleets.
+                    </p>
+                </div>
             </div>
 
-            <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-                <div className="bg-white py-8 px-4 shadow-xl shadow-slate-200/40 sm:rounded-2xl sm:px-10 border border-slate-100">
+            {/* Right Side: Form Panel */}
+            <div className="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-12 bg-[#F4F7FE]">
+                <div className="w-full max-w-md bg-white rounded-[24px] shadow-xl shadow-slate-200/40 p-8 sm:p-10 border border-slate-100 relative z-10">
+                    
+                    {/* Form Header */}
+                    <div className="flex flex-col items-center mb-8">
+                        <div className="w-14 h-14 rounded-2xl bg-slate-50 flex items-center justify-center mb-4 border border-slate-100">
+                            {isOtpView ? <ShieldCheck className="w-7 h-7 text-cyan-500" /> : <Zap className="w-7 h-7 text-cyan-500" />}
+                        </div>
+                        <h2 className="text-2xl font-bold text-[#1A2234] text-center">{heading}</h2>
+                        <p className="mt-2 text-center text-sm text-slate-500">
+                            {isOtpView ? (
+                                <>We emailed a 6-digit code to <span className="font-semibold text-slate-700">{email}</span></>
+                            ) : (
+                                <>
+                                    Or{' '}
+                                    <Link to="/register" className="font-semibold text-cyan-500 hover:text-cyan-600 transition-colors underline-offset-2 hover:underline">
+                                        register as a new Pump Owner
+                                    </Link>
+                                </>
+                            )}
+                        </p>
+                    </div>
+
+                    {/* Views */}
                     {view === 'login' && (
                         <form className="space-y-6" onSubmit={handleLogin}>
                             <div>
-                                <label className="block text-sm font-medium text-slate-700">Email address</label>
-                                <div className="mt-2 relative rounded-md shadow-sm">
+                                <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider">Email address</label>
+                                <div className="mt-2 relative rounded-lg shadow-sm border border-slate-200 focus-within:ring-2 focus-within:ring-cyan-500/20 focus-within:border-cyan-500 transition-colors overflow-hidden">
                                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                                         <Mail className="h-5 w-5 text-slate-400" />
                                     </div>
@@ -183,7 +260,7 @@ export default function LoginPage() {
                                         required
                                         value={email}
                                         onChange={(e) => setEmail(e.target.value)}
-                                        className="block w-full pl-10 sm:text-sm border-slate-200 rounded-lg py-3 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-colors"
+                                        className="block w-full pl-10 pr-4 py-3 sm:text-sm border-0 bg-slate-50/50 focus:bg-white focus:ring-0 placeholder:text-slate-400 text-slate-800 focus:outline-none transition-colors"
                                         placeholder="admin@plugsy.com"
                                         disabled={loading}
                                     />
@@ -191,8 +268,8 @@ export default function LoginPage() {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-slate-700">Password</label>
-                                <div className="mt-2 relative rounded-md shadow-sm">
+                                <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider">Password</label>
+                                <div className="mt-2 relative rounded-lg shadow-sm border border-slate-200 focus-within:ring-2 focus-within:ring-cyan-500/20 focus-within:border-cyan-500 transition-colors overflow-hidden">
                                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                                         <Lock className="h-5 w-5 text-slate-400" />
                                     </div>
@@ -201,7 +278,7 @@ export default function LoginPage() {
                                         required
                                         value={password}
                                         onChange={(e) => setPassword(e.target.value)}
-                                        className="block w-full pl-10 pr-10 sm:text-sm border-slate-200 rounded-lg py-3 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-colors"
+                                        className="block w-full pl-10 pr-10 py-3 sm:text-sm border-0 bg-slate-50/50 focus:bg-white focus:ring-0 placeholder:text-slate-400 text-slate-800 focus:outline-none transition-colors"
                                         placeholder="••••••••"
                                         disabled={loading}
                                     />
@@ -218,9 +295,14 @@ export default function LoginPage() {
                             <button
                                 type="submit"
                                 disabled={loading}
-                                className="w-full flex justify-center items-center gap-2 py-3 px-4 border border-transparent rounded-xl shadow-md shadow-cyan-500/20 text-sm font-medium text-white bg-cyan-500 hover:bg-cyan-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-cyan-500 transition-all active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
+                                className="w-full flex justify-center items-center gap-2 py-3 px-4 border border-transparent rounded-lg shadow-lg shadow-cyan-500/10 text-sm font-semibold text-white bg-gradient-to-r from-cyan-600 to-cyan-500 hover:opacity-95 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-cyan-500 transition-all active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed"
                             >
-                                {loading ? (<><Loader2 className="w-4 h-4 animate-spin" /> Signing in...</>) : 'Sign in'}
+                                {loading ? (<><Loader2 className="w-4 h-4 animate-spin" /> Signing in...</>) : (
+                                    <>
+                                        Sign in
+                                        <ArrowRight className="w-4 h-4" />
+                                    </>
+                                )}
                             </button>
                         </form>
                     )}
@@ -228,40 +310,46 @@ export default function LoginPage() {
                     {isOtpView && (
                         <form className="space-y-6" onSubmit={view === 'mfa' ? handleVerifyMfa : handleVerifyEmail}>
                             <div>
-                                <label className="block text-sm font-medium text-slate-700">6-digit code</label>
-                                <div className="mt-2 relative rounded-md shadow-sm">
-                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                        <ShieldCheck className="h-5 w-5 text-slate-400" />
-                                    </div>
-                                    <input
-                                        type="text"
-                                        inputMode="numeric"
-                                        autoComplete="one-time-code"
-                                        maxLength={6}
-                                        required
-                                        value={otp}
-                                        onChange={(e) => setOtp(e.target.value)}
-                                        className="block w-full pl-10 tracking-[0.5em] text-center sm:text-sm border-slate-200 rounded-lg py-3 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-colors"
-                                        placeholder="••••••"
-                                        disabled={loading}
-                                    />
+                                <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider text-center">Enter Verification Code</label>
+                                
+                                {/* 6-Digit OTP Box Grid */}
+                                <div className="flex justify-between gap-2 sm:gap-3 my-6">
+                                    {otpDigits.map((digit, idx) => (
+                                        <input
+                                            key={idx}
+                                            id={`otp-${idx}`}
+                                            type="text"
+                                            inputMode="numeric"
+                                            maxLength={1}
+                                            value={digit}
+                                            onChange={(e) => handleOtpDigitChange(idx, e.target.value)}
+                                            onKeyDown={(e) => handleOtpKeyDown(idx, e)}
+                                            className="w-11 h-14 sm:w-12 sm:h-16 text-center text-2xl font-bold border border-slate-200 rounded-lg bg-slate-50 focus:bg-white focus:outline-none focus:border-cyan-500 focus:ring-4 focus:ring-cyan-500/10 transition-all text-[#1A2234]"
+                                            disabled={loading}
+                                        />
+                                    ))}
                                 </div>
                             </div>
 
                             <button
                                 type="submit"
-                                disabled={loading}
-                                className="w-full flex justify-center items-center gap-2 py-3 px-4 border border-transparent rounded-xl shadow-md shadow-cyan-500/20 text-sm font-medium text-white bg-cyan-500 hover:bg-cyan-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-cyan-500 transition-all active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
+                                disabled={loading || otp.length < 6}
+                                className="w-full flex justify-center items-center gap-2 py-3 px-4 border border-transparent rounded-lg shadow-lg shadow-cyan-500/10 text-sm font-semibold text-white bg-gradient-to-r from-cyan-600 to-cyan-500 hover:opacity-95 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-cyan-500 transition-all active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed"
                             >
-                                {loading ? (<><Loader2 className="w-4 h-4 animate-spin" /> Verifying...</>) : (view === 'mfa' ? 'Verify & sign in' : 'Verify email')}
+                                {loading ? (<><Loader2 className="w-4 h-4 animate-spin" /> Verifying...</>) : (
+                                    <>
+                                        {view === 'mfa' ? 'Verify & sign in' : 'Verify email'}
+                                        <ArrowRight className="w-4 h-4" />
+                                    </>
+                                )}
                             </button>
 
-                            <div className="flex items-center justify-between text-sm">
-                                <button type="button" onClick={resetToLogin} className="text-slate-500 hover:text-slate-700">
+                            <div className="flex items-center justify-between text-sm pt-2">
+                                <button type="button" onClick={resetToLogin} className="text-slate-500 hover:text-slate-700 transition-colors font-medium">
                                     Back to sign in
                                 </button>
                                 {view === 'verify' && (
-                                    <button type="button" onClick={handleResend} className="font-medium text-cyan-600 hover:text-cyan-500">
+                                    <button type="button" onClick={handleResend} className="font-semibold text-cyan-500 hover:text-cyan-600 transition-colors">
                                         Resend code
                                     </button>
                                 )}
