@@ -15,6 +15,8 @@ import com.ganesh.EV_Project.service.OtpService;
 import com.ganesh.EV_Project.service.RefreshTokenService;
 import com.ganesh.EV_Project.service.UserService;
 import com.ganesh.EV_Project.service.LoginAttemptService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.env.Environment;
@@ -33,6 +35,8 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
+
+    private static final Logger log = LoggerFactory.getLogger(AuthController.class);
 
     @Autowired
     private OtpService otpService;
@@ -74,6 +78,21 @@ public class AuthController {
 
     private boolean isDevProfile() {
         return Arrays.asList(environment.getActiveProfiles()).contains("dev");
+    }
+
+    /**
+     * Sends an OTP email. In dev the OTP is also returned in the response, so a mail
+     * failure is logged but not fatal; in prod email is the only channel, so it throws.
+     */
+    private void deliverOtp(String email, String otp, String purpose) {
+        try {
+            emailService.sendOtpEmail(email, otp, purpose);
+        } catch (Exception e) {
+            if (!exposeOtpInResponse) {
+                throw e;
+            }
+            log.warn("OTP email to {} failed ({}); continuing because OTP is exposed in dev response", email, e.getMessage());
+        }
     }
 
     @PostMapping("/send-otp")
@@ -212,7 +231,7 @@ public class AuthController {
         // instead of the JWT. Admins/customers (and MFA-off owners) log in directly.
         if (user.getRole() == User.Role.STATION_OWNER && Boolean.TRUE.equals(user.getMfaEnabled())) {
             MfaOtpService.MfaChallenge challenge = mfaOtpService.createMfaChallenge(user.getId());
-            emailService.sendOtpEmail(user.getEmail(), challenge.otp(), "login");
+            deliverOtp(user.getEmail(), challenge.otp(), "login");
             Map<String, Object> data = new HashMap<>();
             data.put("mfaRequired", true);
             data.put("tempLoginToken", challenge.tempToken());
@@ -345,7 +364,7 @@ public class AuthController {
 
         // 3. Generate + email the verification OTP.
         String otp = mfaOtpService.generateRegistrationOtp(savedUser.getId());
-        emailService.sendOtpEmail(email, otp, "verification");
+        deliverOtp(email, otp, "verification");
 
         Map<String, Object> data = new HashMap<>();
         data.put("userId", savedUser.getId());
