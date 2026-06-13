@@ -1,5 +1,6 @@
 package com.ganesh.EV_Project.model;
 
+import com.ganesh.EV_Project.enums.UserStatus;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -34,6 +35,19 @@ public class User {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private Role role = Role.CUSTOMER;
+
+    // Account lifecycle. Defaults to APPROVED so existing customer/admin flows are
+    // unaffected; owner registration overrides this to PENDING_EMAIL_VERIFICATION.
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", length = 50)
+    private UserStatus status = UserStatus.APPROVED;
+
+    // Email-based MFA (owners only). Off by default.
+    @Column(name = "mfa_enabled")
+    private Boolean mfaEnabled = false;
+
+    @Column(name = "mfa_secret", length = 100)
+    private String mfaSecret;
 
     private LocalDateTime createdAt = LocalDateTime.now();
     private LocalDateTime updatedAt = LocalDateTime.now();
