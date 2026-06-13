@@ -44,6 +44,10 @@ public class UserService {
         return user.orElse(null);
     }
 
+    public User findById(Long id) {
+        return userRepository.findById(id).orElse(null);
+    }
+
     public User saveUser(User user) {
         // Handle empty email as null to avoid unique constraint violations
         if (user.getEmail() != null && user.getEmail().trim().isEmpty()) {

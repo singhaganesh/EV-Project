@@ -1,6 +1,8 @@
 package com.ganesh.EV_Project.service;
 
 import com.ganesh.EV_Project.exception.APIException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -18,6 +20,8 @@ import java.time.Duration;
  */
 @Service
 public class DocumentStorageService {
+
+    private static final Logger log = LoggerFactory.getLogger(DocumentStorageService.class);
 
     @Value("${supabase.url}")
     private String supabaseUrl;
@@ -44,6 +48,14 @@ public class DocumentStorageService {
         }
         String objectPath = "owner-" + userId + "/" + docType + "_"
                 + System.currentTimeMillis() + extension(file.getOriginalFilename());
+
+        // Dev convenience: with no Supabase key configured, skip the real upload and
+        // return the would-be object path so local registration testing still works.
+        if (serviceKey == null || serviceKey.isBlank()) {
+            log.warn("supabase.service-key is blank — skipping real upload for {} (dev mode)", objectPath);
+            return objectPath;
+        }
+
         String url = supabaseUrl + "/storage/v1/object/" + bucket + "/" + objectPath;
         try {
             String contentType = file.getContentType() != null
