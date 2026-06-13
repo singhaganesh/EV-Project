@@ -69,7 +69,6 @@ export default function LoginPage() {
             // Owner with MFA: move to the OTP step instead of logging in.
             if (data?.mfaRequired) {
                 setTempLoginToken(data.tempLoginToken);
-                if (data.otp) setOtp(data.otp); // dev convenience when OTP is exposed
                 setView('mfa');
                 toast.success('MFA code sent to your email.');
                 return;
@@ -78,7 +77,6 @@ export default function LoginPage() {
             // Unverified owner: backend re-sent a verification code — go verify.
             if (data?.needsEmailVerification) {
                 setVerifyUserId(data.userId);
-                if (data.otp) setOtp(data.otp);
                 setView('verify');
                 toast('Please verify your email to continue.', { icon: '✉️' });
                 return;
@@ -137,8 +135,7 @@ export default function LoginPage() {
 
     const handleResend = async () => {
         try {
-            const response = await api.post('/auth/resend-verification', { userId: verifyUserId });
-            if (response.data?.data?.otp) setOtp(response.data.data.otp);
+            await api.post('/auth/resend-verification', { userId: verifyUserId });
             toast.success('A new code has been sent.');
         } catch (err) {
             toast.error(err.response?.data?.message || 'Could not resend the code.');

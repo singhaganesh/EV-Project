@@ -148,7 +148,6 @@ export default function RegisterPage() {
             }
 
             setUserId(data.userId);
-            if (data.otp) setOtp(data.otp); // dev convenience when OTP is exposed
             setStep(4);
             toast.success('Verification code sent to your email.');
         } catch (err) {
@@ -161,8 +160,7 @@ export default function RegisterPage() {
 
     const handleResend = async () => {
         try {
-            const response = await api.post('/auth/resend-verification', { userId });
-            if (response.data?.data?.otp) setOtp(response.data.data.otp);
+            await api.post('/auth/resend-verification', { userId });
             toast.success('A new code has been sent.');
         } catch (err) {
             toast.error(err.response?.data?.message || 'Could not resend the code.');
