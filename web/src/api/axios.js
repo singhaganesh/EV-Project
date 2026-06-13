@@ -28,13 +28,18 @@ api.interceptors.response.use(
         return response;
     },
     (error) => {
-        if (error.response?.status === 401) {
+        // Auth endpoints (login, MFA, registration/verification) own their error
+        // UX — a 401 there means "bad credentials/OTP", not an expired session, so
+        // don't force a logout/redirect or show the generic toast.
+        const isAuthEndpoint = (error.config?.url || '').includes('/auth/');
+
+        if (error.response?.status === 401 && !isAuthEndpoint) {
             // Auto logout if 401 response returned from api
             tokenStorage.clear();
             localStorage.removeItem('user');
             window.location.href = '/login';
             toast.error('Session expired. Please log in again.');
-        } else {
+        } else if (!isAuthEndpoint) {
             toast.error(error.response?.data?.message || 'An unexpected error occurred.');
         }
         return Promise.reject(error);
