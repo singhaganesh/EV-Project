@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
-import { Zap, Mail, Lock, User, Loader2, Building2, Hash, Phone, Banknote, FileText, ShieldCheck, Wand2 } from 'lucide-react';
+import { Zap, Mail, Lock, User, Loader2, Building2, Hash, Phone, Banknote, FileText, ShieldCheck, Wand2, Eye, EyeOff } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../api/axios';
 import { selectCurrentUser } from '../../store/authSlice';
@@ -23,14 +23,38 @@ const mockPdf = (name) => new File([new Blob(['mock content'], { type: 'applicat
 const inputClass =
     'block w-full pl-10 sm:text-sm border-slate-200 rounded-lg py-3 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-colors';
 
-const TextField = ({ icon: Icon, disabled, ...props }) => (
-    <div className="mt-2 relative rounded-md shadow-sm">
-        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <Icon className="h-5 w-5 text-slate-400" />
+const TextField = ({ icon: Icon, disabled, ...props }) => {
+    const [showPassword, setShowPassword] = useState(false);
+    const isPassword = props.type === 'password';
+    const inputType = isPassword ? (showPassword ? 'text' : 'password') : props.type;
+
+    return (
+        <div className="mt-2 relative rounded-md shadow-sm">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <Icon className="h-5 w-5 text-slate-400" />
+            </div>
+            <input 
+                className={`${inputClass} ${isPassword ? 'pr-10' : ''}`} 
+                disabled={disabled} 
+                {...props} 
+                type={inputType}
+            />
+            {isPassword && (
+                <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 transition-colors z-20"
+                >
+                    {showPassword ? (
+                        <EyeOff className="h-5 w-5" />
+                    ) : (
+                        <Eye className="h-5 w-5" />
+                    )}
+                </button>
+            )}
         </div>
-        <input className={inputClass} disabled={disabled} {...props} />
-    </div>
-);
+    );
+};
 
 export default function RegisterPage() {
     const [form, setForm] = useState(EMPTY_FORM);
