@@ -11,10 +11,11 @@ export default function LoginPage() {
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
 
-    // MFA step state
-    const [mfaStep, setMfaStep] = useState(false);
-    const [tempLoginToken, setTempLoginToken] = useState('');
+    // view: 'login' | 'mfa' | 'verify'
+    const [view, setView] = useState('login');
     const [otp, setOtp] = useState('');
+    const [tempLoginToken, setTempLoginToken] = useState('');
+    const [verifyUserId, setVerifyUserId] = useState(null);
 
     const dispatch = useDispatch();
     const navigate = useNavigate();
@@ -23,13 +24,17 @@ export default function LoginPage() {
     // Redirect if already logged in
     useEffect(() => {
         if (user) {
-            if (user.role === 'ADMIN') {
-                navigate('/admin', { replace: true });
-            } else if (user.role === 'STATION_OWNER') {
-                navigate('/owner', { replace: true });
-            }
+            if (user.role === 'ADMIN') navigate('/admin', { replace: true });
+            else if (user.role === 'STATION_OWNER') navigate('/owner', { replace: true });
         }
     }, [user, navigate]);
+
+    const resetToLogin = () => {
+        setView('login');
+        setOtp('');
+        setTempLoginToken('');
+        setVerifyUserId(null);
+    };
 
     // Finalize a successful login (direct or post-MFA) and redirect by role.
     const completeLogin = (data) => {
@@ -64,8 +69,17 @@ export default function LoginPage() {
             if (data?.mfaRequired) {
                 setTempLoginToken(data.tempLoginToken);
                 if (data.otp) setOtp(data.otp); // dev convenience when OTP is exposed
-                setMfaStep(true);
+                setView('mfa');
                 toast.success('MFA code sent to your email.');
+                return;
+            }
+
+            // Unverified owner: backend re-sent a verification code — go verify.
+            if (data?.needsEmailVerification) {
+                setVerifyUserId(data.userId);
+                if (data.otp) setOtp(data.otp);
+                setView('verify');
+                toast('Please verify your email to continue.', { icon: '✉️' });
                 return;
             }
 
@@ -81,35 +95,69 @@ export default function LoginPage() {
     const handleVerifyMfa = async (e) => {
         e.preventDefault();
         setLoading(true);
-
         try {
             const response = await api.post('/auth/verify-mfa', { tempLoginToken, otp });
             const { success, message, data } = response.data;
-
             if (!success) {
                 toast.error(message || 'Invalid MFA code');
                 return;
             }
             completeLogin(data);
         } catch (err) {
-            const msg = err.response?.data?.message || 'Verification failed. Please try again.';
-            toast.error(msg);
+            toast.error(err.response?.data?.message || 'Verification failed. Please try again.');
         } finally {
             setLoading(false);
         }
     };
 
+    const handleVerifyEmail = async (e) => {
+        e.preventDefault();
+        setLoading(true);
+        try {
+            const response = await api.post('/auth/verify-registration', { userId: verifyUserId, otp });
+            const { success, message, data } = response.data;
+            if (!success) {
+                toast.error(message || 'Invalid code');
+                return;
+            }
+            if (data?.status === 'APPROVED') {
+                toast.success('Email verified! Your account is approved — please sign in.');
+            } else {
+                toast.success('Email verified! Your account is pending admin approval.');
+            }
+            setPassword('');
+            resetToLogin();
+        } catch (err) {
+            toast.error(err.response?.data?.message || 'Verification failed. Please try again.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleResend = async () => {
+        try {
+            const response = await api.post('/auth/resend-verification', { userId: verifyUserId });
+            if (response.data?.data?.otp) setOtp(response.data.data.otp);
+            toast.success('A new code has been sent.');
+        } catch (err) {
+            toast.error(err.response?.data?.message || 'Could not resend the code.');
+        }
+    };
+
+    const isOtpView = view === 'mfa' || view === 'verify';
+    const heading = view === 'mfa' ? 'Two-factor verification'
+        : view === 'verify' ? 'Verify your email'
+        : 'Sign in to your account';
+
     return (
         <div className="min-h-screen bg-[#F4F7FE] flex flex-col justify-center py-12 sm:px-6 lg:px-8">
             <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
                 <div className="w-16 h-16 rounded-full bg-cyan-500 mx-auto flex items-center justify-center shadow-lg shadow-cyan-500/30">
-                    {mfaStep ? <ShieldCheck className="w-8 h-8 text-white" /> : <Zap className="w-8 h-8 text-white" />}
+                    {isOtpView ? <ShieldCheck className="w-8 h-8 text-white" /> : <Zap className="w-8 h-8 text-white" />}
                 </div>
-                <h2 className="mt-6 text-center text-3xl font-extrabold text-[#1A2234]">
-                    {mfaStep ? 'Two-factor verification' : 'Sign in to your account'}
-                </h2>
+                <h2 className="mt-6 text-center text-3xl font-extrabold text-[#1A2234]">{heading}</h2>
                 <p className="mt-2 text-center text-sm text-slate-500">
-                    {mfaStep ? (
+                    {isOtpView ? (
                         <>We emailed a 6-digit code to <span className="font-medium">{email}</span></>
                     ) : (
                         <>
@@ -124,7 +172,7 @@ export default function LoginPage() {
 
             <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
                 <div className="bg-white py-8 px-4 shadow-xl shadow-slate-200/40 sm:rounded-2xl sm:px-10 border border-slate-100">
-                    {!mfaStep ? (
+                    {view === 'login' && (
                         <form className="space-y-6" onSubmit={handleLogin}>
                             <div>
                                 <label className="block text-sm font-medium text-slate-700">Email address</label>
@@ -162,25 +210,18 @@ export default function LoginPage() {
                                 </div>
                             </div>
 
-                            <div>
-                                <button
-                                    type="submit"
-                                    disabled={loading}
-                                    className="w-full flex justify-center items-center gap-2 py-3 px-4 border border-transparent rounded-xl shadow-md shadow-cyan-500/20 text-sm font-medium text-white bg-cyan-500 hover:bg-cyan-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-cyan-500 transition-all active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
-                                >
-                                    {loading ? (
-                                        <>
-                                            <Loader2 className="w-4 h-4 animate-spin" />
-                                            Signing in...
-                                        </>
-                                    ) : (
-                                        'Sign in'
-                                    )}
-                                </button>
-                            </div>
+                            <button
+                                type="submit"
+                                disabled={loading}
+                                className="w-full flex justify-center items-center gap-2 py-3 px-4 border border-transparent rounded-xl shadow-md shadow-cyan-500/20 text-sm font-medium text-white bg-cyan-500 hover:bg-cyan-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-cyan-500 transition-all active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
+                            >
+                                {loading ? (<><Loader2 className="w-4 h-4 animate-spin" /> Signing in...</>) : 'Sign in'}
+                            </button>
                         </form>
-                    ) : (
-                        <form className="space-y-6" onSubmit={handleVerifyMfa}>
+                    )}
+
+                    {isOtpView && (
+                        <form className="space-y-6" onSubmit={view === 'mfa' ? handleVerifyMfa : handleVerifyEmail}>
                             <div>
                                 <label className="block text-sm font-medium text-slate-700">6-digit code</label>
                                 <div className="mt-2 relative rounded-md shadow-sm">
@@ -202,30 +243,24 @@ export default function LoginPage() {
                                 </div>
                             </div>
 
-                            <div>
-                                <button
-                                    type="submit"
-                                    disabled={loading}
-                                    className="w-full flex justify-center items-center gap-2 py-3 px-4 border border-transparent rounded-xl shadow-md shadow-cyan-500/20 text-sm font-medium text-white bg-cyan-500 hover:bg-cyan-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-cyan-500 transition-all active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
-                                >
-                                    {loading ? (
-                                        <>
-                                            <Loader2 className="w-4 h-4 animate-spin" />
-                                            Verifying...
-                                        </>
-                                    ) : (
-                                        'Verify & sign in'
-                                    )}
-                                </button>
-                            </div>
-
                             <button
-                                type="button"
-                                onClick={() => { setMfaStep(false); setOtp(''); setTempLoginToken(''); }}
-                                className="w-full text-sm text-slate-500 hover:text-slate-700"
+                                type="submit"
+                                disabled={loading}
+                                className="w-full flex justify-center items-center gap-2 py-3 px-4 border border-transparent rounded-xl shadow-md shadow-cyan-500/20 text-sm font-medium text-white bg-cyan-500 hover:bg-cyan-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-cyan-500 transition-all active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
                             >
-                                Back to sign in
+                                {loading ? (<><Loader2 className="w-4 h-4 animate-spin" /> Verifying...</>) : (view === 'mfa' ? 'Verify & sign in' : 'Verify email')}
                             </button>
+
+                            <div className="flex items-center justify-between text-sm">
+                                <button type="button" onClick={resetToLogin} className="text-slate-500 hover:text-slate-700">
+                                    Back to sign in
+                                </button>
+                                {view === 'verify' && (
+                                    <button type="button" onClick={handleResend} className="font-medium text-cyan-600 hover:text-cyan-500">
+                                        Resend code
+                                    </button>
+                                )}
+                            </div>
                         </form>
                     )}
                 </div>

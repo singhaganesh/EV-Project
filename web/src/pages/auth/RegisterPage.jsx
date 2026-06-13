@@ -99,6 +99,16 @@ export default function RegisterPage() {
         }
     };
 
+    const handleResend = async () => {
+        try {
+            const response = await api.post('/auth/resend-verification', { userId });
+            if (response.data?.data?.otp) setOtp(response.data.data.otp);
+            toast.success('A new code has been sent.');
+        } catch (err) {
+            toast.error(err.response?.data?.message || 'Could not resend the code.');
+        }
+    };
+
     const handleVerify = async (e) => {
         e.preventDefault();
         setLoading(true);
@@ -273,6 +283,14 @@ export default function RegisterPage() {
                                 className="w-full flex justify-center items-center gap-2 py-3 px-4 border border-transparent rounded-xl shadow-md shadow-slate-900/20 text-sm font-medium text-white bg-[#1A2234] hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-900 transition-all active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
                             >
                                 {loading ? (<><Loader2 className="w-4 h-4 animate-spin" /> Verifying...</>) : 'Verify email'}
+                            </button>
+
+                            <button
+                                type="button"
+                                onClick={handleResend}
+                                className="w-full text-sm font-medium text-cyan-600 hover:text-cyan-500"
+                            >
+                                Resend code
                             </button>
                         </form>
                     )}

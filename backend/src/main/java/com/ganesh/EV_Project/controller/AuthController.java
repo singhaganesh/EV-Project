@@ -221,6 +221,24 @@ public class AuthController {
         // Owners must have completed verification + approval before they can log in.
         if (user.getRole() == User.Role.STATION_OWNER
                 && user.getStatus() != UserStatus.APPROVED) {
+
+            // Unverified email: the password is already proven here, so safely
+            // re-issue a verification OTP and route the UI straight to the verify
+            // step (recovers a registration whose tab was closed before verifying).
+            if (user.getStatus() == UserStatus.PENDING_EMAIL_VERIFICATION) {
+                String otp = mfaOtpService.generateRegistrationOtp(user.getId());
+                deliverOtp(user.getEmail(), otp, "verification");
+                Map<String, Object> data = new HashMap<>();
+                data.put("needsEmailVerification", true);
+                data.put("userId", user.getId());
+                if (exposeOtpInResponse) data.put("otp", otp);
+                return ResponseEntity.ok(APIResponse.builder()
+                        .success(true)
+                        .message("Please verify your email — a new code has been sent.")
+                        .data(data)
+                        .build());
+            }
+
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body(APIResponse.builder()
                     .success(false)
                     .message(statusMessage(user.getStatus()))
@@ -329,25 +347,41 @@ public class AuthController {
             @RequestParam("electricityDoc") MultipartFile electricityDoc,
             @RequestParam("bankDoc") MultipartFile bankDoc) {
 
-        if (userService.findByEmail(email) != null) {
-            return ResponseEntity.badRequest().body(APIResponse.builder()
-                    .success(false)
-                    .message("Email already registered")
-                    .build());
+        // 1. Resolve the account. If the email already belongs to an UNVERIFIED
+        // owner (closed the tab before entering the OTP), resume that registration
+        // by overwriting its details + sending a fresh OTP. Any other status means
+        // the email is genuinely taken.
+        User existing = userService.findByEmail(email);
+        boolean resuming = false;
+        User user;
+        if (existing != null) {
+            if (existing.getStatus() == UserStatus.PENDING_EMAIL_VERIFICATION) {
+                user = existing;
+                resuming = true;
+            } else {
+                return ResponseEntity.badRequest().body(APIResponse.builder()
+                        .success(false)
+                        .message("Email already registered")
+                        .build());
+            }
+        } else {
+            user = new User();
+            user.setEmail(email);
+            user.setRole(User.Role.STATION_OWNER);
+            user.setStatus(UserStatus.PENDING_EMAIL_VERIFICATION);
+            user.setMfaEnabled(true);
         }
 
-        // 1. Create the owner account in the PENDING_EMAIL_VERIFICATION state, MFA on.
-        User user = new User();
         user.setName(name);
-        user.setEmail(email);
         user.setPassword(passwordEncoder.encode(password));
-        user.setRole(User.Role.STATION_OWNER);
-        user.setStatus(UserStatus.PENDING_EMAIL_VERIFICATION);
-        user.setMfaEnabled(true);
-        User savedUser = userService.saveUser(user);
+        // saveUser rejects existing emails, so update the row directly when resuming.
+        User savedUser = resuming ? userService.updateUser(user) : userService.saveUser(user);
 
         // 2. Upload documents to Supabase Storage and persist the business profile.
-        BusinessProfile profile = new BusinessProfile();
+        // Reuse the existing profile row when resuming (user_id is UNIQUE).
+        BusinessProfile profile = resuming
+                ? businessProfileRepository.findByUserId(savedUser.getId()).orElseGet(BusinessProfile::new)
+                : new BusinessProfile();
         profile.setUser(savedUser);
         profile.setCompanyName(companyName);
         profile.setTaxId(taxId);
@@ -411,6 +445,39 @@ public class AuthController {
                 .success(true)
                 .message("Email verified successfully.")
                 .data(Map.of("status", user.getStatus().name()))
+                .build());
+    }
+
+    @PostMapping("/resend-verification")
+    public ResponseEntity<?> resendVerification(@RequestBody Map<String, String> body) {
+        String userIdStr = body.get("userId");
+        if (userIdStr == null) {
+            return ResponseEntity.badRequest().body(APIResponse.builder()
+                    .success(false)
+                    .message("userId is required")
+                    .build());
+        }
+
+        User user = userService.findById(Long.parseLong(userIdStr));
+        // Generic success when there's nothing to verify, so we don't reveal which
+        // ids exist or their account state.
+        if (user == null || user.getStatus() != UserStatus.PENDING_EMAIL_VERIFICATION) {
+            return ResponseEntity.ok(APIResponse.builder()
+                    .success(true)
+                    .message("If the account needs verification, a new code has been sent.")
+                    .build());
+        }
+
+        String otp = mfaOtpService.generateRegistrationOtp(user.getId());
+        deliverOtp(user.getEmail(), otp, "verification");
+
+        Map<String, Object> data = new HashMap<>();
+        if (exposeOtpInResponse) data.put("otp", otp);
+
+        return ResponseEntity.ok(APIResponse.builder()
+                .success(true)
+                .message("A new verification code has been sent.")
+                .data(data.isEmpty() ? null : data)
                 .build());
     }
 
