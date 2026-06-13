@@ -28,5 +28,7 @@ android/nul
 # Local planning/report docs
 plans/project_overview_report.md
 
-# Added by code-review-graph
+# Tool output directories
+.agents/
+graphify-out/
 .code-review-graph/
