@@ -254,6 +254,7 @@ No subscription fees. No hidden charges. You pay only for what you charge.
 | **Subscription Plans** | Save 10-20% with monthly or yearly subscriptions if you charge regularly | 💡 We're Considering |
 | **Recurring Bookings** | Book your regular Monday-Friday morning slot once; it auto-books weekly | 📅 Planned (June 2026) |
 | **Admin Dashboard** | For station owners: real-time analytics, revenue tracking, customer insights | ✅ Live Now (Beta) |
+| **Verified Owner Onboarding** | Secure owner sign-up with document upload, email verification, admin approval, and two-factor (MFA) login | ✅ Live Now (Beta) |
 | **Referral Program** | Invite friends, get ₹50 credit per referral | 💡 We're Considering |
 | **Green Rewards** | Earn points for charging — redeem for discounts or plant trees | 💡 We're Considering |
 
@@ -332,6 +333,9 @@ The EV Project is built as a **monolithic backend** with **distributed client ap
 | Validation | Javax Validation API | Part of Boot | Input validation annotations |
 | Payment | **Razorpay Java SDK** | 1.4.7 | Payment processing (orders + signature verification) |
 | Scheduling | Spring Tasks | Part of Boot | @Scheduled booking expiry cleanup |
+| Email | **Spring Boot Mail** (Gmail SMTP) | Part of Boot | Owner email-OTP delivery (verification + MFA) |
+| OTP/Token Store | **Redis** (Upstash) | Part of Boot Data Redis | TTL store for registration OTP + MFA temp-login tokens |
+| Document Storage | **Supabase Storage** | REST API | Owner business-document uploads (registration / electricity / bank) |
 | | | | |
 | Mobile OS | Android | 8.0+ | Mobile platform |
 | Mobile Language | **Kotlin** | 1.9+ | Android development language |
@@ -412,7 +416,10 @@ graph TD
     subgraph Third-Party Integrations
         Razorpay[Payment Gateway<br/>Razorpay]
         Maps[Mapping Services<br/>Google Maps / Nominatim]
-        SMS[SMS Provider<br/>OTP Auth]
+        SMS[SMS Provider<br/>Customer OTP Auth]
+        Email[Gmail SMTP<br/>Owner OTP / MFA]
+        Redis[(Redis / Upstash<br/>OTP + temp tokens)]
+        Storage[Supabase Storage<br/>Business Documents]
     end
 
     %% Define Interactions
@@ -429,7 +436,10 @@ graph TD
     WebSocket -->|Reads Data| Postgres
 
     REST_API <-->|Creates Orders & Verifies Signatures| Razorpay
-    REST_API -->|Triggers Login Texts| SMS
+    REST_API -->|Triggers Customer Login Texts| SMS
+    REST_API -->|Sends Owner OTP / MFA Emails| Email
+    REST_API <-->|Stores OTP + Temp Tokens TTL| Redis
+    REST_API -->|Uploads Owner Documents| Storage
     MobileApp -->|Renders UI Location Data| Maps
     WebApp -->|Reverse Geocoding| Maps
 ```
@@ -512,9 +522,24 @@ graph TD
 - **No webhook:** confirmation is signature-verified on the client-initiated verify call, not via a server callback
 
 **SMS OTP Provider**
-- **Purpose:** Two-factor authentication via mobile
+- **Purpose:** Customer authentication via mobile
 - **Flow:** User requests OTP → SMS sent → User enters OTP → JWT granted
 - **Current Status:** Implementation ready; provider TBD
+
+**Gmail SMTP (Email OTP)**
+- **Purpose:** Owner email verification + MFA login codes
+- **Flow:** Backend generates a 6-digit OTP → `EmailService` sends via Gmail SMTP (App Password)
+- **Note:** Non-fatal in dev (OTP also returned in response); strict in prod (only channel)
+
+**Redis (Upstash)**
+- **Purpose:** TTL store for owner registration OTPs and MFA temp-login tokens
+- **Flow:** OTPs hashed with a 5-minute TTL; consumed on successful verification
+- **Why separate:** Keeps the short-lived owner email-OTP state out of the relational DB
+
+**Supabase Storage**
+- **Purpose:** Stores owner business documents (registration, electricity, bank)
+- **Flow:** `DocumentStorageService` PUTs files to the `business-documents` bucket via the Storage REST API; the object path is persisted on `BusinessProfile`
+- **Dev bypass:** Skips the real upload when no service key is configured
 
 **WebSocket (STOMP)**
 - **Purpose:** Real-time slot status updates
@@ -609,6 +634,20 @@ JWT_EXPIRATION=3600000
 # Razorpay — REQUIRED (use test keys locally)
 RAZORPAY_KEY_ID=rzp_test_your_key_id
 RAZORPAY_KEY_SECRET=your_razorpay_key_secret
+
+# Email (Gmail SMTP) — owner verification + MFA OTP delivery
+# Use a Gmail App Password, not the account password.
+GMAIL_USERNAME=your_account@gmail.com
+GMAIL_APP_PASSWORD=your_16_char_app_password
+
+# Redis (Upstash) — TTL store for registration OTP + MFA temp tokens
+# rediss:// (TLS) is required by Upstash.
+REDIS_URL=rediss://default:password@your-instance.upstash.io:6379
+
+# Supabase Storage — owner business-documents bucket
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_KEY=your_service_role_key
+SUPABASE_BUCKET=business-documents
 
 # Dev admin seeding (dev profile only) — leave blank to skip seeding the admin
 SEED_ADMIN_PASSWORD=
@@ -1076,6 +1115,17 @@ Headers: Authorization: Bearer eyJhbGc...
 
 #### Authentication
 
+There are **two distinct auth flows**:
+
+- **Customers (mobile / SMS OTP)** — phone number → SMS OTP → JWT. OTPs are
+  stored DB-backed and hashed (`OtpService`).
+- **Station owners (email + password + MFA)** — a 3-stage verified business
+  onboarding (register with documents → email OTP → admin approval → MFA login).
+  Email OTPs and temp-login tokens are stored in Redis with a TTL
+  (`MfaOtpService`), separate from the customer SMS flow.
+
+##### Customer (Mobile OTP)
+
 | Method | Endpoint | Auth | Purpose |
 |--------|----------|------|---------|
 | POST | `/auth/send-otp` | ❌ | Send OTP to mobile number |
@@ -1084,22 +1134,88 @@ Headers: Authorization: Bearer eyJhbGc...
 
 **Request Example:**
 ```bash
-curl -X POST http://localhost:8080/api/auth/validate-otp \
-  -H "Content-Type: application/json" \
-  -d '{
-    "mobileNumber": "919876543210",
-    "otp": "123456"
-  }'
+curl -X POST "http://localhost:8080/api/auth/validate-otp?mobileNumber=919876543210&otp=123456"
 ```
 
-**Response (201 Created):**
+**Response (200 OK):**
 ```json
 {
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "isFirstTime": true,
-  "userId": 1
+  "success": true,
+  "message": "Login successful",
+  "data": {
+    "isNewUser": false,
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "refreshToken": "…",
+    "user": { "id": 1, "role": "CUSTOMER" }
+  }
 }
 ```
+
+##### Station Owner (Email + Password + MFA)
+
+| Method | Endpoint | Auth | Purpose |
+|--------|----------|------|---------|
+| POST | `/auth/register/owner` | ❌ | Register an owner (multipart: details + 3 documents). Creates a `PENDING_EMAIL_VERIFICATION` account and emails a verification OTP. Resumes an unverified account if the email already exists in that state. |
+| POST | `/auth/verify-registration` | ❌ | Verify the email OTP. Sets status to `APPROVED` (dev) or `PENDING_ADMIN_APPROVAL` (prod). |
+| POST | `/auth/resend-verification` | ❌ | Re-issue a verification OTP by `userId` (generic response — no account enumeration). |
+| POST | `/auth/login` | ❌ | Email + password. Owners with MFA get `{ mfaRequired, tempLoginToken }`; unverified owners get `{ needsEmailVerification, userId }` plus a fresh OTP; everyone else gets a JWT directly. |
+| POST | `/auth/verify-mfa` | ❌ | Exchange `tempLoginToken` + email OTP for a JWT + refresh token. |
+
+**Register (multipart):**
+```bash
+curl -X POST http://localhost:8080/api/auth/register/owner \
+  -F "name=Jane Owner" \
+  -F "email=owner@example.com" \
+  -F "password=secret123" \
+  -F "companyName=Jane Stations Pvt Ltd" \
+  -F "taxId=22AAAAA0000A1Z5" \
+  -F "phoneNumber=9876543210" \
+  -F "bankAccountNumber=1234567890" \
+  -F "bankIfscCode=HDFC0001234" \
+  -F "registrationDoc=@registration.pdf" \
+  -F "electricityDoc=@electricity.pdf" \
+  -F "bankDoc=@bank.pdf"
+```
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "Registration initiated. Verification OTP sent to email.",
+  "data": { "userId": 42 }
+}
+```
+
+**Verify registration:**
+```bash
+curl -X POST http://localhost:8080/api/auth/verify-registration \
+  -H "Content-Type: application/json" \
+  -d '{ "userId": "42", "otp": "123456" }'
+```
+
+```json
+{ "success": true, "message": "Email verified successfully.", "data": { "status": "APPROVED" } }
+```
+
+**Login → MFA challenge → JWT:**
+```bash
+# 1. Password step — returns a temp-login token, emails a 6-digit OTP
+curl -X POST http://localhost:8080/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{ "email": "owner@example.com", "password": "secret123" }'
+# → { "data": { "mfaRequired": true, "tempLoginToken": "…" } }
+
+# 2. MFA step — exchange the token + OTP for a JWT
+curl -X POST http://localhost:8080/api/auth/verify-mfa \
+  -H "Content-Type: application/json" \
+  -d '{ "tempLoginToken": "…", "otp": "123456" }'
+# → { "data": { "token": "eyJhbGc…", "refreshToken": "…", "user": {…} } }
+```
+
+> In the **dev** profile (`otp.expose-in-response=true`) the OTP is also returned
+> in the JSON `data.otp` for local testing, and email-send failures are logged
+> but non-fatal. In **prod** the OTP is never returned and email is the only
+> delivery channel.
 
 #### Stations
 
@@ -1301,6 +1417,23 @@ curl -X POST "http://localhost:8080/api/payments/verify" \
 }
 ```
 
+#### Admin
+
+| Method | Endpoint | Auth | Purpose |
+|--------|----------|------|---------|
+| PUT | `/admin/users/{userId}/approve` | ✅ ADMIN | Approve a station owner who has verified their email and is `PENDING_ADMIN_APPROVAL`. Sets status to `APPROVED`. |
+
+**Request Example:**
+```bash
+curl -X PUT http://localhost:8080/api/admin/users/42/approve \
+  -H "Authorization: Bearer ADMIN_JWT_TOKEN"
+```
+
+**Response (200 OK):**
+```json
+{ "success": true, "message": "Pump Owner approved successfully." }
+```
+
 ### Error Responses
 
 | HTTP Code | Error Key | Meaning | Fix |
@@ -1351,7 +1484,8 @@ EV-Project/
 │   │   │   └── DataSeeder.java                   # Test data initialization
 │   │   │
 │   │   ├── controller/                           # REST API Endpoints
-│   │   │   ├── AuthController.java               # POST /auth/send-otp, /validate-otp
+│   │   │   ├── AuthController.java               # Customer OTP + owner register/verify/MFA/login
+│   │   │   ├── AdminController.java              # ⭐ PUT /admin/users/{id}/approve (owner approval)
 │   │   │   ├── StationController.java            # GET/POST /stations
 │   │   │   ├── ChargerSlotController.java        # GET /slots
 │   │   │   ├── BookingController.java            # POST /bookings (core logic)
@@ -1366,11 +1500,15 @@ EV-Project/
 │   │   │   ├── RazorpayService.java              # Razorpay order creation + signature verification
 │   │   │   ├── StationService.java               # Station CRUD
 │   │   │   ├── UserService.java                  # User management
-│   │   │   ├── OtpService.java                   # OTP generation/validation
+│   │   │   ├── OtpService.java                   # Customer SMS OTP (DB-backed)
+│   │   │   ├── MfaOtpService.java                # ⭐ Owner email OTP + MFA temp tokens (Redis-backed)
+│   │   │   ├── EmailService.java                 # Gmail SMTP OTP email delivery
+│   │   │   ├── DocumentStorageService.java       # Supabase Storage uploads (business docs)
 │   │   │   └── UserDetailsServiceImpl.java        # Spring Security user details
 │   │   │
 │   │   ├── model/                                # JPA Entities (Database Models)
-│   │   │   ├── User.java                         # User with roles (CUSTOMER, OWNER, ADMIN)
+│   │   │   ├── User.java                         # User with roles + status, mfaEnabled, mfaSecret
+│   │   │   ├── BusinessProfile.java              # ⭐ Owner company/bank details + document paths
 │   │   │   ├── Station.java                      # Charging station (location, pricing)
 │   │   │   ├── Dispensary.java                   # Pump unit (2 slots per dispensary)
 │   │   │   ├── ChargerSlot.java                  # Individual charger connector
@@ -1382,6 +1520,7 @@ EV-Project/
 │   │   │
 │   │   ├── repository/                           # Spring Data JPA Repositories
 │   │   │   ├── UserRepository.java               # User queries
+│   │   │   ├── BusinessProfileRepository.java    # findByUserId() for owner profiles
 │   │   │   ├── BookingRepository.java            # ⭐ findOverlappingBookings()
 │   │   │   ├── ChargingSessionRepository.java    # Session queries
 │   │   │   ├── ChargerSlotRepository.java        # Slot queries
@@ -1397,6 +1536,7 @@ EV-Project/
 │   │   │   └── [other DTOs]
 │   │   │
 │   │   ├── enums/                                # Enumerations
+│   │   │   ├── UserStatus.java                   # ⭐ PENDING_EMAIL_VERIFICATION, PENDING_ADMIN_APPROVAL, APPROVED, SUSPENDED
 │   │   │   ├── BookingStatus.java                # CONFIRMED, ONGOING, COMPLETED, CANCELLED, EXPIRED
 │   │   │   ├── SlotStatus.java                   # AVAILABLE, RESERVED, BOOKED, CHARGING, PAYMENT_PENDING, MAINTENANCE, OCCUPIED
 │   │   │   ├── VehicleType.java                  # CAR, TRUCK (affects pricing & eligibility)
@@ -1467,8 +1607,8 @@ EV-Project/
 │   ├── src/
 │   │   ├── pages/
 │   │   │   ├── auth/
-│   │   │   │   ├── Login.jsx                     # Login page
-│   │   │   │   └── Register.jsx                  # Registration page
+│   │   │   │   ├── LoginPage.jsx                 # ⭐ Login + MFA + email-verify views (owner 2FA)
+│   │   │   │   └── RegisterPage.jsx              # ⭐ 4-step owner wizard (contact → business → docs → OTP)
 │   │   │   │
 │   │   │   ├── admin/                            # Admin Dashboard
 │   │   │   │   ├── DashboardOverview.jsx         # Statistics, charts
@@ -2105,7 +2245,7 @@ Launch:
 
 ## Security
 
-### Authentication Flow
+### Authentication Flow — Customer (Mobile OTP)
 
 ```
 Step 1: User sends mobile number
@@ -2154,6 +2294,48 @@ Step 10: Client interceptor detects 401
   ├─ Redirect to login page
   └─ Show: "Session expired. Please log in again."
 ```
+
+### Authentication Flow — Station Owner (Email + MFA)
+
+Owners are onboarded through a **3-stage verified business flow**. The
+`UserStatus` enum tracks where each account is:
+`PENDING_EMAIL_VERIFICATION → PENDING_ADMIN_APPROVAL → APPROVED` (plus
+`SUSPENDED`). Owner accounts have `mfaEnabled=true`.
+
+```
+STAGE 1 — REGISTER (with documents)
+  POST /api/auth/register/owner  (multipart)
+  ├─ Contact + business + bank details
+  ├─ 3 documents uploaded to Supabase Storage (registration / electricity / bank)
+  ├─ Account created: status=PENDING_EMAIL_VERIFICATION, mfaEnabled=true
+  ├─ Password stored BCrypt-hashed
+  └─ A 6-digit OTP (hashed, 5-min TTL in Redis) is emailed via Gmail SMTP
+
+STAGE 2 — VERIFY EMAIL
+  POST /api/auth/verify-registration { userId, otp }
+  ├─ OTP validated + consumed from Redis
+  ├─ DEV  → status=APPROVED (admin step auto-skipped for local testing)
+  └─ PROD → status=PENDING_ADMIN_APPROVAL
+
+STAGE 3 — ADMIN APPROVAL (prod only)
+  PUT /api/admin/users/{userId}/approve   (ADMIN role)
+  └─ status=APPROVED  → owner may now log in
+
+LOGIN (every time, once APPROVED) — two-factor
+  POST /api/auth/login { email, password }
+  ├─ Password verified (BCrypt); brute-force guarded by LoginAttemptService
+  ├─ Not-yet-approved owner → 403 (or, if still unverified, a fresh OTP is
+  │   re-issued and the UI is routed back to the verify step — recovers a
+  │   registration whose tab was closed before verifying)
+  └─ APPROVED owner → email OTP sent + { mfaRequired, tempLoginToken } returned
+
+  POST /api/auth/verify-mfa { tempLoginToken, otp }
+  └─ Token + OTP validated against Redis → JWT + refresh token issued
+```
+
+> **Two separate OTP subsystems.** Customer SMS OTPs use the DB-backed
+> `OtpService`; owner email OTPs and MFA temp-login tokens use the Redis-backed
+> `MfaOtpService`. They never share storage.
 
 ### Authorization Model (RBAC)
 
@@ -2250,7 +2432,8 @@ ssl_ciphers HIGH:!aNULL:!MD5;
 **Data Encryption:**
 - ✅ At Rest: PostgreSQL with encryption
 - ✅ In Transit: HTTPS/TLS for all connections
-- ✅ Passwords: Bcrypt hashing (not used currently, OTP-based)
+- ✅ Passwords: BCrypt hashing (owner accounts; customers are mobile-OTP based)
+- ✅ OTPs: BCrypt-hashed at rest (SMS in DB, email in Redis) — never stored plaintext
 
 ### Vulnerability Reporting
 
@@ -2552,7 +2735,7 @@ If you found this project helpful, consider:
 ---
 
 ### Version: 0.0.1-SNAPSHOT
-### Last Updated: March 11, 2026
+### Last Updated: June 13, 2026
 ### [⬆️ Back to Top](#-ev-charging-management-system)
 
 ---
