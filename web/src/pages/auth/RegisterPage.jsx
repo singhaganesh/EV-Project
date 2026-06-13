@@ -20,6 +20,18 @@ const EMPTY_FORM = {
 // Dev-only mock PDF so registration can be tested without real documents.
 const mockPdf = (name) => new File([new Blob(['mock content'], { type: 'application/pdf' })], name, { type: 'application/pdf' });
 
+const inputClass =
+    'block w-full pl-10 sm:text-sm border-slate-200 rounded-lg py-3 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-colors';
+
+const TextField = ({ icon: Icon, disabled, ...props }) => (
+    <div className="mt-2 relative rounded-md shadow-sm">
+        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <Icon className="h-5 w-5 text-slate-400" />
+        </div>
+        <input className={inputClass} disabled={disabled} {...props} />
+    </div>
+);
+
 export default function RegisterPage() {
     const [form, setForm] = useState(EMPTY_FORM);
     const [files, setFiles] = useState({ registrationDoc: null, electricityDoc: null, bankDoc: null });
@@ -160,18 +172,6 @@ export default function RegisterPage() {
         }
     };
 
-    const inputClass =
-        'block w-full pl-10 sm:text-sm border-slate-200 rounded-lg py-3 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-colors';
-
-    const TextField = ({ icon: Icon, ...props }) => (
-        <div className="mt-2 relative rounded-md shadow-sm">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <Icon className="h-5 w-5 text-slate-400" />
-            </div>
-            <input className={inputClass} disabled={loading} {...props} />
-        </div>
-    );
-
     const stepsInfo = [
         { id: 1, label: 'Contact Details' },
         { id: 2, label: 'Business & Bank' },
@@ -256,19 +256,19 @@ export default function RegisterPage() {
                         <div className="space-y-5">
                             <div>
                                 <label className="block text-sm font-medium text-slate-700">Owner / contact name</label>
-                                <TextField icon={User} type="text" required value={form.name} onChange={updateField('name')} placeholder="Your name" />
+                                <TextField icon={User} type="text" required value={form.name} onChange={updateField('name')} placeholder="Your name" disabled={loading} />
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-slate-700">Email address</label>
-                                <TextField icon={Mail} type="email" required value={form.email} onChange={updateField('email')} placeholder="business@example.com" />
+                                <TextField icon={Mail} type="email" required value={form.email} onChange={updateField('email')} placeholder="business@example.com" disabled={loading} />
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-slate-700">Password</label>
-                                <TextField icon={Lock} type="password" required minLength={6} value={form.password} onChange={updateField('password')} placeholder="••••••••" />
+                                <TextField icon={Lock} type="password" required minLength={6} value={form.password} onChange={updateField('password')} placeholder="••••••••" disabled={loading} />
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-slate-700">Phone number</label>
-                                <TextField icon={Phone} type="tel" required value={form.phoneNumber} onChange={updateField('phoneNumber')} placeholder="9876543210" />
+                                <TextField icon={Phone} type="tel" required value={form.phoneNumber} onChange={updateField('phoneNumber')} placeholder="9876543210" disabled={loading} />
                             </div>
 
                             <button
@@ -286,20 +286,20 @@ export default function RegisterPage() {
                         <div className="space-y-5">
                             <div>
                                 <label className="block text-sm font-medium text-slate-700">Company name</label>
-                                <TextField icon={Building2} type="text" required value={form.companyName} onChange={updateField('companyName')} placeholder="Your Stations Pvt Ltd" />
+                                <TextField icon={Building2} type="text" required value={form.companyName} onChange={updateField('companyName')} placeholder="Your Stations Pvt Ltd" disabled={loading} />
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-slate-700">Tax ID (GSTIN / PAN)</label>
-                                <TextField icon={Hash} type="text" required value={form.taxId} onChange={updateField('taxId')} placeholder="22AAAAA0000A1Z5" />
+                                <TextField icon={Hash} type="text" required value={form.taxId} onChange={updateField('taxId')} placeholder="22AAAAA0000A1Z5" disabled={loading} />
                             </div>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-medium text-slate-700">Bank account no.</label>
-                                    <TextField icon={Banknote} type="text" required value={form.bankAccountNumber} onChange={updateField('bankAccountNumber')} placeholder="1234567890" />
+                                    <TextField icon={Banknote} type="text" required value={form.bankAccountNumber} onChange={updateField('bankAccountNumber')} placeholder="1234567890" disabled={loading} />
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-slate-700">IFSC code</label>
-                                    <TextField icon={Hash} type="text" required value={form.bankIfscCode} onChange={updateField('bankIfscCode')} placeholder="HDFC0001234" />
+                                    <TextField icon={Hash} type="text" required value={form.bankIfscCode} onChange={updateField('bankIfscCode')} placeholder="HDFC0001234" disabled={loading} />
                                 </div>
                             </div>
 
