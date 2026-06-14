@@ -1,10 +1,14 @@
 import { createSlice } from '@reduxjs/toolkit';
 import { tokenStorage } from '../api/tokenStorage';
 
+const storedToken = tokenStorage.getToken() || null;
+if (!storedToken) {
+    localStorage.removeItem('user');
+}
 const initialState = {
-    token: tokenStorage.getToken() || null,
-    user: JSON.parse(localStorage.getItem('user')) || null,
-    isAuthenticated: !!tokenStorage.getToken(),
+    token: storedToken,
+    user: storedToken ? (JSON.parse(localStorage.getItem('user')) || null) : null,
+    isAuthenticated: !!storedToken,
     loading: false,
     error: null,
 };
