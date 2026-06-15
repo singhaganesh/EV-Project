@@ -25,9 +25,6 @@ android/nul
 /backend/src/main/resources/application-dev.properties
 /station-finder-backend/src/main/resources/application-dev.properties
 
-# Local planning/report docs
-plans/project_overview_report.md
-
 # Tool output directories
 .agents/
 graphify-out/
