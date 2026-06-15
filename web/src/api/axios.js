@@ -58,4 +58,9 @@ export const getEarningsTransactions = (ownerId, page = 0, size = 10, search = '
 export const exportEarningsTransactions = (ownerId) =>
     api.get(`/earnings/transactions/${ownerId}/export`, { responseType: 'blob' });
 
+// Bookings
+export const getOwnerBookings = (ownerId, page = 0, size = 10, status = '') =>
+    api.get(`/bookings/owner/${ownerId}?page=${page}&size=${size}` +
+        (status ? `&status=${encodeURIComponent(status)}` : ''));
+
 export default api;

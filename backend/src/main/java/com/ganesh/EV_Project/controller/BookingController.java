@@ -67,6 +67,39 @@ public class BookingController {
                 .build());
     }
 
+    @GetMapping("/owner/{ownerId}")
+    @PreAuthorize("hasAnyRole('STATION_OWNER', 'ADMIN')")
+    public ResponseEntity<?> getBookingsByOwner(
+            @PathVariable Long ownerId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) String status,
+            Authentication authentication) {
+        User currentUser = userService.getAuthenticatedUser(authentication);
+        if (currentUser == null) {
+            return new ResponseEntity<>("Unauthorized", HttpStatus.UNAUTHORIZED);
+        }
+        // Owners may only view their own bookings; admins may view anyone's.
+        boolean isAdmin = currentUser.getRole() == User.Role.ADMIN;
+        if (!isAdmin && !currentUser.getId().equals(ownerId)) {
+            return new ResponseEntity<>("Access Denied: not your data", HttpStatus.FORBIDDEN);
+        }
+
+        com.ganesh.EV_Project.enums.BookingStatus parsed = null;
+        if (status != null && !status.isBlank()) {
+            try {
+                parsed = com.ganesh.EV_Project.enums.BookingStatus.valueOf(status.toUpperCase());
+            } catch (IllegalArgumentException ex) {
+                return ResponseEntity.badRequest().body("Invalid status: " + status);
+            }
+        }
+
+        org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(
+                page, size, org.springframework.data.domain.Sort.by("startTime").descending());
+
+        return ResponseEntity.ok(bookingService.getOwnerBookings(ownerId, parsed, pageable));
+    }
+
     @PostMapping
     public ResponseEntity<?> createBooking(@jakarta.validation.Valid @RequestBody BookingRequest request,
                                            Authentication authentication) {

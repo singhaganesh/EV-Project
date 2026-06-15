@@ -186,6 +186,11 @@ public class BookingService {
         return bookingRepository.findByUserId(userId, pageable);
     }
 
+    public org.springframework.data.domain.Page<com.ganesh.EV_Project.dto.OwnerBookingRowDTO> getOwnerBookings(
+            Long ownerId, BookingStatus status, org.springframework.data.domain.Pageable pageable) {
+        return bookingRepository.findOwnerBookings(ownerId, status, pageable);
+    }
+
     @Transactional
     public void cancelBooking(Long bookingId) {
         Booking booking = bookingRepository.findById(bookingId)

@@ -12,6 +12,7 @@ import MyStations from './pages/owner/MyStations';
 import ManageStationPage from './pages/owner/ManageStationPage';
 import AnalyticsPage from './pages/owner/AnalyticsPage';
 import EarningsPage from './pages/owner/EarningsPage';
+import BookingsPage from './pages/owner/BookingsPage';
 import StationsList from './pages/admin/StationsList';
 import LoginPage from './pages/auth/LoginPage';
 import RegisterPage from './pages/auth/RegisterPage';
@@ -30,6 +31,7 @@ const adminNav = [
 const ownerNav = [
     { name: 'Dashboard', path: '/owner', icon: LayoutDashboard },
     { name: 'My Stations', path: '/owner/stations', icon: MapPin },
+    { name: 'Bookings', path: '/owner/bookings', icon: Calendar },
     { name: 'Analytics', path: '/owner/analytics', icon: BarChart2 },
     { name: 'Earnings', path: '/owner/earnings', icon: Wallet },
     { name: 'Settings', path: '/owner/settings', icon: Settings },
@@ -64,6 +66,7 @@ function App() {
                     <Route element={<RoleRoute allowedRole="STATION_OWNER" />}>
                         <Route element={<DashboardLayout navItems={ownerNav} sidebarTitle="Plugsy Partner" />}>
                             <Route path="/owner" element={<PumpOwnerDashboard />} />
+                            <Route path="/owner/bookings" element={<BookingsPage />} />
                             <Route path="/owner/analytics" element={<AnalyticsPage />} />
                             <Route path="/owner/earnings" element={<EarningsPage />} />
                             <Route path="/owner/stations" element={<MyStations />} />

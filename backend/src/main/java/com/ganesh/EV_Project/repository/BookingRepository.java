@@ -35,4 +35,16 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
        List<Booking> findActiveBookingsByStationAndConnector(
                      @Param("stationId") Long stationId,
                      @Param("connectorType") ConnectorType connectorType);
+
+       // Owner-scoped, paginated bookings (flat projection). Optional status filter.
+       @Query("SELECT new com.ganesh.EV_Project.dto.OwnerBookingRowDTO(" +
+                     "b.id, b.user.name, b.slot.station.name, b.slot.slotLabel, " +
+                     "b.vehicleType, b.status, b.startTime, b.expiresAt) " +
+                     "FROM Booking b WHERE b.slot.station.owner.id = :ownerId " +
+                     "AND (:status IS NULL OR b.status = :status) " +
+                     "ORDER BY b.startTime DESC")
+       org.springframework.data.domain.Page<com.ganesh.EV_Project.dto.OwnerBookingRowDTO> findOwnerBookings(
+                     @Param("ownerId") Long ownerId,
+                     @Param("status") BookingStatus status,
+                     org.springframework.data.domain.Pageable pageable);
 }
