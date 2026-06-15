@@ -93,8 +93,8 @@ public interface ChargingSessionRepository extends JpaRepository<ChargingSession
     @org.springframework.data.jpa.repository.Query("SELECT new com.ganesh.EV_Project.dto.TransactionRowDTO(" +
            "s.id, s.endTime, s.booking.slot.station.name, s.energyKwh, s.totalCost, s.razorpayOrderId, s.paymentStatus) " +
            "FROM ChargingSession s WHERE s.booking.slot.station.owner.id = :ownerId " +
-           "AND (:search IS NULL OR LOWER(s.booking.slot.station.name) LIKE LOWER(CONCAT('%', :search, '%')) " +
-           "OR LOWER(s.razorpayOrderId) LIKE LOWER(CONCAT('%', :search, '%'))) " +
+           "AND (CAST(:search AS string) IS NULL OR LOWER(s.booking.slot.station.name) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%')) " +
+           "OR LOWER(s.razorpayOrderId) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%'))) " +
            "ORDER BY s.endTime DESC")
     org.springframework.data.domain.Page<com.ganesh.EV_Project.dto.TransactionRowDTO> getTransactionHistory(
             @org.springframework.data.repository.query.Param("ownerId") Long ownerId,
