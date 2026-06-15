@@ -19,6 +19,10 @@ export default function LoginPage() {
     const [tempLoginToken, setTempLoginToken] = useState('');
     const [verifyUserId, setVerifyUserId] = useState(null);
 
+    // Resend cooldown (seconds remaining) + in-flight flag to prevent spamming.
+    const [resendTimer, setResendTimer] = useState(0);
+    const [resendLoading, setResendLoading] = useState(false);
+
     const dispatch = useDispatch();
     const navigate = useNavigate();
     const user = useSelector(selectCurrentUser);
@@ -31,11 +35,21 @@ export default function LoginPage() {
         }
     }, [user, navigate]);
 
-    // Reset OTP digits when view changes
+    // Reset OTP digits when view changes; start the resend cooldown on OTP views.
     useEffect(() => {
         setOtpDigits(Array(6).fill(''));
         setOtp('');
+        if (view === 'mfa' || view === 'verify') {
+            setResendTimer(60);
+        }
     }, [view]);
+
+    // Tick the resend cooldown down to zero, one second at a time.
+    useEffect(() => {
+        if (resendTimer <= 0) return undefined;
+        const id = setTimeout(() => setResendTimer((t) => t - 1), 1000);
+        return () => clearTimeout(id);
+    }, [resendTimer]);
 
     const resetToLogin = () => {
         setView('login');
@@ -142,28 +156,30 @@ export default function LoginPage() {
     };
 
     const handleResend = async () => {
+        if (resendTimer > 0 || resendLoading) return;
+        setResendLoading(true);
         try {
             await api.post('/auth/resend-verification', { userId: verifyUserId });
             toast.success('A new code has been sent.');
+            setResendTimer(60);
         } catch (err) {
             toast.error(err.response?.data?.message || 'Could not resend the code.');
+        } finally {
+            setResendLoading(false);
         }
     };
 
     const handleResendMfa = async () => {
+        if (resendTimer > 0 || resendLoading) return;
+        setResendLoading(true);
         try {
-            const response = await api.post('/auth/resend-mfa', { tempLoginToken });
+            await api.post('/auth/resend-mfa', { tempLoginToken });
             toast.success('A new MFA code has been sent.');
-            
-            if (response.data?.data?.otp) {
-                const otpVal = response.data.data.otp;
-                const digits = otpVal.split('');
-                setOtpDigits(digits);
-                setOtp(otpVal);
-                toast.success(`Dev Autofill: ${otpVal}`);
-            }
+            setResendTimer(60);
         } catch (err) {
             toast.error(err.response?.data?.message || 'Could not resend the code.');
+        } finally {
+            setResendLoading(false);
         }
     };
 
@@ -202,6 +218,12 @@ export default function LoginPage() {
     };
 
     const isOtpView = view === 'mfa' || view === 'verify';
+    const resendDisabled = resendTimer > 0 || resendLoading;
+    const resendLabel = resendLoading
+        ? 'Sending...'
+        : resendTimer > 0
+            ? `Resend code (${resendTimer}s)`
+            : 'Resend code';
     const heading = view === 'mfa' ? 'Two-factor verification'
         : view === 'verify' ? 'Verify your email'
         : 'Sign in to your account';
@@ -365,16 +387,15 @@ export default function LoginPage() {
                                 <button type="button" onClick={resetToLogin} className="text-slate-500 hover:text-slate-700 transition-colors font-medium">
                                     Back to sign in
                                 </button>
-                                {view === 'verify' && (
-                                    <button type="button" onClick={handleResend} className="font-semibold text-cyan-500 hover:text-cyan-600 transition-colors">
-                                        Resend code
-                                    </button>
-                                )}
-                                {view === 'mfa' && (
-                                    <button type="button" onClick={handleResendMfa} className="font-semibold text-cyan-500 hover:text-cyan-600 transition-colors">
-                                        Resend code
-                                    </button>
-                                )}
+                                <button
+                                    type="button"
+                                    onClick={view === 'verify' ? handleResend : handleResendMfa}
+                                    disabled={resendDisabled}
+                                    className="font-semibold text-cyan-500 hover:text-cyan-600 transition-colors inline-flex items-center gap-1.5 disabled:text-slate-400 disabled:cursor-not-allowed"
+                                >
+                                    {resendLoading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                                    {resendLabel}
+                                </button>
                             </div>
                         </form>
                     )}

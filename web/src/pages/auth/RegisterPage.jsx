@@ -67,6 +67,10 @@ export default function RegisterPage() {
     const [otp, setOtp] = useState('');
     const [otpDigits, setOtpDigits] = useState(Array(6).fill(''));
 
+    // Resend cooldown (seconds remaining) + in-flight flag to prevent spamming.
+    const [resendTimer, setResendTimer] = useState(0);
+    const [resendLoading, setResendLoading] = useState(false);
+
     const navigate = useNavigate();
     const user = useSelector(selectCurrentUser);
 
@@ -81,8 +85,16 @@ export default function RegisterPage() {
         if (step === 4) {
             setOtpDigits(Array(6).fill(''));
             setOtp('');
+            setResendTimer(60);
         }
     }, [step]);
+
+    // Tick the resend cooldown down to zero, one second at a time.
+    useEffect(() => {
+        if (resendTimer <= 0) return undefined;
+        const id = setTimeout(() => setResendTimer((t) => t - 1), 1000);
+        return () => clearTimeout(id);
+    }, [resendTimer]);
 
     const updateField = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
     const updateFile = (key) => (e) => setFiles((f) => ({ ...f, [key]: e.target.files?.[0] || null }));
@@ -167,11 +179,16 @@ export default function RegisterPage() {
     };
 
     const handleResend = async () => {
+        if (resendTimer > 0 || resendLoading) return;
+        setResendLoading(true);
         try {
             await api.post('/auth/resend-verification', { userId });
             toast.success('A new code has been sent.');
+            setResendTimer(60);
         } catch (err) {
             toast.error(err.response?.data?.message || 'Could not resend the code.');
+        } finally {
+            setResendLoading(false);
         }
     };
 
@@ -239,6 +256,13 @@ export default function RegisterPage() {
         { id: 2, label: 'Business' },
         { id: 3, label: 'Documents' },
     ];
+
+    const resendDisabled = resendTimer > 0 || resendLoading;
+    const resendLabel = resendLoading
+        ? 'Sending...'
+        : resendTimer > 0
+            ? `Resend code (${resendTimer}s)`
+            : 'Resend code';
 
     const heading = step === 4 ? 'Verify your email' : 'Register your Business';
     const subHeading = step === 4 ? (
@@ -557,12 +581,14 @@ export default function RegisterPage() {
                                 >
                                     Back to details
                                 </button>
-                                <button 
-                                    type="button" 
-                                    onClick={handleResend} 
-                                    className="font-semibold text-cyan-500 hover:text-cyan-600 transition-colors"
+                                <button
+                                    type="button"
+                                    onClick={handleResend}
+                                    disabled={resendDisabled}
+                                    className="font-semibold text-cyan-500 hover:text-cyan-600 transition-colors inline-flex items-center gap-1.5 disabled:text-slate-400 disabled:cursor-not-allowed"
                                 >
-                                    Resend code
+                                    {resendLoading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                                    {resendLabel}
                                 </button>
                             </div>
                         </form>
