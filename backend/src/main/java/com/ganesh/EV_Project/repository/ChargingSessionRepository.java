@@ -43,6 +43,23 @@ public interface ChargingSessionRepository extends JpaRepository<ChargingSession
     @org.springframework.data.jpa.repository.Query("SELECT SUM(s.totalCost) FROM ChargingSession s WHERE s.booking.slot.station.owner.id = :ownerId AND s.endTime >= :since AND s.paymentStatus = 'PAID'")
     Double sumEarningsByOwnerSince(@org.springframework.data.repository.query.Param("ownerId") Long ownerId, @org.springframework.data.repository.query.Param("since") java.time.LocalDateTime since);
 
+    // Hour-aligned trend support: totals between two explicit timestamps.
+    @org.springframework.data.jpa.repository.Query("SELECT SUM(s.energyKwh) FROM ChargingSession s " +
+            "WHERE s.booking.slot.station.owner.id = :ownerId " +
+            "AND s.endTime >= :start AND s.endTime <= :end AND s.status = 'COMPLETED'")
+    Double sumEnergyByOwnerBetween(
+            @org.springframework.data.repository.query.Param("ownerId") Long ownerId,
+            @org.springframework.data.repository.query.Param("start") java.time.LocalDateTime start,
+            @org.springframework.data.repository.query.Param("end") java.time.LocalDateTime end);
+
+    @org.springframework.data.jpa.repository.Query("SELECT SUM(s.totalCost) FROM ChargingSession s " +
+            "WHERE s.booking.slot.station.owner.id = :ownerId " +
+            "AND s.endTime >= :start AND s.endTime <= :end AND s.paymentStatus = 'PAID'")
+    Double sumEarningsByOwnerBetween(
+            @org.springframework.data.repository.query.Param("ownerId") Long ownerId,
+            @org.springframework.data.repository.query.Param("start") java.time.LocalDateTime start,
+            @org.springframework.data.repository.query.Param("end") java.time.LocalDateTime end);
+
     @org.springframework.data.jpa.repository.Query(value = "SELECT CAST(s.end_time AS DATE) as date, SUM(s.total_cost) as revenue, SUM(s.energy_kwh) as energy " +
            "FROM charging_sessions s JOIN bookings b ON s.booking_id = b.id " +
            "JOIN charger_slots cs ON b.slot_id = cs.id JOIN stations st ON cs.station_id = st.id " +

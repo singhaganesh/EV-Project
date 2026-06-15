@@ -122,7 +122,9 @@ export default function PumpOwnerDashboard() {
         activeStationsCount: 0,
         todayEnergyKwh: 0,
         todayEarnings: 0,
-        utilizationRate: 0
+        utilizationRate: 0,
+        energyTrendPercentage: 0,
+        earningsTrendPercentage: 0
     });
     const [stations, setStations] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -146,7 +148,9 @@ export default function PumpOwnerDashboard() {
                 activeStationsCount: statsData.activeStationsCount || 0,
                 todayEnergyKwh: statsData.todayEnergyKwh || 0,
                 todayEarnings: statsData.todayEarnings || 0,
-                utilizationRate: statsData.utilizationRate || 0
+                utilizationRate: statsData.utilizationRate || 0,
+                energyTrendPercentage: statsData.energyTrendPercentage || 0,
+                earningsTrendPercentage: statsData.earningsTrendPercentage || 0
             });
 
             const stationList = Array.isArray(stationsRes.data) ? stationsRes.data : (stationsRes.data?.data || []);
@@ -247,18 +251,18 @@ export default function PumpOwnerDashboard() {
                     value={`${stats.todayEnergyKwh.toFixed(1)} kWh`}
                     icon={Zap}
                     iconColor="bg-cyan-500"
-                    trend="up"
-                    trendValue="Live"
-                    trendLabel="Updating real-time"
+                    trend={stats.energyTrendPercentage >= 0 ? 'up' : 'down'}
+                    trendValue={`${stats.energyTrendPercentage >= 0 ? '+' : ''}${stats.energyTrendPercentage.toFixed(1)}%`}
+                    trendLabel="vs yesterday (same time)"
                 />
                 <StatCard
                     title="Today's Earnings"
                     value={`₹${stats.todayEarnings.toLocaleString('en-IN')}`}
                     icon={Wallet}
                     iconColor="bg-emerald-500"
-                    trend="up"
-                    trendValue="Today"
-                    trendLabel="Gross Revenue"
+                    trend={stats.earningsTrendPercentage >= 0 ? 'up' : 'down'}
+                    trendValue={`${stats.earningsTrendPercentage >= 0 ? '+' : ''}${stats.earningsTrendPercentage.toFixed(1)}%`}
+                    trendLabel="vs yesterday (same time)"
                 />
                 <StatCard
                     title="Hardware Alerts"

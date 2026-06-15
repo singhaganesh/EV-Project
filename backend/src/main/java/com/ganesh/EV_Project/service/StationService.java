@@ -60,11 +60,27 @@ public class StationService {
 
         double roundedUtilizationRate = Math.round(utilizationRate * 10.0) / 10.0;
 
-        // ── CALCULATE TODAY'S METRICS ──
+        // ── CALCULATE TODAY'S METRICS & HOUR-ALIGNED TRENDS ──
+        java.time.LocalDateTime now = java.time.LocalDateTime.now();
         java.time.LocalDateTime startOfToday = java.time.LocalDate.now().atStartOfDay();
-        
-        Double todayEnergy = chargingSessionRepository.sumEnergyByOwnerSince(ownerId, startOfToday);
-        Double todayEarnings = chargingSessionRepository.sumEarningsByOwnerSince(ownerId, startOfToday);
+
+        java.time.LocalDateTime startOfYesterday = java.time.LocalDate.now().minusDays(1).atStartOfDay();
+        java.time.LocalDateTime sameTimeYesterday = now.minusDays(1);
+
+        // Today: start of today → now
+        Double todayEnergy = chargingSessionRepository.sumEnergyByOwnerBetween(ownerId, startOfToday, now);
+        Double todayEarnings = chargingSessionRepository.sumEarningsByOwnerBetween(ownerId, startOfToday, now);
+        todayEnergy = (todayEnergy != null) ? todayEnergy : 0.0;
+        todayEarnings = (todayEarnings != null) ? todayEarnings : 0.0;
+
+        // Yesterday, hour-aligned: start of yesterday → same time yesterday
+        Double yesterdayEnergy = chargingSessionRepository.sumEnergyByOwnerBetween(ownerId, startOfYesterday, sameTimeYesterday);
+        Double yesterdayEarnings = chargingSessionRepository.sumEarningsByOwnerBetween(ownerId, startOfYesterday, sameTimeYesterday);
+        yesterdayEnergy = (yesterdayEnergy != null) ? yesterdayEnergy : 0.0;
+        yesterdayEarnings = (yesterdayEarnings != null) ? yesterdayEarnings : 0.0;
+
+        double energyTrend = calculateTrendPercentage(todayEnergy, yesterdayEnergy);
+        double earningsTrend = calculateTrendPercentage(todayEarnings, yesterdayEarnings);
 
         return OwnerStationStatsDTO.builder()
                 .totalStations(totalStations)
@@ -72,9 +88,20 @@ public class StationService {
                 .activeChargers(activeChargers)
                 .inUseChargers(inUseChargers)
                 .utilizationRate(roundedUtilizationRate)
-                .todayEnergyKwh(todayEnergy != null ? Math.round(todayEnergy * 10.0) / 10.0 : 0.0)
-                .todayEarnings(todayEarnings != null ? Math.round(todayEarnings * 100.0) / 100.0 : 0.0)
+                .todayEnergyKwh(Math.round(todayEnergy * 10.0) / 10.0)
+                .todayEarnings(Math.round(todayEarnings * 100.0) / 100.0)
+                .energyTrendPercentage(energyTrend)
+                .earningsTrendPercentage(earningsTrend)
                 .build();
+    }
+
+    // Percentage change of current vs previous, safe against division by zero.
+    private double calculateTrendPercentage(double current, double previous) {
+        if (previous == 0.0) {
+            return current > 0.0 ? 100.0 : 0.0;
+        }
+        double percentage = ((current - previous) / previous) * 100.0;
+        return Math.round(percentage * 10.0) / 10.0;
     }
 
     public Station getStationById(Long id) {

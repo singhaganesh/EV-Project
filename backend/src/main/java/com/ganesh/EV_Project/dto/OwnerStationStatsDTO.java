@@ -17,4 +17,8 @@ public class OwnerStationStatsDTO {
     private Double utilizationRate;
     private Double todayEnergyKwh;
     private Double todayEarnings;
+
+    // Hour-aligned trend vs. the same window yesterday (percentages).
+    private Double energyTrendPercentage;
+    private Double earningsTrendPercentage;
 }
