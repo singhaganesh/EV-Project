@@ -39,7 +39,8 @@ public class EarningsService {
         );
     }
 
-    public Page<TransactionRowDTO> getTransactionHistory(Long ownerId, Pageable pageable) {
-        return sessionRepository.getTransactionHistory(ownerId, pageable);
+    public Page<TransactionRowDTO> getTransactionHistory(Long ownerId, String search, Pageable pageable) {
+        String q = (search != null && !search.isBlank()) ? search.trim() : null;
+        return sessionRepository.getTransactionHistory(ownerId, q, pageable);
     }
 }

@@ -52,7 +52,8 @@ export const getRevenueTrends = (ownerId, days = 7) => api.get(`/analytics/reven
 export const getPeakUsage = (ownerId, days = 7) => api.get(`/analytics/peak-usage/${ownerId}?days=${days}`);
 export const getAnalyticsSummary = (ownerId, days = 7) => api.get(`/analytics/summary/${ownerId}?days=${days}`);
 export const getEarningsSummary = (ownerId) => api.get(`/earnings/summary/${ownerId}`);
-export const getEarningsTransactions = (ownerId, page = 0, size = 10) => 
-    api.get(`/earnings/transactions/${ownerId}?page=${page}&size=${size}`);
+export const getEarningsTransactions = (ownerId, page = 0, size = 10, search = '') =>
+    api.get(`/earnings/transactions/${ownerId}?page=${page}&size=${size}` +
+        (search ? `&search=${encodeURIComponent(search)}` : ''));
 
 export default api;

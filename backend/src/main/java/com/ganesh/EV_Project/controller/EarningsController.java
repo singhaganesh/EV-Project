@@ -29,8 +29,9 @@ public class EarningsController {
     public ResponseEntity<Page<TransactionRowDTO>> getTransactionHistory(
             @PathVariable Long ownerId,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size) {
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) String search) {
         Pageable pageable = PageRequest.of(page, size);
-        return ResponseEntity.ok(earningsService.getTransactionHistory(ownerId, pageable));
+        return ResponseEntity.ok(earningsService.getTransactionHistory(ownerId, search, pageable));
     }
 }

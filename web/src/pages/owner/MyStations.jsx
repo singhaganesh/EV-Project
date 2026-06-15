@@ -17,6 +17,7 @@ export default function MyStations() {
     });
     const [loading, setLoading] = useState(true);
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+    const [query, setQuery] = useState('');
 
     const fetchStations = async () => {
         try {
@@ -78,6 +79,14 @@ export default function MyStations() {
         }
     };
 
+    const q = query.trim().toLowerCase();
+    const filteredStations = q
+        ? stations.filter((s) =>
+            (s.name || '').toLowerCase().includes(q) ||
+            (s.address || '').toLowerCase().includes(q) ||
+            String(s.id).includes(q))
+        : stations;
+
     return (
         <div className="space-y-8 max-w-[1400px] mx-auto pb-12">
 
@@ -89,6 +98,8 @@ export default function MyStations() {
                     </div>
                     <input
                         type="text"
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
                         className="block w-full pl-10 pr-4 py-3 bg-white border-0 shadow-[0_2px_10px_rgba(0,0,0,0.04)] rounded-full text-sm placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/20"
                         placeholder="Search by station name, ID, or location..."
                     />
@@ -145,7 +156,7 @@ export default function MyStations() {
 
             {/* Station Cards Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {loading ? <div className="col-span-2 text-center py-10">Loading stations...</div> : stations.map((station) => {
+                {loading ? <div className="col-span-2 text-center py-10">Loading stations...</div> : filteredStations.map((station) => {
                     const isOnline = station.isOpen !== false;
 
                     return (

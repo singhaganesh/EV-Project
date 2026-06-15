@@ -18,9 +18,9 @@ export const fetchEarningsSummary = createAsyncThunk(
 
 export const fetchEarningsTransactions = createAsyncThunk(
     'earnings/fetchTransactions',
-    async ({ ownerId, page, size }, { rejectWithValue }) => {
+    async ({ ownerId, page, size, search }, { rejectWithValue }) => {
         try {
-            const response = await fetchEarningsTransactionsAPI(ownerId, page, size);
+            const response = await fetchEarningsTransactionsAPI(ownerId, page, size, search);
             return response.data;
         } catch (error) {
             return rejectWithValue(error.response?.data?.message || 'Failed to fetch transactions');

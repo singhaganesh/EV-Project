@@ -51,12 +51,23 @@ export default function EarningsPage() {
     const stationRevenue = useSelector(selectStationRevenue);
 
     const [page, setPage] = useState(0);
+    const [searchInput, setSearchInput] = useState('');
+    const [search, setSearch] = useState('');
+
+    // Debounce the ledger search box; reset to the first page on a new query.
+    useEffect(() => {
+        const t = setTimeout(() => {
+            setSearch(searchInput.trim());
+            setPage(0);
+        }, 400);
+        return () => clearTimeout(t);
+    }, [searchInput]);
 
     useEffect(() => {
         const userStr = localStorage.getItem('user');
         if (!userStr) return;
         const user = JSON.parse(userStr);
-        
+
         // Fetch financial summary
         dispatch(fetchEarningsSummary(user.id));
         
@@ -73,8 +84,8 @@ export default function EarningsPage() {
         const user = JSON.parse(userStr);
         
         // Fetch transactions for current page
-        dispatch(fetchEarningsTransactions({ ownerId: user.id, page, size: 10 }));
-    }, [dispatch, page]);
+        dispatch(fetchEarningsTransactions({ ownerId: user.id, page, size: 10, search }));
+    }, [dispatch, page, search]);
 
     const formatChartDate = (dateStr) => {
         const date = new Date(dateStr);
@@ -298,9 +309,11 @@ export default function EarningsPage() {
                     </div>
                     <div className="relative group">
                         <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-emerald-500 transition-colors" />
-                        <input 
-                            type="text" 
-                            placeholder="Search transaction..." 
+                        <input
+                            type="text"
+                            value={searchInput}
+                            onChange={(e) => setSearchInput(e.target.value)}
+                            placeholder="Search station or txn ID..."
                             className="pl-11 pr-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:bg-white transition-all min-w-[240px]"
                         />
                     </div>
