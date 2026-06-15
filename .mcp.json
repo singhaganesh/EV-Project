@@ -1,11 +1,10 @@
 {
   "mcpServers": {
-    "code-review-graph": {
-      "command": "code-review-graph",
+    "graphify": {
+      "command": "graphify-mcp",
       "args": [
-        "serve"
-      ],
-      "type": "stdio"
+        "/home/ganesh/Work/Projects/EV-Project/graphify-out/graph.json"
+      ]
     }
   }
 }
