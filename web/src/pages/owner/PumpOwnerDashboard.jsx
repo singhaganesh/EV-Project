@@ -165,6 +165,42 @@ export default function PumpOwnerDashboard() {
         fetchDashboardData();
     }, [dispatch]);
 
+    // Hydrate current slot states on load so a session that is already
+    // charging shows immediately (WebSocket only pushes future changes).
+    useEffect(() => {
+        if (!stations || stations.length === 0) return undefined;
+        let cancelled = false;
+        (async () => {
+            try {
+                const results = await Promise.all(
+                    stations.map((st) =>
+                        api.get(`/slots/station/${st.id}`).then((res) => ({
+                            st,
+                            slots: Array.isArray(res.data) ? res.data : (res.data?.data || []),
+                        }))
+                    )
+                );
+                if (cancelled) return;
+                setLiveSlots((prev) => {
+                    const next = { ...prev };
+                    results.forEach(({ st, slots }) => {
+                        slots.forEach((slot) => {
+                            // Don't clobber a fresher live update that already arrived.
+                            if (!next[slot.id]) {
+                                next[slot.id] = { ...slot, _stationName: st.name };
+                            }
+                        });
+                    });
+                    return next;
+                });
+            } catch {
+                // Non-fatal: live pushes still populate the panel going forward.
+            }
+        })();
+        return () => { cancelled = true; };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [stations.map((s) => s.id).join(',')]);
+
     // Subscribe to live slot/gun status for each owned station.
     useEffect(() => {
         if (!stations || stations.length === 0) return undefined;
