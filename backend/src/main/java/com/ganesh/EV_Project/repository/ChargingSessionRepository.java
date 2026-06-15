@@ -100,4 +100,12 @@ public interface ChargingSessionRepository extends JpaRepository<ChargingSession
             @org.springframework.data.repository.query.Param("ownerId") Long ownerId,
             @org.springframework.data.repository.query.Param("search") String search,
             org.springframework.data.domain.Pageable pageable);
+
+    // Non-paged variant for CSV export (full ledger, newest first).
+    @org.springframework.data.jpa.repository.Query("SELECT new com.ganesh.EV_Project.dto.TransactionRowDTO(" +
+           "s.id, s.endTime, s.booking.slot.station.name, s.energyKwh, s.totalCost, s.razorpayOrderId, s.paymentStatus) " +
+           "FROM ChargingSession s WHERE s.booking.slot.station.owner.id = :ownerId " +
+           "ORDER BY s.endTime DESC")
+    java.util.List<com.ganesh.EV_Project.dto.TransactionRowDTO> getAllTransactions(
+            @org.springframework.data.repository.query.Param("ownerId") Long ownerId);
 }

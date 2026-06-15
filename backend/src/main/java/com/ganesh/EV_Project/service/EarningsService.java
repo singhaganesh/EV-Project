@@ -43,4 +43,8 @@ public class EarningsService {
         String q = (search != null && !search.isBlank()) ? search.trim() : null;
         return sessionRepository.getTransactionHistory(ownerId, q, pageable);
     }
+
+    public java.util.List<TransactionRowDTO> getAllTransactions(Long ownerId) {
+        return sessionRepository.getAllTransactions(ownerId);
+    }
 }

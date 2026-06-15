@@ -22,9 +22,11 @@ import {
     AreaChart,
     Area
 } from 'recharts';
+import toast from 'react-hot-toast';
 import StatCard from '../../components/common/StatCard';
 import DataTable from '../../components/common/DataTable';
 import StatusBadge from '../../components/common/StatusBadge';
+import { exportEarningsTransactions } from '../../api/axios';
 import { 
     fetchEarningsSummary, 
     selectEarningsSummary, 
@@ -53,6 +55,31 @@ export default function EarningsPage() {
     const [page, setPage] = useState(0);
     const [searchInput, setSearchInput] = useState('');
     const [search, setSearch] = useState('');
+    const [exporting, setExporting] = useState(false);
+
+    const handleExport = async () => {
+        const userStr = localStorage.getItem('user');
+        if (!userStr) return;
+        const user = JSON.parse(userStr);
+        try {
+            setExporting(true);
+            const response = await exportEarningsTransactions(user.id);
+            const blob = new Blob([response.data], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `transactions-${new Date().toISOString().slice(0, 10)}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            window.URL.revokeObjectURL(url);
+            toast.success('Report exported.');
+        } catch (err) {
+            toast.error('Failed to export report.');
+        } finally {
+            setExporting(false);
+        }
+    };
 
     // Debounce the ledger search box; reset to the first page on a new query.
     useEffect(() => {
@@ -145,8 +172,12 @@ export default function EarningsPage() {
                     <h1 className="text-2xl font-bold text-[#1A2234]">Earnings & Payouts</h1>
                     <p className="text-slate-500 font-medium mt-1">Track your revenue and manage your bank settlements.</p>
                 </div>
-                <button className="flex items-center gap-2 bg-[#1A2234] hover:bg-slate-800 text-white px-6 py-3 rounded-2xl font-bold text-sm transition-all shadow-sm">
-                    <Download className="w-4 h-4" /> Export Report
+                <button
+                    onClick={handleExport}
+                    disabled={exporting}
+                    className="flex items-center gap-2 bg-[#1A2234] hover:bg-slate-800 text-white px-6 py-3 rounded-2xl font-bold text-sm transition-all shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                    <Download className="w-4 h-4" /> {exporting ? 'Exporting...' : 'Export Report'}
                 </button>
             </div>
 

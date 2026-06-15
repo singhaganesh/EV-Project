@@ -55,5 +55,7 @@ export const getEarningsSummary = (ownerId) => api.get(`/earnings/summary/${owne
 export const getEarningsTransactions = (ownerId, page = 0, size = 10, search = '') =>
     api.get(`/earnings/transactions/${ownerId}?page=${page}&size=${size}` +
         (search ? `&search=${encodeURIComponent(search)}` : ''));
+export const exportEarningsTransactions = (ownerId) =>
+    api.get(`/earnings/transactions/${ownerId}/export`, { responseType: 'blob' });
 
 export default api;
