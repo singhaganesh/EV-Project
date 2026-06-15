@@ -135,6 +135,7 @@ public class StationService {
                     existing.setOperatingHours(updatedStation.getOperatingHours());
                     existing.setPricePerKwh(updatedStation.getPricePerKwh());
                     existing.setTruckPricePerKwh(updatedStation.getTruckPricePerKwh());
+                    existing.setCostPerKwh(updatedStation.getCostPerKwh());
                     return stationRepository.save(existing);
                 })
                 .orElseThrow(() -> new RuntimeException("Station not found"));

@@ -60,6 +60,9 @@ public class Station {
     @Column(columnDefinition = "DOUBLE PRECISION DEFAULT 0.0")
     private Double truckPricePerKwh; // e.g. 20.0
 
+    @Column(columnDefinition = "DOUBLE PRECISION DEFAULT 0.0")
+    private Double costPerKwh; // grid tariff the owner pays per kWh, e.g. 9.0
+
     @Transient
     @JsonProperty(access = JsonProperty.Access.READ_ONLY)
     public Boolean getIsOpen() {

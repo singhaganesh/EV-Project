@@ -83,6 +83,10 @@ public interface ChargingSessionRepository extends JpaRepository<ChargingSession
     @org.springframework.data.jpa.repository.Query("SELECT SUM(s.totalCost) FROM ChargingSession s WHERE s.booking.slot.station.owner.id = :ownerId AND s.paymentStatus = 'PAID'")
     Double getTotalLifetimeRevenue(@org.springframework.data.repository.query.Param("ownerId") Long ownerId);
 
+    // Total cost of energy sold = sum of (kWh × the station's grid tariff) over paid sessions.
+    @org.springframework.data.jpa.repository.Query("SELECT COALESCE(SUM(s.energyKwh * COALESCE(s.booking.slot.station.costPerKwh, 0)), 0) FROM ChargingSession s WHERE s.booking.slot.station.owner.id = :ownerId AND s.paymentStatus = 'PAID'")
+    Double getTotalEnergyCost(@org.springframework.data.repository.query.Param("ownerId") Long ownerId);
+
     @org.springframework.data.jpa.repository.Query("SELECT SUM(s.totalCost) FROM ChargingSession s WHERE s.booking.slot.station.owner.id = :ownerId AND s.paymentStatus = 'PAID' AND s.endTime >= :since")
     Double getRecentRevenue(@org.springframework.data.repository.query.Param("ownerId") Long ownerId, @org.springframework.data.repository.query.Param("since") java.time.LocalDateTime since);
 

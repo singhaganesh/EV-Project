@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { 
-    Wallet, 
-    TrendingUp, 
-    Clock, 
-    Check, 
+import {
+    Wallet,
+    TrendingUp,
+    Clock,
+    Zap,
     ArrowRight,
     Download,
     MapPin,
@@ -142,40 +142,40 @@ export default function EarningsPage() {
             {/* Wallet Header */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <StatCard
-                    title="Current Balance"
-                    value={`₹${summary.currentBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`}
-                    icon={Wallet}
-                    iconColor="bg-emerald-500"
-                    trend="up"
-                    trendValue="Available"
-                    trendLabel="for next payout"
-                />
-                <StatCard
                     title="Lifetime Revenue"
-                    value={`₹${summary.lifetimeRevenue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`}
+                    value={`₹${(summary.lifetimeRevenue || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`}
                     icon={TrendingUp}
                     iconColor="bg-blue-600"
                     trend="up"
-                    trendValue="Total"
-                    trendLabel="Gross earnings"
+                    trendValue="Gross"
+                    trendLabel="All paid sessions"
                 />
                 <StatCard
-                    title="Pending Payouts"
-                    value={`₹${summary.pendingPayouts.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`}
-                    icon={Clock}
+                    title="Energy Cost"
+                    value={`₹${(summary.energyCost || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`}
+                    icon={Zap}
                     iconColor="bg-amber-500"
                     trend="down"
-                    trendValue="48h window"
-                    trendLabel="In process"
+                    trendValue="Grid tariff"
+                    trendLabel="Cost of energy sold"
                 />
                 <StatCard
-                    title="Last Settlement"
-                    value={`₹${summary.lastSettlement.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`}
-                    icon={Check}
+                    title="Net Margin"
+                    value={`₹${(summary.netMargin || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`}
+                    icon={Wallet}
+                    iconColor="bg-emerald-500"
+                    trend="up"
+                    trendValue="Revenue − energy cost"
+                    trendLabel=""
+                />
+                <StatCard
+                    title="Revenue (Last 48h)"
+                    value={`₹${(summary.revenueLast48h || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`}
+                    icon={Clock}
                     iconColor="bg-slate-700"
                     trend="up"
-                    trendValue="Success"
-                    trendLabel="Last transfer"
+                    trendValue="Recent"
+                    trendLabel="Paid in last 48h"
                 />
             </div>
 

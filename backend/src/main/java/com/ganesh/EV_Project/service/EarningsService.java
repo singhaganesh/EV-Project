@@ -17,25 +17,25 @@ public class EarningsService {
     private ChargingSessionRepository sessionRepository;
 
     public EarningsSummaryDTO getEarningsSummary(Long ownerId) {
-        // ... (existing code)
         Double lifetimeRevenue = sessionRepository.getTotalLifetimeRevenue(ownerId);
         if (lifetimeRevenue == null) lifetimeRevenue = 0.0;
 
-        // Pending payouts: Revenue from the last 48 hours (simulating settlement window)
-        LocalDateTime settlementWindow = LocalDateTime.now().minusHours(48);
-        Double pendingPayouts = sessionRepository.getRecentRevenue(ownerId, settlementWindow);
-        if (pendingPayouts == null) pendingPayouts = 0.0;
+        // Cost of the energy sold = sum(kWh × each station's grid tariff) over paid sessions.
+        Double energyCost = sessionRepository.getTotalEnergyCost(ownerId);
+        if (energyCost == null) energyCost = 0.0;
 
-        // Current Balance = Lifetime - (simulated payouts)
-        // For now, let's assume 80% is settled and 20% is current balance/pending
-        Double currentBalance = lifetimeRevenue - (lifetimeRevenue * 0.85); 
-        Double lastSettlement = lifetimeRevenue * 0.15; // Dummy last payout amount
+        // Real revenue settled in the last 48h (no fabricated balances/settlements).
+        LocalDateTime since = LocalDateTime.now().minusHours(48);
+        Double revenueLast48h = sessionRepository.getRecentRevenue(ownerId, since);
+        if (revenueLast48h == null) revenueLast48h = 0.0;
+
+        double netMargin = lifetimeRevenue - energyCost;
 
         return new EarningsSummaryDTO(
-            currentBalance,
             lifetimeRevenue,
-            pendingPayouts,
-            lastSettlement
+            energyCost,
+            netMargin,
+            revenueLast48h
         );
     }
 

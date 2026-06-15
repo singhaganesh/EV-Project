@@ -176,6 +176,7 @@ function OverviewTab({ station, setStation, onSave, saving }) {
                     </div>
                     <InputField label="Car Price (₹/kWh)" value={station.pricePerKwh || ''} onChange={handleNumberChange('pricePerKwh')} type="number" placeholder="15.50" icon={IndianRupee} />
                     <InputField label="Truck Price (₹/kWh)" value={station.truckPricePerKwh || ''} onChange={handleNumberChange('truckPricePerKwh')} type="number" placeholder="20.00" icon={Truck} />
+                    <InputField label="Grid Tariff (₹/kWh)" value={station.costPerKwh || ''} onChange={handleNumberChange('costPerKwh')} type="number" placeholder="9.00" icon={IndianRupee} />
                 </div>
             </div>
 

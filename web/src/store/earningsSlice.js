@@ -30,10 +30,10 @@ export const fetchEarningsTransactions = createAsyncThunk(
 
 const initialState = {
     summary: {
-        currentBalance: 0,
         lifetimeRevenue: 0,
-        pendingPayouts: 0,
-        lastSettlement: 0
+        energyCost: 0,
+        netMargin: 0,
+        revenueLast48h: 0
     },
     transactions: [],
     pagination: {
