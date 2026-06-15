@@ -554,6 +554,69 @@ public class AuthController {
                 .build());
     }
 
+    @PostMapping("/forgot-password")
+    public ResponseEntity<?> forgotPassword(@RequestBody Map<String, String> body) {
+        String email = body.get("email");
+        if (email == null || email.isBlank()) {
+            return ResponseEntity.badRequest().body(APIResponse.builder()
+                    .success(false)
+                    .message("email is required")
+                    .build());
+        }
+
+        User user = userService.findByEmail(email);
+        // Anti-enumeration: always return the same generic success, only sending
+        // a code when the account actually exists.
+        Map<String, Object> data = new HashMap<>();
+        if (user != null) {
+            String otp = mfaOtpService.generateResetOtp(email);
+            deliverOtp(email, otp, "password reset");
+            if (exposeOtpInResponse) data.put("otp", otp);
+        }
+
+        return ResponseEntity.ok(APIResponse.builder()
+                .success(true)
+                .message("If the email exists, a reset code has been sent.")
+                .data(data.isEmpty() ? null : data)
+                .build());
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<?> resetPassword(@RequestBody Map<String, String> body) {
+        String email = body.get("email");
+        String otp = body.get("otp");
+        String newPassword = body.get("newPassword");
+        if (email == null || otp == null || newPassword == null || newPassword.length() < 6) {
+            return ResponseEntity.badRequest().body(APIResponse.builder()
+                    .success(false)
+                    .message("email, otp and a newPassword of at least 6 characters are required")
+                    .build());
+        }
+
+        User user = userService.findByEmail(email);
+        if (user == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(APIResponse.builder()
+                    .success(false)
+                    .message("User not found")
+                    .build());
+        }
+
+        if (!mfaOtpService.validateResetOtp(email, otp)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(APIResponse.builder()
+                    .success(false)
+                    .message("Invalid or expired OTP")
+                    .build());
+        }
+
+        user.setPassword(passwordEncoder.encode(newPassword));
+        userService.updateUser(user);
+
+        return ResponseEntity.ok(APIResponse.builder()
+                .success(true)
+                .message("Password reset successfully. Please sign in.")
+                .build());
+    }
+
     @PostMapping("/refresh-token")
     public ResponseEntity<?> refreshToken(@RequestBody TokenRefreshRequest request) {
         String requestRefreshToken = request.getRefreshToken();

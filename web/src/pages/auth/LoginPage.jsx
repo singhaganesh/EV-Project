@@ -12,12 +12,17 @@ export default function LoginPage() {
     const [showPassword, setShowPassword] = useState(false);
     const [loading, setLoading] = useState(false);
 
-    // view: 'login' | 'mfa' | 'verify'
+    // view: 'login' | 'mfa' | 'verify' | 'forgot' | 'reset'
     const [view, setView] = useState('login');
     const [otp, setOtp] = useState('');
     const [otpDigits, setOtpDigits] = useState(Array(6).fill(''));
     const [tempLoginToken, setTempLoginToken] = useState('');
     const [verifyUserId, setVerifyUserId] = useState(null);
+
+    // Password-reset form fields.
+    const [newPassword, setNewPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [showNewPassword, setShowNewPassword] = useState(false);
 
     // Resend cooldown (seconds remaining) + in-flight flag to prevent spamming.
     const [resendTimer, setResendTimer] = useState(0);
@@ -39,7 +44,7 @@ export default function LoginPage() {
     useEffect(() => {
         setOtpDigits(Array(6).fill(''));
         setOtp('');
-        if (view === 'mfa' || view === 'verify') {
+        if (view === 'mfa' || view === 'verify' || view === 'reset') {
             setResendTimer(60);
         }
     }, [view]);
@@ -57,6 +62,9 @@ export default function LoginPage() {
         setOtpDigits(Array(6).fill(''));
         setTempLoginToken('');
         setVerifyUserId(null);
+        setNewPassword('');
+        setConfirmPassword('');
+        setShowNewPassword(false);
     };
 
     // Finalize a successful login (direct or post-MFA) and redirect by role.
@@ -183,6 +191,52 @@ export default function LoginPage() {
         }
     };
 
+    // Requests a password-reset code. Used both to start the flow (from the
+    // 'forgot' view) and to resend a code (from the 'reset' view).
+    const handleForgotPassword = async (e) => {
+        if (e) e.preventDefault();
+        const resending = view === 'reset';
+        if (resending && (resendTimer > 0 || resendLoading)) return;
+        if (resending) setResendLoading(true); else setLoading(true);
+        try {
+            await api.post('/auth/forgot-password', { email });
+            toast.success('If the email exists, a reset code has been sent.');
+            if (resending) {
+                setResendTimer(60);
+            } else {
+                setView('reset');
+            }
+        } catch (err) {
+            toast.error(err.response?.data?.message || 'Could not send the reset code.');
+        } finally {
+            if (resending) setResendLoading(false); else setLoading(false);
+        }
+    };
+
+    const handleResetPassword = async (e) => {
+        e.preventDefault();
+        if (newPassword !== confirmPassword) {
+            toast.error('Passwords do not match');
+            return;
+        }
+        setLoading(true);
+        try {
+            const response = await api.post('/auth/reset-password', { email, otp, newPassword });
+            const { success, message } = response.data;
+            if (!success) {
+                toast.error(message || 'Could not reset password.');
+                return;
+            }
+            toast.success('Password reset successfully. Please sign in.');
+            setPassword('');
+            resetToLogin();
+        } catch (err) {
+            toast.error(err.response?.data?.message || 'Could not reset password.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const handleOtpDigitChange = (index, value) => {
         // Only allow single digit numbers
         if (value && !/^[0-9]$/.test(value)) return;
@@ -226,6 +280,8 @@ export default function LoginPage() {
             : 'Resend code';
     const heading = view === 'mfa' ? 'Two-factor verification'
         : view === 'verify' ? 'Verify your email'
+        : view === 'forgot' ? 'Forgot your password?'
+        : view === 'reset' ? 'Reset your password'
         : 'Sign in to your account';
 
     return (
@@ -268,12 +324,16 @@ export default function LoginPage() {
                     {/* Form Header */}
                     <div className="flex flex-col items-center mb-8">
                         <div className="w-14 h-14 rounded-2xl bg-slate-50 flex items-center justify-center mb-4 border border-slate-100">
-                            {isOtpView ? <ShieldCheck className="w-7 h-7 text-cyan-500" /> : <Zap className="w-7 h-7 text-cyan-500" />}
+                            {view === 'login' ? <Zap className="w-7 h-7 text-cyan-500" />
+                                : view === 'forgot' ? <Mail className="w-7 h-7 text-cyan-500" />
+                                : <ShieldCheck className="w-7 h-7 text-cyan-500" />}
                         </div>
                         <h2 className="text-2xl font-bold text-[#1A2234] text-center">{heading}</h2>
                         <p className="mt-2 text-center text-sm text-slate-500">
-                            {isOtpView ? (
+                            {isOtpView || view === 'reset' ? (
                                 <>We emailed a 6-digit code to <span className="font-semibold text-slate-700">{email}</span></>
+                            ) : view === 'forgot' ? (
+                                <>Enter your account email and we'll send you a reset code.</>
                             ) : (
                                 <>
                                     Or{' '}
@@ -307,7 +367,16 @@ export default function LoginPage() {
                             </div>
 
                             <div>
-                                <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider">Password</label>
+                                <div className="flex justify-between items-center">
+                                    <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider">Password</label>
+                                    <button
+                                        type="button"
+                                        onClick={() => setView('forgot')}
+                                        className="text-xs font-semibold text-cyan-500 hover:text-cyan-600 transition-colors"
+                                    >
+                                        Forgot password?
+                                    </button>
+                                </div>
                                 <div className="mt-2 relative rounded-lg shadow-sm border border-slate-200 focus-within:ring-2 focus-within:ring-cyan-500/20 focus-within:border-cyan-500 transition-colors overflow-hidden">
                                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                                         <Lock className="h-5 w-5 text-slate-400" />
@@ -390,6 +459,146 @@ export default function LoginPage() {
                                 <button
                                     type="button"
                                     onClick={view === 'verify' ? handleResend : handleResendMfa}
+                                    disabled={resendDisabled}
+                                    className="font-semibold text-cyan-500 hover:text-cyan-600 transition-colors inline-flex items-center gap-1.5 disabled:text-slate-400 disabled:cursor-not-allowed"
+                                >
+                                    {resendLoading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                                    {resendLabel}
+                                </button>
+                            </div>
+                        </form>
+                    )}
+
+                    {view === 'forgot' && (
+                        <form className="space-y-6" onSubmit={handleForgotPassword}>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider">Email address</label>
+                                <div className="mt-2 relative rounded-lg shadow-sm border border-slate-200 focus-within:ring-2 focus-within:ring-cyan-500/20 focus-within:border-cyan-500 transition-colors overflow-hidden">
+                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                        <Mail className="h-5 w-5 text-slate-400" />
+                                    </div>
+                                    <input
+                                        type="email"
+                                        required
+                                        value={email}
+                                        onChange={(e) => setEmail(e.target.value)}
+                                        className="block w-full pl-10 pr-4 py-3 sm:text-sm border-0 bg-slate-50/50 focus:bg-white focus:ring-0 placeholder:text-slate-400 text-slate-800 focus:outline-none transition-colors"
+                                        placeholder="you@company.com"
+                                        disabled={loading}
+                                    />
+                                </div>
+                            </div>
+
+                            <button
+                                type="submit"
+                                disabled={loading}
+                                className="w-full flex justify-center items-center gap-2 py-3 px-4 border border-transparent rounded-lg shadow-lg shadow-cyan-500/10 text-sm font-semibold text-white bg-gradient-to-r from-cyan-600 to-cyan-500 hover:opacity-95 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-cyan-500 transition-all active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed"
+                            >
+                                {loading ? (<><Loader2 className="w-4 h-4 animate-spin" /> Sending...</>) : (
+                                    <>
+                                        Send reset code
+                                        <ArrowRight className="w-4 h-4" />
+                                    </>
+                                )}
+                            </button>
+
+                            <div className="text-sm pt-2 text-center">
+                                <button type="button" onClick={resetToLogin} className="text-slate-500 hover:text-slate-700 transition-colors font-medium">
+                                    Back to sign in
+                                </button>
+                            </div>
+                        </form>
+                    )}
+
+                    {view === 'reset' && (
+                        <form className="space-y-6" onSubmit={handleResetPassword}>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider text-center">Enter Reset Code</label>
+
+                                {/* 6-Digit OTP Box Grid */}
+                                <div className="flex justify-between gap-2 sm:gap-3 my-6">
+                                    {otpDigits.map((digit, idx) => (
+                                        <input
+                                            key={idx}
+                                            id={`otp-${idx}`}
+                                            type="text"
+                                            inputMode="numeric"
+                                            maxLength={1}
+                                            value={digit}
+                                            onChange={(e) => handleOtpDigitChange(idx, e.target.value)}
+                                            onKeyDown={(e) => handleOtpKeyDown(idx, e)}
+                                            className="w-11 h-14 sm:w-12 sm:h-16 text-center text-2xl font-bold border border-slate-200 rounded-lg bg-slate-50 focus:bg-white focus:outline-none focus:border-cyan-500 focus:ring-4 focus:ring-cyan-500/10 transition-all text-[#1A2234]"
+                                            disabled={loading}
+                                        />
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider">New Password</label>
+                                <div className="mt-2 relative rounded-lg shadow-sm border border-slate-200 focus-within:ring-2 focus-within:ring-cyan-500/20 focus-within:border-cyan-500 transition-colors overflow-hidden">
+                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                        <Lock className="h-5 w-5 text-slate-400" />
+                                    </div>
+                                    <input
+                                        type={showNewPassword ? 'text' : 'password'}
+                                        required
+                                        minLength={6}
+                                        value={newPassword}
+                                        onChange={(e) => setNewPassword(e.target.value)}
+                                        className="block w-full pl-10 pr-10 py-3 sm:text-sm border-0 bg-slate-50/50 focus:bg-white focus:ring-0 placeholder:text-slate-400 text-slate-800 focus:outline-none transition-colors"
+                                        placeholder="••••••••"
+                                        disabled={loading}
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowNewPassword(!showNewPassword)}
+                                        className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 transition-colors z-20"
+                                    >
+                                        {showNewPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider">Confirm Password</label>
+                                <div className="mt-2 relative rounded-lg shadow-sm border border-slate-200 focus-within:ring-2 focus-within:ring-cyan-500/20 focus-within:border-cyan-500 transition-colors overflow-hidden">
+                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                        <Lock className="h-5 w-5 text-slate-400" />
+                                    </div>
+                                    <input
+                                        type={showNewPassword ? 'text' : 'password'}
+                                        required
+                                        minLength={6}
+                                        value={confirmPassword}
+                                        onChange={(e) => setConfirmPassword(e.target.value)}
+                                        className="block w-full pl-10 pr-4 py-3 sm:text-sm border-0 bg-slate-50/50 focus:bg-white focus:ring-0 placeholder:text-slate-400 text-slate-800 focus:outline-none transition-colors"
+                                        placeholder="••••••••"
+                                        disabled={loading}
+                                    />
+                                </div>
+                            </div>
+
+                            <button
+                                type="submit"
+                                disabled={loading || otp.length < 6 || !newPassword || !confirmPassword}
+                                className="w-full flex justify-center items-center gap-2 py-3 px-4 border border-transparent rounded-lg shadow-lg shadow-cyan-500/10 text-sm font-semibold text-white bg-gradient-to-r from-cyan-600 to-cyan-500 hover:opacity-95 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-cyan-500 transition-all active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed"
+                            >
+                                {loading ? (<><Loader2 className="w-4 h-4 animate-spin" /> Resetting...</>) : (
+                                    <>
+                                        Reset password
+                                        <ArrowRight className="w-4 h-4" />
+                                    </>
+                                )}
+                            </button>
+
+                            <div className="flex items-center justify-between text-sm pt-2">
+                                <button type="button" onClick={resetToLogin} className="text-slate-500 hover:text-slate-700 transition-colors font-medium">
+                                    Back to sign in
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={handleForgotPassword}
                                     disabled={resendDisabled}
                                     className="font-semibold text-cyan-500 hover:text-cyan-600 transition-colors inline-flex items-center gap-1.5 disabled:text-slate-400 disabled:cursor-not-allowed"
                                 >

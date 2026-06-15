@@ -26,6 +26,7 @@ public class MfaOtpService {
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
     private static final String REG_OTP_PREFIX = "regotp:";
     private static final String MFA_PREFIX = "mfa:";
+    private static final String RESET_PREFIX = "pwdreset:";
 
     @Autowired
     private StringRedisTemplate redis;
@@ -56,6 +57,25 @@ public class MfaOtpService {
     /** Validates and consumes a registration OTP. */
     public boolean validateRegistrationOtp(Long userId, String otp) {
         String key = REG_OTP_PREFIX + userId;
+        String hash = redis.opsForValue().get(key);
+        if (hash == null) return false;
+        if (!passwordEncoder.matches(otp, hash)) return false;
+        redis.delete(key);
+        return true;
+    }
+
+    // ---- Password reset ----
+
+    /** Generates a password-reset OTP keyed by email, stores its hash with a 10-minute TTL, returns the plaintext. */
+    public String generateResetOtp(String email) {
+        String otp = randomOtp();
+        redis.opsForValue().set(RESET_PREFIX + email, passwordEncoder.encode(otp), Duration.ofMinutes(10));
+        return otp;
+    }
+
+    /** Validates and consumes a password-reset OTP. */
+    public boolean validateResetOtp(String email, String otp) {
+        String key = RESET_PREFIX + email;
         String hash = redis.opsForValue().get(key);
         if (hash == null) return false;
         if (!passwordEncoder.matches(otp, hash)) return false;
