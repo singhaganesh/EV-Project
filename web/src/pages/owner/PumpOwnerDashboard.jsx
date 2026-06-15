@@ -26,10 +26,11 @@ import {
 import StatCard from '../../components/common/StatCard';
 import StatusBadge from '../../components/common/StatusBadge';
 import api from '../../api/axios';
-import { 
-    fetchRevenueTrends, 
-    selectRevenueTrends 
+import {
+    fetchRevenueTrends,
+    selectRevenueTrends
 } from '../../store/stationSlice';
+import { subscribeStationSlots, disconnect } from '../../api/socket';
 
 // Sub-component for a Dispenser row
 const DispenserRow = ({ dispenser }) => {
@@ -125,6 +126,7 @@ export default function PumpOwnerDashboard() {
     });
     const [stations, setStations] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [liveSlots, setLiveSlots] = useState({});
 
     const fetchDashboardData = async () => {
         try {
@@ -163,6 +165,24 @@ export default function PumpOwnerDashboard() {
         fetchDashboardData();
     }, [dispatch]);
 
+    // Subscribe to live slot/gun status for each owned station.
+    useEffect(() => {
+        if (!stations || stations.length === 0) return undefined;
+        const unsubs = stations.map((st) =>
+            subscribeStationSlots(st.id, (slot) => {
+                setLiveSlots((prev) => ({
+                    ...prev,
+                    [slot.id]: { ...slot, _stationName: st.name },
+                }));
+            })
+        );
+        return () => unsubs.forEach((u) => u && u());
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [stations.map((s) => s.id).join(',')]);
+
+    // Drop the socket when leaving the dashboard.
+    useEffect(() => () => disconnect(), []);
+
     if (loading) {
         return (
             <div className="flex items-center justify-center h-[60vh]">
@@ -170,6 +190,8 @@ export default function PumpOwnerDashboard() {
             </div>
         );
     }
+
+    const chargingSlots = Object.values(liveSlots).filter((s) => s.status === 'CHARGING');
 
     return (
         <div className="space-y-8 max-w-[1400px] mx-auto pb-12">
@@ -216,6 +238,43 @@ export default function PumpOwnerDashboard() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 {/* Left Side: Quick Actions & Sparkline */}
                 <div className="lg:col-span-1 space-y-8">
+                    {/* Live Sessions (real-time via WebSocket) */}
+                    <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100/50">
+                        <div className="flex items-center justify-between mb-4">
+                            <div>
+                                <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider">Live</h3>
+                                <p className="text-lg font-bold text-[#1A2234]">Active Sessions</p>
+                            </div>
+                            <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-600">
+                                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                                {chargingSlots.length} charging
+                            </span>
+                        </div>
+
+                        {chargingSlots.length > 0 ? (
+                            <div className="space-y-3 max-h-[220px] overflow-y-auto">
+                                {chargingSlots.map((s) => (
+                                    <div key={s.id} className="flex items-center justify-between bg-slate-50 rounded-xl p-3 border border-slate-100">
+                                        <div className="flex items-center gap-3">
+                                            <BatteryCharging className="w-4 h-4 text-amber-500" />
+                                            <div>
+                                                <p className="text-sm font-semibold text-[#1A2234]">{s.slotNumber || s.slotLabel || `Slot #${s.id}`}</p>
+                                                <p className="text-[11px] text-slate-400">{s._stationName}</p>
+                                            </div>
+                                        </div>
+                                        <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-1 rounded-full">CHARGING</span>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="text-center py-8">
+                                <Activity className="w-8 h-8 text-slate-200 mx-auto mb-2" />
+                                <p className="text-sm text-slate-400 font-medium">No active charging sessions.</p>
+                                <p className="text-[11px] text-slate-300 mt-1">Updates live as drivers plug in.</p>
+                            </div>
+                        )}
+                    </div>
+
                     {/* Revenue Sparkline (The Pulse) */}
                     <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100/50">
                         <div className="flex items-center justify-between mb-4">
