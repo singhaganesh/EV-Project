@@ -150,6 +150,23 @@ export default function LoginPage() {
         }
     };
 
+    const handleResendMfa = async () => {
+        try {
+            const response = await api.post('/auth/resend-mfa', { tempLoginToken });
+            toast.success('A new MFA code has been sent.');
+            
+            if (response.data?.data?.otp) {
+                const otpVal = response.data.data.otp;
+                const digits = otpVal.split('');
+                setOtpDigits(digits);
+                setOtp(otpVal);
+                toast.success(`Dev Autofill: ${otpVal}`);
+            }
+        } catch (err) {
+            toast.error(err.response?.data?.message || 'Could not resend the code.');
+        }
+    };
+
     const handleOtpDigitChange = (index, value) => {
         // Only allow single digit numbers
         if (value && !/^[0-9]$/.test(value)) return;
@@ -350,6 +367,11 @@ export default function LoginPage() {
                                 </button>
                                 {view === 'verify' && (
                                     <button type="button" onClick={handleResend} className="font-semibold text-cyan-500 hover:text-cyan-600 transition-colors">
+                                        Resend code
+                                    </button>
+                                )}
+                                {view === 'mfa' && (
+                                    <button type="button" onClick={handleResendMfa} className="font-semibold text-cyan-500 hover:text-cyan-600 transition-colors">
                                         Resend code
                                     </button>
                                 )}

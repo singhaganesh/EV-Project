@@ -77,6 +77,25 @@ public class MfaOtpService {
         return new MfaChallenge(tempToken, otp);
     }
 
+    /** Regenerates a new MFA OTP for an active temp-login token. Returns the new plaintext OTP, or null if session is invalid. */
+    public String regenerateMfaOtp(String tempToken) {
+        String key = MFA_PREFIX + tempToken;
+        Object userIdObj = redis.opsForHash().get(key, "userId");
+        if (userIdObj == null) return null;
+        String otp = randomOtp();
+        redis.opsForHash().put(key, "otp", passwordEncoder.encode(otp));
+        redis.expire(key, ttl());
+        return otp;
+    }
+
+    /** Retrieves the userId for a temp-login token without consuming/deleting the session. Returns null if expired. */
+    public Long getUserIdFromTempToken(String tempToken) {
+        String key = MFA_PREFIX + tempToken;
+        Object userIdObj = redis.opsForHash().get(key, "userId");
+        if (userIdObj == null) return null;
+        return Long.parseLong(userIdObj.toString());
+    }
+
     /**
      * Validates the OTP for a temp-login token. Returns the userId on success
      * (consuming the challenge), or null if the token/OTP is invalid or expired.

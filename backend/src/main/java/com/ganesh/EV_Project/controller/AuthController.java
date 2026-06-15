@@ -481,6 +481,45 @@ public class AuthController {
                 .build());
     }
 
+    @PostMapping("/resend-mfa")
+    public ResponseEntity<?> resendMfa(@RequestBody Map<String, String> body) {
+        String tempLoginToken = body.get("tempLoginToken");
+        if (tempLoginToken == null) {
+            return ResponseEntity.badRequest().body(APIResponse.builder()
+                    .success(false)
+                    .message("tempLoginToken is required")
+                    .build());
+        }
+
+        Long userId = mfaOtpService.getUserIdFromTempToken(tempLoginToken);
+        if (userId == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(APIResponse.builder()
+                    .success(false)
+                    .message("Session expired or invalid token. Please log in again.")
+                    .build());
+        }
+
+        User user = userService.findById(userId);
+        if (user == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(APIResponse.builder()
+                    .success(false)
+                    .message("User not found")
+                    .build());
+        }
+
+        String newOtp = mfaOtpService.regenerateMfaOtp(tempLoginToken);
+        deliverOtp(user.getEmail(), newOtp, "login");
+
+        Map<String, Object> data = new HashMap<>();
+        if (exposeOtpInResponse) data.put("otp", newOtp);
+
+        return ResponseEntity.ok(APIResponse.builder()
+                .success(true)
+                .message("A new MFA code has been sent.")
+                .data(data.isEmpty() ? null : data)
+                .build());
+    }
+
     @PostMapping("/verify-mfa")
     public ResponseEntity<?> verifyMfa(@RequestBody Map<String, String> body) {
         String tempLoginToken = body.get("tempLoginToken");
