@@ -23,6 +23,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import androidx.navigation.navDeepLink
 import com.ganesh.ev.data.model.User
 import com.ganesh.ev.data.network.RetrofitClient
 import com.ganesh.ev.data.repository.UserPreferencesRepository
@@ -322,7 +323,11 @@ fun EVChargingApp(
 
             composable(
                     route = Screen.StationDetail.route,
-                    arguments = listOf(navArgument("stationId") { type = NavType.LongType })
+                    arguments = listOf(navArgument("stationId") { type = NavType.LongType }),
+                    deepLinks = listOf(
+                        navDeepLink { uriPattern = "https://plugsy.in/station/{stationId}" },
+                        navDeepLink { uriPattern = "plugsy://station/{stationId}" }
+                    )
             ) { backStackEntry ->
                 val stationId = backStackEntry.arguments?.getLong("stationId") ?: return@composable
                 StationDetailScreen(
@@ -417,7 +422,11 @@ fun EVChargingApp(
 
             composable(
                     route = Screen.MyBookings.route,
-                    arguments = listOf(navArgument("userId") { type = NavType.LongType })
+                    arguments = listOf(navArgument("userId") { type = NavType.LongType }),
+                    deepLinks = listOf(
+                        navDeepLink { uriPattern = "https://plugsy.in/bookings/{userId}" },
+                        navDeepLink { uriPattern = "plugsy://bookings/{userId}" }
+                    )
             ) { backStackEntry ->
                 val userId = backStackEntry.arguments?.getLong("userId") ?: return@composable
                 MyBookingsScreen(
@@ -459,6 +468,10 @@ fun EVChargingApp(
                     arguments = listOf(
                         navArgument("bookingId") { type = NavType.LongType },
                         navArgument("isNewSession") { type = NavType.BoolType; defaultValue = true }
+                    ),
+                    deepLinks = listOf(
+                        navDeepLink { uriPattern = "https://plugsy.in/charging/{bookingId}" },
+                        navDeepLink { uriPattern = "plugsy://charging/{bookingId}" }
                     )
             ) { backStackEntry ->
                 val bookingId = backStackEntry.arguments?.getLong("bookingId") ?: return@composable
@@ -482,7 +495,11 @@ fun EVChargingApp(
 
             composable(
                     route = Screen.PaymentSummary.route,
-                    arguments = listOf(navArgument("sessionId") { type = NavType.LongType })
+                    arguments = listOf(navArgument("sessionId") { type = NavType.LongType }),
+                    deepLinks = listOf(
+                        navDeepLink { uriPattern = "https://plugsy.in/payment/{sessionId}" },
+                        navDeepLink { uriPattern = "plugsy://payment/{sessionId}" }
+                    )
             ) { backStackEntry ->
                 val sessionId = backStackEntry.arguments?.getLong("sessionId") ?: return@composable
                 PaymentSummaryScreen(

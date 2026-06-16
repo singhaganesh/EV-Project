@@ -37,6 +37,27 @@
 
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
+            <!-- App Links (https) — requires assetlinks.json at
+                 https://plugsy.in/.well-known/assetlinks.json to verify (CV-12). -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="plugsy.in" />
+                <data android:pathPrefix="/charging" />
+                <data android:pathPrefix="/payment" />
+                <data android:pathPrefix="/bookings" />
+                <data android:pathPrefix="/station" />
+            </intent-filter>
+
+            <!-- Custom scheme — used by notification taps; no domain verification needed. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="plugsy" />
+            </intent-filter>
         </activity>
     </application>
 
