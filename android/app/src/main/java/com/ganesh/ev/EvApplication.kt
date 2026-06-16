@@ -7,6 +7,7 @@ import com.ganesh.ev.data.notifications.Notifications
 import com.ganesh.ev.data.repository.UserPreferencesRepository
 import com.ganesh.ev.service.ChargingManager
 import com.ganesh.ev.util.AppAnalytics
+import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -20,6 +21,7 @@ import kotlinx.coroutines.launch
  * (CV-1). [RetrofitClient] is a Context-less singleton, so it cannot touch
  * DataStore directly — instead we hand it a persister callback here.
  */
+@HiltAndroidApp
 class EvApplication : Application() {
 
     // Process-scoped IO scope for fire-and-forget token persistence.

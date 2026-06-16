@@ -39,6 +39,7 @@ import com.ganesh.ev.ui.screens.*
 import com.ganesh.ev.ui.theme.ClayBottomBar
 import com.ganesh.ev.ui.theme.EvTheme
 import com.ganesh.ev.ui.viewmodel.BookingViewModel
+import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -47,6 +48,7 @@ import com.razorpay.PaymentData
 import android.widget.Toast
 import androidx.lifecycle.lifecycleScope
 
+@AndroidEntryPoint
 class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
 
     private lateinit var userPreferencesRepository: UserPreferencesRepository

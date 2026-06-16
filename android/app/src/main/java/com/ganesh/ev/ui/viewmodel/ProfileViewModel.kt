@@ -4,13 +4,18 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ganesh.ev.data.model.UpdateProfileRequest
 import com.ganesh.ev.data.model.User
-import com.ganesh.ev.data.network.RetrofitClient
+import com.ganesh.ev.data.network.ApiService
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
-class ProfileViewModel : ViewModel() {
+@HiltViewModel
+class ProfileViewModel @Inject constructor(
+        private val apiService: ApiService
+) : ViewModel() {
 
     sealed class DeleteState {
         object Idle : DeleteState()
@@ -37,7 +42,7 @@ class ProfileViewModel : ViewModel() {
             _updateState.value = UpdateState.Saving
             try {
                 val response =
-                        RetrofitClient.apiService.updateProfile(
+                        apiService.updateProfile(
                                 userId,
                                 UpdateProfileRequest(name = name, email = email)
                         )
@@ -62,7 +67,7 @@ class ProfileViewModel : ViewModel() {
         viewModelScope.launch {
             _deleteState.value = DeleteState.Deleting
             try {
-                val response = RetrofitClient.apiService.deleteAccount()
+                val response = apiService.deleteAccount()
                 if (response.isSuccessful && response.body()?.success != false) {
                     _deleteState.value = DeleteState.Deleted
                 } else {

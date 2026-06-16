@@ -13,7 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.ganesh.ev.data.model.User
 import com.ganesh.ev.ui.theme.*
 import com.ganesh.ev.ui.viewmodel.ProfileViewModel
@@ -25,7 +25,7 @@ fun ProfileScreen(
         onAccountDeleted: () -> Unit = onLogout,
         onOpenSettings: () -> Unit = {},
         onProfileUpdated: (User) -> Unit = {},
-        viewModel: ProfileViewModel = viewModel()
+        viewModel: ProfileViewModel = hiltViewModel()
 ) {
         val deleteState by viewModel.deleteState.collectAsState()
         val updateState by viewModel.updateState.collectAsState()
