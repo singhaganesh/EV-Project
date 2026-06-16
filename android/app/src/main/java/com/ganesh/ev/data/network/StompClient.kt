@@ -24,7 +24,12 @@ class StompClient(private val url: String) {
     private val nullTerminator: String = 0.toChar().toString()
 
     private var webSocket: WebSocket? = null
-    private val client = OkHttpClient()
+    // pingInterval makes OkHttp send WebSocket ping frames and surface a dead
+    // peer as onFailure, which triggers our reconnect — without it a half-open
+    // connection can silently freeze telemetry (CV-6).
+    private val client = OkHttpClient.Builder()
+            .pingInterval(20, TimeUnit.SECONDS)
+            .build()
     private val listeners = ConcurrentHashMap<String, (String) -> Unit>()
 
     @Volatile private var isConnected = false
