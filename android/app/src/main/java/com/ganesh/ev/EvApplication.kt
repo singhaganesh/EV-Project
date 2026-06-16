@@ -3,6 +3,7 @@ package com.ganesh.ev
 import android.app.Application
 import com.ganesh.ev.data.network.RetrofitClient
 import com.ganesh.ev.data.repository.UserPreferencesRepository
+import com.ganesh.ev.util.AppAnalytics
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -23,6 +24,9 @@ class EvApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+
+        AppAnalytics.init(this)
+        AppAnalytics.appOpen()
 
         val prefs = UserPreferencesRepository(applicationContext)
 

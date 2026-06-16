@@ -4,6 +4,8 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.google.services)
+    alias(libs.plugins.firebase.crashlytics)
 }
 
 val localProperties = Properties()
@@ -109,6 +111,11 @@ dependencies {
     
     // Material Icons Extended
     implementation("androidx.compose.material:material-icons-extended")
+
+    // Firebase (Crashlytics + Analytics; Messaging added for push)
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.crashlytics)
+    implementation(libs.firebase.analytics)
     
     // Testing
     testImplementation("junit:junit:4.13.2")

@@ -69,6 +69,7 @@ class ChargingViewModel : ViewModel() {
                     
                     if (simpleSession != null && simpleSession.id > 0) {
                         _uiState.value = ChargingUiState.SessionStarted(simpleSession)
+                        com.ganesh.ev.util.AppAnalytics.chargingStarted(bookingId)
                         // Immediately load the full session details
                         loadSession(simpleSession.id)
                         startWebSocketTelemetry(bookingId)
@@ -126,6 +127,7 @@ class ChargingViewModel : ViewModel() {
 
                     if (simpleSession != null && simpleSession.id > 0) {
                         _uiState.value = ChargingUiState.SessionStopped(simpleSession)
+                        com.ganesh.ev.util.AppAnalytics.chargingCompleted(simpleSession.id)
                         stopWebSocketTelemetry()
                         // Force reload to get full details including razorpayOrderId
                         loadSession(simpleSession.id)
@@ -213,6 +215,9 @@ class ChargingViewModel : ViewModel() {
                 val response = RetrofitClient.apiService.verifyPayment(data)
                 if (response.isSuccessful) {
                     val updatedSession = response.body()?.data
+                    if (sessionId > 0) {
+                        com.ganesh.ev.util.AppAnalytics.paymentSuccess(sessionId)
+                    }
                     if (updatedSession != null) {
                         // Directly update the UI with the PAID session data
                         _uiState.value = ChargingUiState.SessionLoaded(updatedSession)
