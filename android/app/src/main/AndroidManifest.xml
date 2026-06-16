@@ -9,6 +9,9 @@
     <!-- Required for charging notifications on Android 13+ (must also be
          requested at runtime before posting notifications). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Keeps the live charging session alive in the background (CV-5). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
     <application
         android:name=".EvApplication"
@@ -68,6 +71,12 @@
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
         </service>
+
+        <!-- Keeps live charging telemetry running in the background (CV-5). -->
+        <service
+            android:name=".service.ChargingForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
     </application>
 
 </manifest>

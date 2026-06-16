@@ -7,8 +7,8 @@ import com.ganesh.ev.data.model.SimpleChargingSession
 import com.ganesh.ev.data.model.SimulatedSession
 import com.ganesh.ev.data.model.StartChargingRequest
 import com.ganesh.ev.data.network.RetrofitClient
-import com.ganesh.ev.data.network.StompClient
-import com.google.gson.Gson
+import com.ganesh.ev.service.ChargingManager
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -34,8 +34,7 @@ class ChargingViewModel : ViewModel() {
     private val _telemetryData = MutableStateFlow<SimulatedSession?>(null)
     val telemetryData: StateFlow<SimulatedSession?> = _telemetryData.asStateFlow()
 
-    private var stompClient: StompClient? = null
-    private val gson = Gson()
+    private var telemetryJob: Job? = null
 
     fun startCharging(bookingId: Long) {
         viewModelScope.launch {
@@ -88,19 +87,22 @@ class ChargingViewModel : ViewModel() {
     }
 
     private fun startWebSocketTelemetry(bookingId: Long) {
-        val baseUrl = com.ganesh.ev.BuildConfig.BASE_URL
-        val wsUrl = baseUrl.replace("http://", "ws://").replace("https://", "wss://") + "ws/websocket"
-        
-        stompClient = StompClient(wsUrl)
-        stompClient?.connect()
-        stompClient?.subscribe("/topic/session/$bookingId") { json ->
-            try {
-                val data = gson.fromJson(json, SimulatedSession::class.java)
-                _telemetryData.value = data
-            } catch (e: Exception) {
-                android.util.Log.e("STOMP", "Error parsing telemetry: ${e.message}")
-            }
+        // The socket now lives in ChargingManager so charging survives the screen
+        // being closed; the ViewModel just mirrors its telemetry (CV-5).
+        ChargingManager.connect(bookingId)
+        observeTelemetry()
+    }
+
+    private fun observeTelemetry() {
+        if (telemetryJob != null) return
+        telemetryJob = viewModelScope.launch {
+            ChargingManager.telemetry.collect { _telemetryData.value = it }
         }
+    }
+
+    private fun detachTelemetry() {
+        telemetryJob?.cancel()
+        telemetryJob = null
     }
 
     fun stopCharging(sessionId: Long) {
@@ -145,14 +147,15 @@ class ChargingViewModel : ViewModel() {
     }
 
     private fun stopWebSocketTelemetry() {
-        stompClient?.disconnect()
-        stompClient = null
+        detachTelemetry()
+        ChargingManager.disconnect()
     }
 
     override fun onCleared() {
         super.onCleared()
-        // Ensure the WebSocket is torn down when the screen/VM is destroyed
-        stopWebSocketTelemetry()
+        // Detach from telemetry but keep ChargingManager + the foreground service
+        // running so charging continues after the screen is closed (CV-5).
+        detachTelemetry()
     }
 
     fun loadSession(sessionId: Long) {
@@ -164,6 +167,7 @@ class ChargingViewModel : ViewModel() {
                     val session = response.body()?.data
                     if (session != null) {
                         _uiState.value = ChargingUiState.SessionLoaded(session)
+                        ChargingManager.setActiveSessionId(session.id)
                         if (session.endTime == null) {
                             session.booking?.id?.let { startWebSocketTelemetry(it) }
                         }
@@ -188,6 +192,7 @@ class ChargingViewModel : ViewModel() {
                     val session = response.body()?.data
                     if (session != null) {
                         _uiState.value = ChargingUiState.SessionLoaded(session)
+                        ChargingManager.setActiveSessionId(session.id)
                         if (session.endTime == null) {
                             startWebSocketTelemetry(bookingId)
                         }

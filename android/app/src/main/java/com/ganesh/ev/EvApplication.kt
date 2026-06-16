@@ -4,6 +4,7 @@ import android.app.Application
 import com.ganesh.ev.data.network.RetrofitClient
 import com.ganesh.ev.data.notifications.Notifications
 import com.ganesh.ev.data.repository.UserPreferencesRepository
+import com.ganesh.ev.service.ChargingManager
 import com.ganesh.ev.util.AppAnalytics
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -30,6 +31,7 @@ class EvApplication : Application() {
         AppAnalytics.appOpen()
 
         Notifications.createChannels(this)
+        ChargingManager.init(this)
 
         val prefs = UserPreferencesRepository(applicationContext)
 
