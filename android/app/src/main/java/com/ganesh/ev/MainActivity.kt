@@ -132,6 +132,7 @@ sealed class Screen(val route: String) {
         fun createRoute(userId: Long) = "history/$userId"
     }
     object Profile : Screen("profile")
+    object Settings : Screen("settings")
     object Onboarding : Screen("onboarding")
 }
 
@@ -587,7 +588,19 @@ fun EVChargingApp(
                                     popUpTo(0) { inclusive = true }
                                 }
                             }
+                        },
+                        onOpenSettings = { navController.navigate(Screen.Settings.route) },
+                        onProfileUpdated = { updated ->
+                            currentUser = updated
+                            coroutineScope.launch { userPreferencesRepository.saveUser(updated) }
                         }
+                )
+            }
+
+            composable(Screen.Settings.route) {
+                SettingsScreen(
+                        userPreferencesRepository = userPreferencesRepository,
+                        onBack = { navController.popBackStack() }
                 )
             }
         }

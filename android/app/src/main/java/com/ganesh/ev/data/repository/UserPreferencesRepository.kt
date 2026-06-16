@@ -25,6 +25,14 @@ class UserPreferencesRepository(private val context: Context) {
         val USER_DATA = stringPreferencesKey("user_data")
         val USER_ID = longPreferencesKey("user_id")
         val SHOULD_SHOW_ONBOARDING = booleanPreferencesKey("should_show_onboarding")
+        val NOTIFICATIONS_ENABLED = booleanPreferencesKey("notifications_enabled")
+    }
+
+    val notificationsEnabled: Flow<Boolean> =
+            context.dataStore.data.map { preferences -> preferences[NOTIFICATIONS_ENABLED] ?: true }
+
+    suspend fun setNotificationsEnabled(enabled: Boolean) {
+        context.dataStore.edit { preferences -> preferences[NOTIFICATIONS_ENABLED] = enabled }
     }
 
     val shouldShowOnboarding: Flow<Boolean> =

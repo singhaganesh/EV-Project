@@ -23,10 +23,16 @@ fun ProfileScreen(
         user: User?,
         onLogout: () -> Unit,
         onAccountDeleted: () -> Unit = onLogout,
+        onOpenSettings: () -> Unit = {},
+        onProfileUpdated: (User) -> Unit = {},
         viewModel: ProfileViewModel = viewModel()
 ) {
         val deleteState by viewModel.deleteState.collectAsState()
+        val updateState by viewModel.updateState.collectAsState()
         var showDeleteDialog by remember { mutableStateOf(false) }
+        var editing by remember { mutableStateOf(false) }
+        var nameField by remember(user) { mutableStateOf(user?.name ?: "") }
+        var emailField by remember(user) { mutableStateOf(user?.email ?: "") }
         val context = LocalContext.current
 
         LaunchedEffect(deleteState) {
@@ -38,6 +44,22 @@ fun ProfileScreen(
                         is ProfileViewModel.DeleteState.Error -> {
                                 Toast.makeText(context, state.message, Toast.LENGTH_LONG).show()
                                 viewModel.resetDeleteState()
+                        }
+                        else -> {}
+                }
+        }
+
+        LaunchedEffect(updateState) {
+                when (val state = updateState) {
+                        is ProfileViewModel.UpdateState.Saved -> {
+                                editing = false
+                                onProfileUpdated(state.user)
+                                Toast.makeText(context, "Profile updated", Toast.LENGTH_SHORT).show()
+                                viewModel.resetUpdateState()
+                        }
+                        is ProfileViewModel.UpdateState.Error -> {
+                                Toast.makeText(context, state.message, Toast.LENGTH_LONG).show()
+                                viewModel.resetUpdateState()
                         }
                         else -> {}
                 }
@@ -90,16 +112,67 @@ fun ProfileScreen(
 
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        Text(
-                                text = user?.name ?: "User",
-                                style = MaterialTheme.typography.headlineMedium
-                        )
+                        if (editing) {
+                                ClayTextField(
+                                        value = nameField,
+                                        onValueChange = { nameField = it },
+                                        label = { Text("Name") },
+                                        modifier = Modifier.fillMaxWidth()
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                ClayTextField(
+                                        value = emailField,
+                                        onValueChange = { emailField = it },
+                                        label = { Text("Email") },
+                                        modifier = Modifier.fillMaxWidth()
+                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+                                val saving = updateState is ProfileViewModel.UpdateState.Saving
+                                Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                        ClayButton(
+                                                onClick = {
+                                                        user?.id?.let {
+                                                                viewModel.updateProfile(
+                                                                        it,
+                                                                        nameField.trim(),
+                                                                        emailField.trim().ifEmpty { null }
+                                                                )
+                                                        }
+                                                },
+                                                enabled = !saving && nameField.isNotBlank(),
+                                                modifier = Modifier.weight(1f)
+                                        ) { Text(if (saving) "Saving…" else "Save") }
+                                        ClayButton(
+                                                onClick = {
+                                                        nameField = user?.name ?: ""
+                                                        emailField = user?.email ?: ""
+                                                        editing = false
+                                                },
+                                                enabled = !saving,
+                                                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                modifier = Modifier.weight(1f)
+                                        ) { Text("Cancel") }
+                                }
+                        } else {
+                                Text(
+                                        text = user?.name ?: "User",
+                                        style = MaterialTheme.typography.headlineMedium
+                                )
 
-                        Text(
-                                text = user?.email ?: "",
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                                Text(
+                                        text = user?.email ?: "",
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+
+                                Spacer(modifier = Modifier.height(8.dp))
+
+                                TextButton(onClick = { editing = true }) { Text("Edit profile") }
+                        }
 
                         if (user?.role != null) {
                                 Spacer(modifier = Modifier.height(8.dp))
@@ -163,6 +236,13 @@ fun ProfileScreen(
                                         )
                                 }
                         }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        ClayOutlinedButton(
+                                onClick = onOpenSettings,
+                                modifier = Modifier.fillMaxWidth()
+                        ) { Text("Settings") }
 
                         Spacer(modifier = Modifier.weight(1f))
 

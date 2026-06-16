@@ -43,6 +43,13 @@ interface ApiService {
         @POST("api/auth/complete-profile")
         suspend fun completeProfile(@Body request: CompleteProfileRequest): Response<AuthResponse>
 
+        // Updates the user's editable profile fields (CV-8b).
+        @PUT("api/users/{id}")
+        suspend fun updateProfile(
+                @Path("id") id: Long,
+                @Body request: com.ganesh.ev.data.model.UpdateProfileRequest
+        ): Response<ApiResponse<com.ganesh.ev.data.model.User>>
+
         @POST("api/auth/refresh-token")
         suspend fun refreshToken(@Body request: com.ganesh.ev.data.model.TokenRefreshRequest): Response<AuthResponse>
 

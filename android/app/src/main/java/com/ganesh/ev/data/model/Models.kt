@@ -147,6 +147,11 @@ data class CompleteProfileRequest(
         val role: String = "CUSTOMER"
 )
 
+data class UpdateProfileRequest(
+        val name: String,
+        val email: String?
+)
+
 data class BookingRequest(
         @SerializedName("userId") val userId: Long,
         @SerializedName("stationId") val stationId: Long,
