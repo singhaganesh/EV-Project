@@ -25,6 +25,10 @@ android/nul
 /backend/src/main/resources/application-dev.properties
 /station-finder-backend/src/main/resources/application-dev.properties
 
+# Firebase service-account private key (server-side FCM credential). Never commit.
+/backend/firebase-service-account.json
+*-firebase-adminsdk-*.json
+
 # Tool output directories
 .agents/
 graphify-out/
