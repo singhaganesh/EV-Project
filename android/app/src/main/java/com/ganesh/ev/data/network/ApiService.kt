@@ -19,6 +19,7 @@ import com.ganesh.ev.data.model.StationWithScore
 import com.ganesh.ev.data.model.ViewportResponse
 import retrofit2.Response
 import retrofit2.http.Body
+import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.PUT
@@ -47,6 +48,11 @@ interface ApiService {
 
         @POST("api/auth/logout")
         suspend fun logout(): Response<ApiResponse<Void>>
+
+        // Deletes the authenticated user's account (server identifies the user
+        // from the JWT). Backend should soft-delete + anonymize PII (CV-8a).
+        @DELETE("api/users/me")
+        suspend fun deleteAccount(): Response<ApiResponse<Void>>
 
         @POST("api/payments/verify")
         suspend fun verifyPayment(@Body data: Map<String, String>): Response<ApiResponse<ChargingSession>>

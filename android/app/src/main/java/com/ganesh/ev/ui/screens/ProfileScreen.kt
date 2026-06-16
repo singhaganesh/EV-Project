@@ -1,5 +1,6 @@
 package com.ganesh.ev.ui.screens
 
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -10,12 +11,38 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ganesh.ev.data.model.User
 import com.ganesh.ev.ui.theme.*
+import com.ganesh.ev.ui.viewmodel.ProfileViewModel
 
 @Composable
-fun ProfileScreen(user: User?, onLogout: () -> Unit) {
+fun ProfileScreen(
+        user: User?,
+        onLogout: () -> Unit,
+        onAccountDeleted: () -> Unit = onLogout,
+        viewModel: ProfileViewModel = viewModel()
+) {
+        val deleteState by viewModel.deleteState.collectAsState()
+        var showDeleteDialog by remember { mutableStateOf(false) }
+        val context = LocalContext.current
+
+        LaunchedEffect(deleteState) {
+                when (val state = deleteState) {
+                        is ProfileViewModel.DeleteState.Deleted -> {
+                                showDeleteDialog = false
+                                onAccountDeleted()
+                        }
+                        is ProfileViewModel.DeleteState.Error -> {
+                                Toast.makeText(context, state.message, Toast.LENGTH_LONG).show()
+                                viewModel.resetDeleteState()
+                        }
+                        else -> {}
+                }
+        }
+
         Box(
                 modifier =
                         Modifier.fillMaxSize()
@@ -146,7 +173,45 @@ fun ProfileScreen(user: User?, onLogout: () -> Unit) {
                                 modifier = Modifier.fillMaxWidth()
                         ) { Text("Logout") }
 
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        TextButton(
+                                onClick = { showDeleteDialog = true },
+                                modifier = Modifier.fillMaxWidth()
+                        ) { Text("Delete Account", color = MaterialTheme.colorScheme.error) }
+
                         Spacer(modifier = Modifier.height(24.dp))
+                }
+
+                if (showDeleteDialog) {
+                        val deleting = deleteState is ProfileViewModel.DeleteState.Deleting
+                        AlertDialog(
+                                onDismissRequest = { if (!deleting) showDeleteDialog = false },
+                                title = { Text("Delete account?") },
+                                text = {
+                                        Text(
+                                                "This permanently deletes your Plugsy account and " +
+                                                        "personal data. This action cannot be undone."
+                                        )
+                                },
+                                confirmButton = {
+                                        TextButton(
+                                                onClick = { viewModel.deleteAccount() },
+                                                enabled = !deleting
+                                        ) {
+                                                Text(
+                                                        if (deleting) "Deleting…" else "Delete",
+                                                        color = MaterialTheme.colorScheme.error
+                                                )
+                                        }
+                                },
+                                dismissButton = {
+                                        TextButton(
+                                                onClick = { showDeleteDialog = false },
+                                                enabled = !deleting
+                                        ) { Text("Cancel") }
+                                }
+                        )
                 }
         }
 }
