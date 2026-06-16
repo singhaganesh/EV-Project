@@ -54,6 +54,12 @@ interface ApiService {
         @DELETE("api/users/me")
         suspend fun deleteAccount(): Response<ApiResponse<Void>>
 
+        // Registers this device's FCM token against the authenticated user (CV-11).
+        @POST("api/users/device-token")
+        suspend fun registerDeviceToken(
+                @Body request: com.ganesh.ev.data.model.DeviceTokenRequest
+        ): Response<ApiResponse<Void>>
+
         @POST("api/payments/verify")
         suspend fun verifyPayment(@Body data: Map<String, String>): Response<ApiResponse<ChargingSession>>
 

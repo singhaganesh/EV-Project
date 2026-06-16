@@ -2,6 +2,7 @@ package com.ganesh.ev
 
 import android.app.Application
 import com.ganesh.ev.data.network.RetrofitClient
+import com.ganesh.ev.data.notifications.Notifications
 import com.ganesh.ev.data.repository.UserPreferencesRepository
 import com.ganesh.ev.util.AppAnalytics
 import kotlinx.coroutines.CoroutineScope
@@ -27,6 +28,8 @@ class EvApplication : Application() {
 
         AppAnalytics.init(this)
         AppAnalytics.appOpen()
+
+        Notifications.createChannels(this)
 
         val prefs = UserPreferencesRepository(applicationContext)
 

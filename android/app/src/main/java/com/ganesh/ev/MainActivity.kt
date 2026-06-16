@@ -1,9 +1,17 @@
 package com.ganesh.ev
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
+import com.ganesh.ev.data.notifications.DeviceTokenRegistrar
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
@@ -149,6 +157,27 @@ fun EVChargingApp(
     var currentUserId by remember { mutableStateOf<Long?>(null) }
     var currentUser by remember { mutableStateOf<User?>(null) }
     val coroutineScope = rememberCoroutineScope()
+    val context = LocalContext.current
+
+    // Once signed in: register the FCM device token and (Android 13+) ask for
+    // notification permission so charge-complete / expiry pushes can show (CV-11).
+    val notifPermissionLauncher = rememberLauncherForActivityResult(
+            ActivityResultContracts.RequestPermission()
+    ) { /* result ignored; the app remains usable either way */ }
+
+    LaunchedEffect(currentUserId) {
+        if (currentUserId != null) {
+            DeviceTokenRegistrar.fetchAndRegister()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                    ContextCompat.checkSelfPermission(
+                            context,
+                            Manifest.permission.POST_NOTIFICATIONS
+                    ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+    }
 
     // Shared ViewModel for Booking flow
     val bookingViewModel: BookingViewModel = viewModel()

@@ -59,6 +59,15 @@
                 <data android:scheme="plugsy" />
             </intent-filter>
         </activity>
+
+        <!-- Firebase Cloud Messaging receiver (CV-11). -->
+        <service
+            android:name=".data.notifications.EvMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
     </application>
 
 </manifest>

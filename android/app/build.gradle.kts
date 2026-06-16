@@ -112,10 +112,11 @@ dependencies {
     // Material Icons Extended
     implementation("androidx.compose.material:material-icons-extended")
 
-    // Firebase (Crashlytics + Analytics; Messaging added for push)
+    // Firebase (Crashlytics + Analytics + Cloud Messaging)
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.crashlytics)
     implementation(libs.firebase.analytics)
+    implementation(libs.firebase.messaging)
     
     // Testing
     testImplementation("junit:junit:4.13.2")
