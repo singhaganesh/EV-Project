@@ -8,6 +8,7 @@ import com.ganesh.ev.data.model.Station
 import com.ganesh.ev.data.model.StationPin
 import com.ganesh.ev.data.model.StationWithScore
 import com.ganesh.ev.data.model.SimulatedSession
+import com.ganesh.ev.data.local.StationCache
 import com.ganesh.ev.data.network.RetrofitClient
 import com.ganesh.ev.data.network.StompClient
 import com.google.gson.Gson
@@ -88,11 +89,23 @@ class StationViewModel : ViewModel() {
             if (response.isSuccessful) {
                 val stations = response.body() ?: emptyList<Station>()
                 _uiState.value = StationUiState.StationsLoaded(stations)
+                StationCache.cache(stations) // keep an offline copy (CV-10)
             } else {
-                _uiState.value = StationUiState.Error("Failed to load stations")
+                emitCachedOrError("Failed to load stations")
             }
         } catch (e: Exception) {
-            _uiState.value = StationUiState.Error("Network error: ${e.message}")
+            emitCachedOrError("Network error: ${e.message}")
+        }
+    }
+
+    // Fall back to the last cached stations when the network is unavailable,
+    // so the list/map isn't blank offline (CV-10).
+    private suspend fun emitCachedOrError(message: String) {
+        val cached = StationCache.cached()
+        if (cached.isNotEmpty()) {
+            _uiState.value = StationUiState.StationsLoaded(cached)
+        } else {
+            _uiState.value = StationUiState.Error(message)
         }
     }
 
@@ -164,6 +177,7 @@ class StationViewModel : ViewModel() {
                     val data = response.body()?.data
                     if (data != null) {
                         val nearby = data.nearbyStations
+                        StationCache.cache(nearby.map { it.station }) // offline copy (CV-10)
 
                         // Only update nearby stations on FIRST load.
                         // After that, nearby only changes when user clicks a pin
