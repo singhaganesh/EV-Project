@@ -1,5 +1,11 @@
 package com.ganesh.ev.ui.screens
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
@@ -48,6 +54,24 @@ fun ChargingScreen(
 
     var isCharging by remember { mutableStateOf(false) }
     var isCompleted by remember { mutableStateOf(false) }
+    // One-shot guard so the error-recovery paths can't loop.
+    var recoveryAttempted by remember { mutableStateOf(false) }
+
+    // Ask for notification permission here (first charging) rather than at login,
+    // so it doesn't collide with the Home screen's location prompt (CV-11).
+    val notifPermissionLauncher = rememberLauncherForActivityResult(
+            ActivityResultContracts.RequestPermission()
+    ) { /* result ignored; charging still works either way */ }
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                ContextCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.POST_NOTIFICATIONS
+                ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
 
     // Pulsing animation for the progress ring
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
@@ -77,8 +101,21 @@ fun ChargingScreen(
         val state = uiState
         android.util.Log.d("ChargingScreen", "Current UI State: ${state.javaClass.simpleName}")
 
-        if (state is ChargingUiState.Error && state.message.contains("Session not found")) {
-            viewModel.startCharging(bookingId)
+        if (state is ChargingUiState.Error && !recoveryAttempted && bookingId > 0) {
+            val msg = state.message.lowercase(Locale.getDefault())
+            when {
+                msg.contains("session not found") -> {
+                    recoveryAttempted = true
+                    viewModel.startCharging(bookingId)
+                }
+                // Asked to START a session that's already running (e.g. opened from
+                // the charging notification) → resume it instead of showing an error.
+                msg.contains("already exists") || msg.contains("not confirmed")
+                        || msg.contains("already ongoing") -> {
+                    recoveryAttempted = true
+                    viewModel.loadSessionByBooking(bookingId)
+                }
+            }
         }
         
         if (state is ChargingUiState.SessionStarted) {

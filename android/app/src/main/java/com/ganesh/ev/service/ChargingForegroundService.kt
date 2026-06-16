@@ -89,7 +89,9 @@ class ChargingForegroundService : Service() {
                         0,
                         Intent(
                                         Intent.ACTION_VIEW,
-                                        Uri.parse("plugsy://charging/${ChargingManager.activeBookingId}")
+                                        // isNewSession=false → resume/show the live session instead
+                                        // of trying to start a new one (which would already exist).
+                                        Uri.parse("plugsy://charging/${ChargingManager.activeBookingId}?isNewSession=false")
                                 )
                                 .setPackage(packageName),
                         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE

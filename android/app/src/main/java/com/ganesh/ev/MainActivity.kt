@@ -1,16 +1,9 @@
 package com.ganesh.ev
 
-import android.Manifest
-import android.content.pm.PackageManager
-import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.ui.platform.LocalContext
-import androidx.core.content.ContextCompat
 import com.ganesh.ev.data.notifications.DeviceTokenRegistrar
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
@@ -160,25 +153,14 @@ fun EVChargingApp(
     var currentUserId by remember { mutableStateOf<Long?>(null) }
     var currentUser by remember { mutableStateOf<User?>(null) }
     val coroutineScope = rememberCoroutineScope()
-    val context = LocalContext.current
 
-    // Once signed in: register the FCM device token and (Android 13+) ask for
-    // notification permission so charge-complete / expiry pushes can show (CV-11).
-    val notifPermissionLauncher = rememberLauncherForActivityResult(
-            ActivityResultContracts.RequestPermission()
-    ) { /* result ignored; the app remains usable either way */ }
-
+    // Once signed in, register this device's FCM token (no UI / permission needed).
+    // The POST_NOTIFICATIONS runtime prompt is requested later, at first charging
+    // (ChargingScreen), so it doesn't race with HomeScreen's location prompt — only
+    // one runtime-permission dialog can be shown at a time (CV-11).
     LaunchedEffect(currentUserId) {
         if (currentUserId != null) {
             DeviceTokenRegistrar.fetchAndRegister()
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                    ContextCompat.checkSelfPermission(
-                            context,
-                            Manifest.permission.POST_NOTIFICATIONS
-                    ) != PackageManager.PERMISSION_GRANTED
-            ) {
-                notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-            }
         }
     }
 
@@ -502,8 +484,8 @@ fun EVChargingApp(
                         navArgument("isNewSession") { type = NavType.BoolType; defaultValue = true }
                     ),
                     deepLinks = listOf(
-                        navDeepLink { uriPattern = "https://plugsy.in/charging/{bookingId}" },
-                        navDeepLink { uriPattern = "plugsy://charging/{bookingId}" }
+                        navDeepLink { uriPattern = "https://plugsy.in/charging/{bookingId}?isNewSession={isNewSession}" },
+                        navDeepLink { uriPattern = "plugsy://charging/{bookingId}?isNewSession={isNewSession}" }
                     )
             ) { backStackEntry ->
                 val bookingId = backStackEntry.arguments?.getLong("bookingId") ?: return@composable
