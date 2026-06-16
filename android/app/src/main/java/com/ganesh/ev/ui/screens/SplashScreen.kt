@@ -57,6 +57,17 @@ fun SplashScreen(
                 }
                 tokenValid = true
                 validToken = token
+            } else if (!refreshToken.isNullOrEmpty() && isRefreshUsable(refreshToken)) {
+                // Access token expired/missing but the refresh token is still usable:
+                // restore the session and let the Authenticator refresh on the first
+                // authenticated call instead of forcing a logout (CV-1).
+                android.util.Log.d("Splash", "Access token stale; restoring via refresh token")
+                if (!token.isNullOrEmpty()) {
+                    RetrofitClient.setAuthToken(token)
+                }
+                RetrofitClient.setRefreshToken(refreshToken)
+                tokenValid = true
+                validToken = token ?: refreshToken
             } else {
                 android.util.Log.d("Splash", "Token invalid or empty, checking onboarding")
                 // If not logged in, check if onboarding is needed
@@ -143,5 +154,25 @@ private fun isTokenStillValid(token: String): Boolean {
         exp > nowSeconds
     } catch (_: Exception) {
         false
+    }
+}
+
+/**
+ * A refresh token is treated as usable unless we can positively prove it has
+ * expired. Opaque (non-JWT) or unparseable tokens get the benefit of the doubt
+ * so the Authenticator can attempt a refresh rather than logging the user out.
+ */
+private fun isRefreshUsable(token: String): Boolean {
+    return try {
+        val parts = token.split(".")
+        if (parts.size < 2) return true // opaque refresh token — assume usable
+
+        val payload = String(Base64.decode(parts[1], Base64.URL_SAFE or Base64.NO_WRAP))
+        val json = JSONObject(payload)
+        if (!json.has("exp")) return true
+
+        json.getLong("exp") > System.currentTimeMillis() / 1000
+    } catch (_: Exception) {
+        true
     }
 }

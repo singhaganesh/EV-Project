@@ -22,6 +22,17 @@ object RetrofitClient {
     @Volatile
     private var refreshToken: String = ""
 
+    // Invoked when the Authenticator rotates tokens, so the new values can be
+    // persisted (e.g. to DataStore) and survive a process restart (CV-1).
+    @Volatile
+    private var tokenPersister: ((access: String, refresh: String?) -> Unit)? = null
+
+    fun setTokenPersister(persister: (access: String, refresh: String?) -> Unit) {
+        synchronized(this) {
+            tokenPersister = persister
+        }
+    }
+
     fun setAuthToken(token: String) {
         synchronized(this) {
             authToken = token
@@ -92,10 +103,18 @@ object RetrofitClient {
                             
                             if (refreshResponse.isSuccessful) {
                                 val newData = refreshResponse.body()?.data
-                                if (newData?.token != null) {
-                                    authToken = newData.token
+                                val newAccess = newData?.token
+                                if (newAccess != null) {
+                                    authToken = newAccess
+                                    // Capture a rotated refresh token if the backend issued one.
+                                    val newRefresh = newData.refreshToken
+                                    if (!newRefresh.isNullOrEmpty()) {
+                                        refreshToken = newRefresh
+                                    }
+                                    // Persist the rotated tokens so they survive a restart (CV-1).
+                                    tokenPersister?.invoke(newAccess, newRefresh)
                                     response.request.newBuilder()
-                                        .header("Authorization", "Bearer $authToken")
+                                        .header("Authorization", "Bearer $newAccess")
                                         .build()
                                 } else null
                             } else null
