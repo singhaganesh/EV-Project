@@ -48,6 +48,9 @@ public class BookingService {
     @Autowired
     private ChargingSessionRepository chargingSessionRepository;
 
+    @Autowired
+    private PushNotificationService pushNotificationService;
+
     /**
      * "Book Now" — instant booking with random connector assignment.
      *
@@ -228,6 +231,38 @@ public class BookingService {
             if (LocalDateTime.now().isAfter(expiration) && !hasSession) {
                 booking.setStatus(BookingStatus.EXPIRED);
                 booking.getSlot().setStatus(SlotStatus.AVAILABLE);
+                bookingRepository.save(booking);
+            }
+        }
+    }
+
+    /**
+     * Remind drivers whose unstarted reservation is about to expire (~5 min out),
+     * once per booking. Runs every 60 seconds. (CV-11)
+     */
+    @Scheduled(fixedRate = 60000)
+    @Transactional
+    public void remindExpiringBookings() {
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime soon = now.plusMinutes(5);
+
+        for (Booking booking : bookingRepository.findByStatus(BookingStatus.CONFIRMED)) {
+            if (booking.getReminderSentAt() != null) continue;
+
+            LocalDateTime expiration = booking.getExpiresAt() != null ? booking.getExpiresAt()
+                    : booking.getStartTime().plusMinutes(expirationMinutes);
+
+            boolean expiringSoon = expiration.isAfter(now) && expiration.isBefore(soon);
+            if (expiringSoon && !chargingSessionRepository.existsByBookingId(booking.getId())) {
+                if (booking.getUser() != null) {
+                    pushNotificationService.sendToUser(
+                            booking.getUser().getId(),
+                            "BOOKING_EXPIRING",
+                            "Reservation expiring",
+                            "Your slot reservation expires in a few minutes. Start charging to keep it.",
+                            "plugsy://bookings/" + booking.getUser().getId());
+                }
+                booking.setReminderSentAt(now);
                 bookingRepository.save(booking);
             }
         }

@@ -42,6 +42,8 @@ public class ChargerSlotService {
     private RazorpayService razorpayService;
     @Autowired
     private WebSocketController webSocketController;
+    @Autowired
+    private PushNotificationService pushNotificationService;
 
     public List<ChargerSlot> getAllSlots() {
         return slotRepository.findAll();
@@ -124,6 +126,16 @@ public class ChargerSlotService {
                 }
             } catch (Exception e) {
                 log.warn("WebSocket driver notify failed: {}", e.getMessage());
+            }
+
+            // ── PUSH: charging force-stopped for maintenance & billed ──
+            if (booking.getUser() != null) {
+                pushNotificationService.sendToUser(
+                        booking.getUser().getId(),
+                        "FORCE_STOPPED",
+                        "Charging stopped",
+                        "Your charging was stopped for maintenance. Please complete payment.",
+                        "plugsy://payment/" + session.getId());
             }
         });
     }

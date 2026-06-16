@@ -8,5 +8,7 @@ public enum UserStatus {
     PENDING_EMAIL_VERIFICATION,
     PENDING_ADMIN_APPROVAL,
     APPROVED,
-    SUSPENDED
+    SUSPENDED,
+    // Account self-deleted: PII anonymized, financial rows retained (CV-8a).
+    DELETED
 }

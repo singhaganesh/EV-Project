@@ -62,6 +62,9 @@ public class ChargingSessionController {
     @Autowired
     private UserService userService;
 
+    @Autowired
+    private com.ganesh.EV_Project.service.PushNotificationService pushNotificationService;
+
     /** True if the user owns the booking behind this session, or is an admin. */
     private boolean ownsBooking(User user, Booking booking) {
         return user != null && booking != null && booking.getUser() != null
@@ -237,6 +240,16 @@ public class ChargingSessionController {
                 ));
             } catch (Exception wsEx) {
                 System.err.println("WebSocket Notification Failed: " + wsEx.getMessage());
+            }
+
+            // ── PUSH: charging complete (reaches the driver who walked away) ──
+            if (booking.getUser() != null) {
+                pushNotificationService.sendToUser(
+                        booking.getUser().getId(),
+                        "CHARGING_COMPLETE",
+                        "Charging complete",
+                        "Your session is done. Amount due: ₹" + cost + ".",
+                        "plugsy://payment/" + savedSession.getId());
             }
 
             return ResponseEntity.ok(APIResponse.builder()

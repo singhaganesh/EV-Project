@@ -60,6 +60,11 @@ public class Booking {
     @Column
     private LocalDateTime expiresAt;
 
+    // When the "reservation expiring" push was sent, so the scheduler sends it
+    // at most once per booking (CV-11).
+    @Column
+    private LocalDateTime reminderSentAt;
+
     @CreationTimestamp
     private LocalDateTime createdAt;
 }
