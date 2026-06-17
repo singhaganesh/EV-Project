@@ -1,176 +1,215 @@
 package com.ganesh.ev.ui.viewmodel
 
+import android.app.Activity
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.ganesh.ev.data.model.AuthResponse
-import com.ganesh.ev.data.model.CompleteProfileRequest
+import com.ganesh.ev.data.model.FirebaseLoginRequest
+import com.ganesh.ev.data.model.UpdateProfileRequest
 import com.ganesh.ev.data.model.User
 import com.ganesh.ev.data.network.RetrofitClient
 import com.ganesh.ev.data.repository.UserPreferencesRepository
+import com.google.firebase.FirebaseException
+import com.google.firebase.FirebaseTooManyRequestsException
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException
+import com.google.firebase.auth.PhoneAuthCredential
+import com.google.firebase.auth.PhoneAuthOptions
+import com.google.firebase.auth.PhoneAuthProvider
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.util.concurrent.TimeUnit
 
 sealed class AuthUiState {
     object Initial : AuthUiState()
     object Loading : AuthUiState()
-    data class OtpSent(val otp: String, val message: String) : AuthUiState()
-    data class OtpValidated(
-        val isNewUser: Boolean, 
-        val token: String?, 
-        val refreshToken: String?,
-        val user: User?
-    ) : AuthUiState()
-    data class ProfileCompleted(val user: User, val token: String) : AuthUiState()
+    // SMS code dispatched; the UI shows the segmented OTP input + resend countdown.
+    object CodeSent : AuthUiState()
+    // Verified, but a brand-new account — collect name/email before continuing.
+    data class NewUserProfile(val user: User) : AuthUiState()
+    data class Success(val user: User, val token: String, val refreshToken: String?) : AuthUiState()
     data class Error(val message: String) : AuthUiState()
 }
 
+/**
+ * Customer phone login via Firebase Phone Auth.
+ *
+ * Firebase sends/verifies the SMS OTP (no DLT needed); on success we exchange the
+ * Firebase ID token for our own JWT at POST /api/auth/firebase-login. Brand-new
+ * accounts then collect name/email via the authenticated profile-update endpoint.
+ */
 class AuthViewModel(
     private val userPreferencesRepository: UserPreferencesRepository? = null
 ) : ViewModel() {
-    
+
     private val _uiState = MutableStateFlow<AuthUiState>(AuthUiState.Initial)
     val uiState: StateFlow<AuthUiState> = _uiState.asStateFlow()
-    
-    private var currentMobileNumber: String = ""
-    
-    fun sendOtp(mobileNumber: String) {
-        viewModelScope.launch {
-            _uiState.value = AuthUiState.Loading
-            currentMobileNumber = mobileNumber
-            
-            try {
-                val response = RetrofitClient.apiService.sendOtp(mobileNumber)
-                if (response.isSuccessful) {
-                    val apiResponse = response.body()
-                    if (apiResponse?.success == true) {
-                        val otp = apiResponse.data?.get("otp") ?: ""
-                        _uiState.value = AuthUiState.OtpSent(otp, apiResponse.message ?: "OTP sent successfully")
-                    } else {
-                        _uiState.value = AuthUiState.Error(apiResponse?.message ?: "Failed to send OTP")
-                    }
-                } else {
-                    _uiState.value = AuthUiState.Error("Failed to send OTP: ${response.message()}")
+
+    private val firebaseAuth: FirebaseAuth = FirebaseAuth.getInstance()
+
+    private var verificationId: String? = null
+    private var resendToken: PhoneAuthProvider.ForceResendingToken? = null
+    private var phoneE164: String = ""
+
+    // Held between firebase-login and profile completion for new users.
+    private var pendingToken: String? = null
+    private var pendingRefresh: String? = null
+    private var pendingUser: User? = null
+
+    private val callbacks = object : PhoneAuthProvider.OnVerificationStateChangedCallbacks() {
+        override fun onVerificationCompleted(credential: PhoneAuthCredential) {
+            // Instant verification / auto-retrieval — sign in without manual entry.
+            signInWithCredential(credential)
+        }
+
+        override fun onVerificationFailed(e: FirebaseException) {
+            _uiState.value = AuthUiState.Error(
+                when (e) {
+                    is FirebaseAuthInvalidCredentialsException -> "Invalid phone number."
+                    is FirebaseTooManyRequestsException ->
+                        "Too many attempts. Please try again later."
+                    else -> e.message ?: "Verification failed. Please try again."
                 }
-            } catch (e: Exception) {
-                _uiState.value = AuthUiState.Error("Network error: ${e.message}")
-            }
+            )
+        }
+
+        override fun onCodeSent(id: String, token: PhoneAuthProvider.ForceResendingToken) {
+            verificationId = id
+            resendToken = token
+            _uiState.value = AuthUiState.CodeSent
         }
     }
-    
-    fun validateOtp(mobileNumber: String, otp: String) {
-        viewModelScope.launch {
-            _uiState.value = AuthUiState.Loading
-            
-            try {
-                val response = RetrofitClient.apiService.validateOtp(mobileNumber, otp)
-                if (response.isSuccessful) {
-                    val authResponse = response.body()
-                    if (authResponse?.success == true) {
-                        val authData = authResponse.data
-                        val isNewUser = authData?.isNewUser ?: true
-                        val token = authData?.token
-                        val user = authData?.user
-                        
-                        if (token != null && token.isNotEmpty()) {
-                            // Existing user - save tokens and user
-                            RetrofitClient.setAuthToken(token)
-                            authData?.refreshToken?.let { 
-                                RetrofitClient.setRefreshToken(it)
-                                userPreferencesRepository?.saveRefreshToken(it)
-                            }
-                            userPreferencesRepository?.saveAuthToken(token)
-                            user?.let { userPreferencesRepository?.saveUser(it) }
-                        }
-                        
-                        _uiState.value = AuthUiState.OtpValidated(
-                            isNewUser = isNewUser,
-                            token = token,
-                            refreshToken = authData?.refreshToken,
-                            user = user
-                        )
-                    } else {
-                        _uiState.value = AuthUiState.Error(authResponse?.message ?: "Invalid OTP")
-                    }
-                } else {
-                    _uiState.value = AuthUiState.Error("Failed to validate OTP: ${response.message()}")
-                }
-            } catch (e: Exception) {
-                _uiState.value = AuthUiState.Error("Network error: ${e.message}")
-            }
-        }
+
+    /** Starts SMS verification for a full E.164 number (e.g. +919876543210). */
+    fun sendCode(activity: Activity, phoneNumberE164: String) {
+        phoneE164 = phoneNumberE164
+        _uiState.value = AuthUiState.Loading
+        PhoneAuthProvider.verifyPhoneNumber(
+            PhoneAuthOptions.newBuilder(firebaseAuth)
+                .setPhoneNumber(phoneNumberE164)
+                .setTimeout(60L, TimeUnit.SECONDS)
+                .setActivity(activity)
+                .setCallbacks(callbacks)
+                .build()
+        )
     }
-    
-    fun completeProfile(name: String, email: String?) {
-        viewModelScope.launch {
-            _uiState.value = AuthUiState.Loading
-            
-            // Treat blank email as null
-            val finalEmail = if (email.isNullOrBlank()) null else email.trim()
-            
-            try {
-                val request = CompleteProfileRequest(
-                    mobileNumber = currentMobileNumber,
-                    name = name,
-                    email = finalEmail
-                )
-                
-                val response = RetrofitClient.apiService.completeProfile(request)
-                if (response.isSuccessful) {
-                    val authResponse = response.body()
-                    if (authResponse?.success == true) {
-                        val authData = authResponse.data
-                        val token = authData?.token
-                        val user = authData?.user
-                        
-                        if (token != null && user != null) {
-                            // Save tokens and user
-                            RetrofitClient.setAuthToken(token)
-                            authData.refreshToken?.let {
-                                RetrofitClient.setRefreshToken(it)
-                                userPreferencesRepository?.saveRefreshToken(it)
-                            }
-                            userPreferencesRepository?.saveAuthToken(token)
-                            userPreferencesRepository?.saveUser(user)
-                            _uiState.value = AuthUiState.ProfileCompleted(user, token)
-                        } else {
-                            // Even if user is null, try to create one
-                            val newUser = User(
-                                id = 0,
-                                mobileNumber = currentMobileNumber,
-                                name = name,
-                                email = finalEmail,
-                                isFirstTimeUser = false,
-                                role = "CUSTOMER",
-                                createdAt = null,
-                                updatedAt = null
-                            )
-                            if (token != null) {
-                                RetrofitClient.setAuthToken(token)
-                                authData?.refreshToken?.let {
-                                    RetrofitClient.setRefreshToken(it)
-                                    userPreferencesRepository?.saveRefreshToken(it)
-                                }
-                                userPreferencesRepository?.saveAuthToken(token)
-                                userPreferencesRepository?.saveUser(newUser)
-                                _uiState.value = AuthUiState.ProfileCompleted(newUser, token)
+
+    /** Re-sends the SMS using the force-resending token from the first send. */
+    fun resendCode(activity: Activity) {
+        _uiState.value = AuthUiState.Loading
+        val builder = PhoneAuthOptions.newBuilder(firebaseAuth)
+            .setPhoneNumber(phoneE164)
+            .setTimeout(60L, TimeUnit.SECONDS)
+            .setActivity(activity)
+            .setCallbacks(callbacks)
+        resendToken?.let { builder.setForceResendingToken(it) }
+        PhoneAuthProvider.verifyPhoneNumber(builder.build())
+    }
+
+    /** Verifies the manually-entered 6-digit code. */
+    fun verifyCode(code: String) {
+        val id = verificationId
+        if (id == null) {
+            _uiState.value = AuthUiState.Error("Please request a code first.")
+            return
+        }
+        signInWithCredential(PhoneAuthProvider.getCredential(id, code))
+    }
+
+    private fun signInWithCredential(credential: PhoneAuthCredential) {
+        _uiState.value = AuthUiState.Loading
+        firebaseAuth.signInWithCredential(credential)
+            .addOnCompleteListener { task ->
+                if (task.isSuccessful) {
+                    task.result?.user?.getIdToken(false)
+                        ?.addOnCompleteListener { tokenTask ->
+                            val idToken = tokenTask.result?.token
+                            if (tokenTask.isSuccessful && idToken != null) {
+                                exchangeWithBackend(idToken)
                             } else {
-                                _uiState.value = AuthUiState.Error("Failed to get user data")
+                                _uiState.value =
+                                    AuthUiState.Error("Could not retrieve login token. Please try again.")
                             }
                         }
+                } else {
+                    val msg = (task.exception as? FirebaseAuthInvalidCredentialsException)
+                        ?.let { "Incorrect code. Please check and try again." }
+                        ?: task.exception?.message ?: "Verification failed."
+                    _uiState.value = AuthUiState.Error(msg)
+                }
+            }
+    }
+
+    private fun exchangeWithBackend(idToken: String) {
+        viewModelScope.launch {
+            try {
+                val response = RetrofitClient.apiService.firebaseLogin(FirebaseLoginRequest(idToken))
+                if (response.isSuccessful && response.body()?.success == true) {
+                    val data = response.body()?.data
+                    val token = data?.token
+                    val user = data?.user
+                    if (token == null || user == null) {
+                        _uiState.value = AuthUiState.Error("Login failed. Please try again.")
+                        return@launch
+                    }
+                    // Persist tokens so the next authenticated call (profile update) works.
+                    RetrofitClient.setAuthToken(token)
+                    userPreferencesRepository?.saveAuthToken(token)
+                    data.refreshToken?.let {
+                        RetrofitClient.setRefreshToken(it)
+                        userPreferencesRepository?.saveRefreshToken(it)
+                    }
+                    userPreferencesRepository?.saveUser(user)
+
+                    pendingToken = token
+                    pendingRefresh = data.refreshToken
+                    pendingUser = user
+
+                    _uiState.value = if (data.isNewUser == true) {
+                        AuthUiState.NewUserProfile(user)
                     } else {
-                        _uiState.value = AuthUiState.Error(authResponse?.message ?: "Failed to complete profile")
+                        AuthUiState.Success(user, token, data.refreshToken)
                     }
                 } else {
-                    _uiState.value = AuthUiState.Error("Failed to complete profile: ${response.message()}")
+                    _uiState.value = AuthUiState.Error(response.body()?.message ?: "Login failed.")
                 }
             } catch (e: Exception) {
                 _uiState.value = AuthUiState.Error("Network error: ${e.message}")
             }
         }
     }
-    
+
+    /** Sets name/email on a brand-new account, then completes login. */
+    fun submitProfile(name: String, email: String?) {
+        val user = pendingUser
+        val token = pendingToken
+        if (user == null || token == null) {
+            _uiState.value = AuthUiState.Error("Session expired. Please sign in again.")
+            return
+        }
+        _uiState.value = AuthUiState.Loading
+        viewModelScope.launch {
+            try {
+                val finalEmail = if (email.isNullOrBlank()) null else email.trim()
+                val response = RetrofitClient.apiService.updateProfile(
+                    user.id,
+                    UpdateProfileRequest(name = name, email = finalEmail)
+                )
+                val updated = response.body()?.data
+                if (response.isSuccessful && response.body()?.success == true && updated != null) {
+                    userPreferencesRepository?.saveUser(updated)
+                    _uiState.value = AuthUiState.Success(updated, token, pendingRefresh)
+                } else {
+                    _uiState.value =
+                        AuthUiState.Error(response.body()?.message ?: "Failed to save profile.")
+                }
+            } catch (e: Exception) {
+                _uiState.value = AuthUiState.Error("Network error: ${e.message}")
+            }
+        }
+    }
+
     fun logout() {
         viewModelScope.launch {
             try {
@@ -178,12 +217,13 @@ class AuthViewModel(
             } catch (e: Exception) {
                 // Ignore logout network error
             }
+            firebaseAuth.signOut()
             RetrofitClient.clearAuthTokens()
             userPreferencesRepository?.clearUserData()
             _uiState.value = AuthUiState.Initial
         }
     }
-    
+
     fun resetState() {
         _uiState.value = AuthUiState.Initial
     }

@@ -6,7 +6,6 @@ import com.ganesh.ev.data.model.Booking
 import com.ganesh.ev.data.model.BookingRequest
 import com.ganesh.ev.data.model.ChargerSlot
 import com.ganesh.ev.data.model.ChargingSession
-import com.ganesh.ev.data.model.CompleteProfileRequest
 import com.ganesh.ev.data.model.LivePowerData
 import com.ganesh.ev.data.model.PaginatedResponse
 import com.ganesh.ev.data.model.Payment
@@ -28,22 +27,16 @@ import retrofit2.http.Query
 
 interface ApiService {
 
-        // Auth APIs
-        @POST("api/auth/send-otp")
-        suspend fun sendOtp(
-                @Query("mobileNumber") mobileNumber: String
-        ): Response<ApiResponse<Map<String, String>>>
-
-        @POST("api/auth/validate-otp")
-        suspend fun validateOtp(
-                @Query("mobileNumber") mobileNumber: String,
-                @Query("otp") otp: String
+        // Auth APIs — customer phone login via Firebase Phone Auth.
+        // The app verifies the SMS OTP with Firebase, then exchanges the
+        // resulting Firebase ID token here for our own JWT + refresh token.
+        @POST("api/auth/firebase-login")
+        suspend fun firebaseLogin(
+                @Body request: com.ganesh.ev.data.model.FirebaseLoginRequest
         ): Response<AuthResponse>
 
-        @POST("api/auth/complete-profile")
-        suspend fun completeProfile(@Body request: CompleteProfileRequest): Response<AuthResponse>
-
-        // Updates the user's editable profile fields (CV-8b).
+        // Updates the user's editable profile fields (CV-8b). Also used to set
+        // name/email for a brand-new phone-login account after firebase-login.
         @PUT("api/users/{id}")
         suspend fun updateProfile(
                 @Path("id") id: Long,

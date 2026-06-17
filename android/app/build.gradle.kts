@@ -119,6 +119,7 @@ dependencies {
     implementation(libs.firebase.crashlytics)
     implementation(libs.firebase.analytics)
     implementation(libs.firebase.messaging)
+    implementation(libs.firebase.auth)
 
     // Room (offline cache)
     implementation(libs.room.runtime)

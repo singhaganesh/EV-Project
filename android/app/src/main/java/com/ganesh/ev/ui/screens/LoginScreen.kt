@@ -1,15 +1,28 @@
 package com.ganesh.ev.ui.screens
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ganesh.ev.data.model.User
@@ -17,69 +30,74 @@ import com.ganesh.ev.ui.theme.*
 import com.ganesh.ev.ui.viewmodel.AuthUiState
 import com.ganesh.ev.ui.viewmodel.AuthViewModel
 import com.ganesh.ev.ui.viewmodel.AuthViewModelFactory
+import kotlinx.coroutines.delay
+
+private enum class AuthStep { MOBILE, OTP, PROFILE }
+
+// Indian mobile numbers: 10 digits starting with 6–9.
+private val INDIAN_MOBILE_REGEX = Regex("^[6-9]\\d{9}$")
+
+private fun Context.findActivity(): Activity? {
+    var ctx: Context? = this
+    while (ctx is ContextWrapper) {
+        if (ctx is Activity) return ctx
+        ctx = ctx.baseContext
+    }
+    return null
+}
 
 @Composable
 fun LoginScreen(
         onLoginSuccess: (User, String?, String?) -> Unit,
         viewModel: AuthViewModel = viewModel(factory = AuthViewModelFactory(LocalContext.current))
 ) {
-    var mobileNumber by remember { mutableStateOf("") }
+    val context = LocalContext.current
+    val activity = remember(context) { context.findActivity() }
+
+    var mobileDigits by remember { mutableStateOf("") }
     var otp by remember { mutableStateOf("") }
     var name by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
-    var showOtpField by remember { mutableStateOf(false) }
-    var showProfileForm by remember { mutableStateOf(false) }
-    var sentOtp by remember { mutableStateOf("") }
-    var currentUser by remember { mutableStateOf<User?>(null) }
+
+    var step by remember { mutableStateOf(AuthStep.MOBILE) }
+    // Bumped each time a code is (re)sent, to (re)start the resend countdown.
+    var resendNonce by remember { mutableStateOf(0) }
+    var resendSeconds by remember { mutableStateOf(0) }
 
     val uiState by viewModel.uiState.collectAsState()
 
     LaunchedEffect(uiState) {
         when (val state = uiState) {
-            is AuthUiState.OtpSent -> {
-                showOtpField = true
-                sentOtp = state.otp
+            is AuthUiState.CodeSent -> {
+                step = AuthStep.OTP
+                resendNonce++
             }
-            is AuthUiState.OtpValidated -> {
-                if (state.isNewUser) {
-                    showOtpField = false
-                    showProfileForm = true
-                } else {
-                    showOtpField = false
-                    showProfileForm = false
-                    if (state.token != null && state.user != null) {
-                        currentUser = state.user
-                        onLoginSuccess(state.user, state.token, state.refreshToken)
-                    } else if (state.token != null) {
-                        val user =
-                                User(
-                                        id = 0,
-                                        mobileNumber = mobileNumber,
-                                        name = "User",
-                                        email = null,
-                                        isFirstTimeUser = false,
-                                        role = "CUSTOMER",
-                                        createdAt = null,
-                                        updatedAt = null
-                                )
-                        currentUser = user
-                        onLoginSuccess(user, state.token, state.refreshToken)
-                    }
-                }
-            }
-            is AuthUiState.ProfileCompleted -> {
-                showOtpField = false
-                showProfileForm = false
-                state.user?.let { currentUser = it }
-                currentUser?.let { onLoginSuccess(it, state.token, null) } // CompleteProfile should also ideally return refreshToken
-            }
-            is AuthUiState.Error -> {
-                showOtpField = false
-                showProfileForm = false
-            }
+            is AuthUiState.NewUserProfile -> step = AuthStep.PROFILE
+            is AuthUiState.Success -> onLoginSuccess(state.user, state.token, state.refreshToken)
             else -> {}
         }
     }
+
+    // Resend countdown — resets to 60s whenever a new code is sent.
+    LaunchedEffect(resendNonce) {
+        if (resendNonce > 0) {
+            resendSeconds = 60
+            while (resendSeconds > 0) {
+                delay(1000)
+                resendSeconds--
+            }
+        }
+    }
+
+    // Auto-submit once all 6 digits are entered (manual path; instant verification
+    // is handled inside the ViewModel callback).
+    LaunchedEffect(otp) {
+        if (otp.length == 6 && uiState is AuthUiState.CodeSent) {
+            viewModel.verifyCode(otp)
+        }
+    }
+
+    val isLoading = uiState is AuthUiState.Loading
 
     Box(
             modifier =
@@ -89,12 +107,9 @@ fun LoginScreen(
                                             Brush.verticalGradient(
                                                     colors =
                                                             listOf(
+                                                                    MaterialTheme.colorScheme.background,
                                                                     MaterialTheme.colorScheme
-                                                                            .background,
-                                                                    MaterialTheme.colorScheme
-                                                                            .surfaceVariant.copy(
-                                                                            alpha = 0.5f
-                                                                    )
+                                                                            .surfaceVariant.copy(alpha = 0.5f)
                                                             )
                                             )
                             )
@@ -122,33 +137,37 @@ fun LoginScreen(
 
             Spacer(modifier = Modifier.height(40.dp))
 
-            when {
-                showProfileForm -> {
+            when (step) {
+                AuthStep.PROFILE -> {
                     ClayProfileForm(
                             name = name,
                             email = email,
                             onNameChange = { name = it },
                             onEmailChange = { email = it },
-                            onSubmit = { viewModel.completeProfile(name, email) },
-                            isLoading = uiState is AuthUiState.Loading
+                            onSubmit = { viewModel.submitProfile(name, email) },
+                            isLoading = isLoading
                     )
                 }
-                showOtpField -> {
+                AuthStep.OTP -> {
                     ClayOtpForm(
                             otp = otp,
-                            sentOtp = sentOtp,
                             onOtpChange = { otp = it },
-                            onSubmit = { viewModel.validateOtp(mobileNumber, otp) },
-                            isLoading = uiState is AuthUiState.Loading,
-                            onResendOtp = { viewModel.sendOtp(mobileNumber) }
+                            onSubmit = { viewModel.verifyCode(otp) },
+                            isLoading = isLoading,
+                            resendSeconds = resendSeconds,
+                            onResend = { activity?.let { viewModel.resendCode(it) } }
                     )
                 }
-                else -> {
+                AuthStep.MOBILE -> {
                     ClayMobileForm(
-                            mobileNumber = mobileNumber,
-                            onMobileChange = { mobileNumber = it },
-                            onSubmit = { viewModel.sendOtp(mobileNumber) },
-                            isLoading = uiState is AuthUiState.Loading
+                            mobileDigits = mobileDigits,
+                            onMobileChange = { input ->
+                                mobileDigits = input.filter { it.isDigit() }.take(10)
+                            },
+                            onSubmit = {
+                                activity?.let { viewModel.sendCode(it, "+91$mobileDigits") }
+                            },
+                            isLoading = isLoading
                     )
                 }
             }
@@ -172,29 +191,54 @@ fun LoginScreen(
 
 @Composable
 fun ClayMobileForm(
-        mobileNumber: String,
+        mobileDigits: String,
         onMobileChange: (String) -> Unit,
         onSubmit: () -> Unit,
         isLoading: Boolean
 ) {
+    val isValid = INDIAN_MOBILE_REGEX.matches(mobileDigits)
+
     ClayCard {
         Text(text = "Enter your mobile number", style = MaterialTheme.typography.titleMedium)
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        ClayTextField(
-                value = mobileNumber,
-                onValueChange = onMobileChange,
-                label = { Text("Mobile Number") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-                modifier = Modifier.fillMaxWidth()
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            // Fixed country code prefix (India).
+            Box(
+                    modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                            .padding(horizontal = 16.dp, vertical = 18.dp)
+            ) {
+                Text("+91", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            }
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            ClayTextField(
+                    value = mobileDigits,
+                    onValueChange = onMobileChange,
+                    label = { Text("Mobile Number") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                    modifier = Modifier.weight(1f)
+            )
+        }
+
+        if (mobileDigits.isNotEmpty() && !isValid) {
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                    text = "Enter a valid 10-digit mobile number.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+            )
+        }
 
         Spacer(modifier = Modifier.height(20.dp))
 
         ClayButton(
                 onClick = onSubmit,
-                enabled = mobileNumber.length >= 10 && !isLoading,
+                enabled = isValid && !isLoading,
                 modifier = Modifier.fillMaxWidth()
         ) {
             if (isLoading) {
@@ -213,45 +257,39 @@ fun ClayMobileForm(
 @Composable
 fun ClayOtpForm(
         otp: String,
-        sentOtp: String,
         onOtpChange: (String) -> Unit,
         onSubmit: () -> Unit,
         isLoading: Boolean,
-        onResendOtp: () -> Unit
+        resendSeconds: Int,
+        onResend: () -> Unit
 ) {
     ClayCard {
-        Text("Enter OTP", style = MaterialTheme.typography.titleMedium)
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        if (sentOtp.isNotEmpty()) {
-            ClayCard(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    cornerRadius = 16.dp
-            ) {
-                Text(
-                        text = "Your OTP: $sentOtp",
-                        style = MaterialTheme.typography.headlineSmall,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            TextButton(onClick = onResendOtp) { Text("Resend OTP") }
-        }
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        ClayTextField(
-                value = otp,
-                onValueChange = onOtpChange,
-                label = { Text("OTP") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.fillMaxWidth()
+        Text("Enter the 6-digit code", style = MaterialTheme.typography.titleMedium)
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+                "We sent an SMS to your phone.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
         Spacer(modifier = Modifier.height(20.dp))
+
+        OtpInputBoxes(
+                value = otp,
+                onValueChange = onOtpChange,
+                enabled = !isLoading,
+                modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        if (resendSeconds > 0) {
+            TextButton(onClick = {}, enabled = false) { Text("Resend in ${resendSeconds}s") }
+        } else {
+            TextButton(onClick = onResend, enabled = !isLoading) { Text("Resend OTP") }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
 
         ClayButton(
                 onClick = onSubmit,
@@ -265,10 +303,66 @@ fun ClayOtpForm(
                         strokeWidth = 2.dp
                 )
             } else {
-                Text("Verify OTP")
+                Text("Verify")
             }
         }
     }
+}
+
+/**
+ * Segmented 6-digit OTP entry: a single hidden text field rendered as 6 boxes.
+ * Typing fills the next box; backspace clears and steps back — driven naturally
+ * by the underlying field value.
+ */
+@Composable
+fun OtpInputBoxes(
+        value: String,
+        onValueChange: (String) -> Unit,
+        enabled: Boolean,
+        length: Int = 6,
+        modifier: Modifier = Modifier
+) {
+    val focusRequester = remember { FocusRequester() }
+    LaunchedEffect(Unit) { focusRequester.requestFocus() }
+
+    BasicTextField(
+            value = TextFieldValue(value, selection = TextRange(value.length)),
+            onValueChange = { tfv ->
+                onValueChange(tfv.text.filter { it.isDigit() }.take(length))
+            },
+            enabled = enabled,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+            modifier = modifier.focusRequester(focusRequester),
+            decorationBox = {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    repeat(length) { index ->
+                        val char = value.getOrNull(index)?.toString() ?: ""
+                        val focused = index == value.length
+                        Box(
+                                modifier = Modifier
+                                        .weight(1f)
+                                        .height(56.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(Color(0xFFF8FEFF))
+                                        .border(
+                                                width = if (focused) 2.dp else 1.dp,
+                                                color = if (focused) MaterialTheme.colorScheme.primary
+                                                        else Color(0xFFCBD5E1),
+                                                shape = RoundedCornerShape(12.dp)
+                                        ),
+                                contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                    text = char,
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF1A2234)
+                            )
+                        }
+                    }
+                }
+            }
+    )
 }
 
 @Composable

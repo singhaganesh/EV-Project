@@ -129,22 +129,13 @@ enum class PaymentStatus {
 }
 
 // Request/Response Models
-data class OtpRequest(val mobileNumber: String)
-
-data class OtpValidateRequest(val mobileNumber: String, val otp: String)
+data class FirebaseLoginRequest(@SerializedName("idToken") val idToken: String)
 
 data class TokenRefreshRequest(val refreshToken: String)
 
 data class DeviceTokenRequest(
         @SerializedName("deviceToken") val deviceToken: String,
         val platform: String = "android"
-)
-
-data class CompleteProfileRequest(
-        @SerializedName("mobileNumber") val mobileNumber: String,
-        val name: String,
-        val email: String?,
-        val role: String = "CUSTOMER"
 )
 
 data class UpdateProfileRequest(
