@@ -40,6 +40,8 @@ android {
         manifestPlaceholders["usesCleartextTraffic"] = "true"
         buildConfigField("String", "BASE_URL", "\"${baseUrl}\"")
         buildConfigField("String", "RAZORPAY_KEY_ID", "\"${razorpayKeyId}\"")
+        // Exposed for the Directions REST call in route planning (E2).
+        buildConfigField("String", "MAPS_API_KEY", "\"${mapsApiKey}\"")
     }
 
     buildTypes {
@@ -107,6 +109,8 @@ dependencies {
     implementation("com.google.maps.android:maps-compose:4.3.0")
     implementation("com.google.android.gms:play-services-maps:18.2.0")
     implementation("com.google.android.gms:play-services-location:21.1.0")
+    // PolyUtil for decoding the Directions overview polyline (E2).
+    implementation("com.google.maps.android:android-maps-utils:3.8.2")
     
     // Razorpay
     implementation("com.razorpay:checkout:1.6.38")

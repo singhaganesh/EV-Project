@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Route
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.rememberCoroutineScope
@@ -157,6 +158,7 @@ sealed class BottomNavItem(val route: String, val icon: ImageVector, val label: 
     object Home : BottomNavItem("home", Icons.Default.Home, "Home")
     object Bookings : BottomNavItem("bottom_bookings", Icons.Default.List, "Bookings")
     object History : BottomNavItem("bottom_history", Icons.Default.Refresh, "History")
+    object Trip : BottomNavItem("trip", Icons.Default.Route, "Trip")
     object Profile : BottomNavItem("profile", Icons.Default.Person, "Profile")
 }
 
@@ -210,6 +212,7 @@ fun EVChargingApp(
                     BottomNavItem.Home,
                     BottomNavItem.Bookings,
                     BottomNavItem.History,
+                    BottomNavItem.Trip,
                     BottomNavItem.Profile
             )
 
@@ -218,7 +221,7 @@ fun EVChargingApp(
 
     val showBottomBar =
             currentDestination?.route in
-                    listOf("home", "bottom_bookings", "bottom_history", "profile") ||
+                    listOf("home", "bottom_bookings", "bottom_history", "trip", "profile") ||
                     currentDestination?.route?.startsWith("bookings/") == true
 
     Scaffold(
@@ -569,6 +572,14 @@ fun EVChargingApp(
 
             composable("bottom_history") {
                 currentUserId?.let { userId -> ChargingHistoryScreen(userId = userId) }
+            }
+
+            composable("trip") {
+                RoutePlanScreen(
+                        onStationClick = { stationId ->
+                            navController.navigate(Screen.StationDetail.createRoute(stationId))
+                        }
+                )
             }
 
             composable(
