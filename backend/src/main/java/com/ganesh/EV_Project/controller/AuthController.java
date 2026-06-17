@@ -10,8 +10,8 @@ import com.ganesh.EV_Project.payload.APIResponse;
 import com.ganesh.EV_Project.repository.BusinessProfileRepository;
 import com.ganesh.EV_Project.service.DocumentStorageService;
 import com.ganesh.EV_Project.service.EmailService;
+import com.ganesh.EV_Project.service.FirebaseAuthService;
 import com.ganesh.EV_Project.service.MfaOtpService;
-import com.ganesh.EV_Project.service.OtpService;
 import com.ganesh.EV_Project.service.RefreshTokenService;
 import com.ganesh.EV_Project.service.UserService;
 import com.ganesh.EV_Project.service.LoginAttemptService;
@@ -39,7 +39,7 @@ public class AuthController {
     private static final Logger log = LoggerFactory.getLogger(AuthController.class);
 
     @Autowired
-    private OtpService otpService;
+    private FirebaseAuthService firebaseAuthService;
 
     @Autowired
     private UserService userService;
@@ -95,93 +95,76 @@ public class AuthController {
         }
     }
 
-    @PostMapping("/send-otp")
-    public ResponseEntity<?> sendOtp(@RequestParam String mobileNumber) {
-        if (loginAttemptService.isBlocked(mobileNumber)) {
-            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
-                    .body(APIResponse.builder()
-                            .success(false)
-                            .message("Too many attempts. You are blocked for 15 minutes.")
-                            .build());
+    /**
+     * Customer phone login via Firebase Phone Auth.
+     *
+     * The client runs the SMS OTP flow with Firebase (Google sends/verifies the
+     * SMS) and posts the resulting Firebase ID token here. We verify it with the
+     * Firebase Admin SDK, read the verified phone number, then find-or-create the
+     * local CUSTOMER account and issue our own JWT + refresh token.
+     *
+     * Because the phone number is cryptographically verified, a brand-new user's
+     * account is created immediately (with a placeholder name); the app then
+     * collects name/email and saves them via the authenticated PUT /api/users/{id}.
+     */
+    @PostMapping("/firebase-login")
+    public ResponseEntity<?> firebaseLogin(@RequestBody Map<String, String> body) {
+        String idToken = body.get("idToken");
+        if (idToken == null || idToken.isBlank()) {
+            return ResponseEntity.badRequest().body(APIResponse.builder()
+                    .success(false)
+                    .message("idToken is required")
+                    .build());
         }
 
-        String otp = otpService.generateOtp(mobileNumber);
-        // Never return the OTP in production responses; only expose under the
-        // dev flag for local testing. Real delivery must go via SMS.
-        Object data = exposeOtpInResponse ? Map.of("otp", otp) : null;
+        String phoneNumber;
+        try {
+            phoneNumber = firebaseAuthService.verifyAndGetPhoneNumber(idToken);
+        } catch (Exception e) {
+            log.warn("Firebase ID token verification failed: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(APIResponse.builder()
+                    .success(false)
+                    .message("Invalid or expired login token. Please sign in again.")
+                    .build());
+        }
+
+        if (phoneNumber == null || phoneNumber.isBlank()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(APIResponse.builder()
+                    .success(false)
+                    .message("Login token has no verified phone number.")
+                    .build());
+        }
+
+        // Firebase returns E.164 (+91XXXXXXXXXX); existing accounts store 10 digits.
+        // Normalize to the last 10 digits so lookups and creation stay consistent.
+        String normalized = normalizePhone(phoneNumber);
+
+        User user = userService.findByPhoneNumber(normalized);
+        boolean isNewUser = false;
+        if (user == null) {
+            isNewUser = true;
+            user = new User();
+            user.setMobileNumber(normalized);
+            user.setRole(User.Role.CUSTOMER);
+            user.setStatus(UserStatus.APPROVED);
+            user.setName("User"); // placeholder until the app completes the profile
+            user = userService.saveUser(user);
+        }
+
+        Map<String, Object> data = issueTokens(user);
+        data.put("isNewUser", isNewUser);
+
         return ResponseEntity.ok(APIResponse.builder()
                 .success(true)
-                .message("OTP sent successfully")
+                .message(isNewUser ? "Account created. Please complete your profile." : "Login successful")
                 .data(data)
                 .build());
     }
 
-    @PostMapping("/validate-otp")
-    public ResponseEntity<?> validateOtp(@RequestParam String mobileNumber,
-                                         @RequestParam String otp) {
-        if (loginAttemptService.isBlocked(mobileNumber)) {
-            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
-                    .body(APIResponse.builder()
-                            .success(false)
-                            .message("Too many attempts. You are blocked for 15 minutes.")
-                            .build());
-        }
-
-        boolean isValid = otpService.validateOtp(mobileNumber, otp);
-        if (!isValid) {
-            int remaining = loginAttemptService.getRemainingAttempts(mobileNumber);
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(APIResponse.builder()
-                    .success(false)
-                    .message("Invalid or expired OTP. " + remaining + " attempts remaining.")
-                    .build());
-        }
-
-        User existingUser = userService.findByPhoneNumber(mobileNumber);
-
-        if (existingUser == null) {
-            return ResponseEntity.ok(APIResponse.builder()
-                    .success(true)
-                    .message("OTP verified successfully. Please complete your profile.")
-                    .data(Map.of("isNewUser", true))
-                    .build());
-        } else {
-            Map<String, Object> claims = new HashMap<>();
-            claims.put("userId", existingUser.getId());
-            claims.put("role", existingUser.getRole().name());
-            String token = jwtUtil.generateToken(mobileNumber, claims);
-            RefreshToken refreshToken = refreshTokenService.createRefreshToken(existingUser.getId());
-
-            return ResponseEntity.ok(APIResponse.builder()
-                    .success(true)
-                    .message("Login successful")
-                    .data(Map.of(
-                            "isNewUser", false,
-                            "token", token,
-                            "refreshToken", refreshToken.getToken(),
-                            "user", existingUser))
-                    .build());
-        }
-    }
-
-    @PostMapping("/complete-profile")
-    public ResponseEntity<?> completeProfile(@RequestBody User user) {
-        User savedUser = userService.saveUser(user);
-
-        Map<String, Object> claims = new HashMap<>();
-        claims.put("userId", savedUser.getId());
-        claims.put("role", savedUser.getRole().name());
-        String token = jwtUtil.generateToken(savedUser.getMobileNumber(), claims);
-        RefreshToken refreshToken = refreshTokenService.createRefreshToken(savedUser.getId());
-
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(APIResponse.builder()
-                        .success(true)
-                        .message("Profile completed successfully")
-                        .data(Map.of(
-                                "token", token,
-                                "refreshToken", refreshToken.getToken(),
-                                "user", savedUser))
-                        .build());
+    /** Keeps only the last 10 digits (drops +91/country code, spaces, dashes, etc.). */
+    private String normalizePhone(String raw) {
+        String digits = raw.replaceAll("\\D", "");
+        return digits.length() > 10 ? digits.substring(digits.length() - 10) : digits;
     }
 
     @PostMapping("/login")

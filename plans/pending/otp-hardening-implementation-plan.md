@@ -8,7 +8,7 @@ This document outlines the business rules, security constraints, and user experi
 
 ### A. Chosen SMS Gateway: Firebase Authentication (Phone Auth)
 * **Requirement:** The application must strictly use **Firebase Authentication (Phone Auth)** as the message broker for dispatching and validating SMS OTPs.
-* **Reasoning:** Leverages Google's infrastructure to handle SMS delivery, auto-retrieval, and basic phone verification at zero cost (under 10,000 monthly verifications) without requiring a separate third-party SMS API subscription (like Twilio or MSG91).
+* **Reasoning:** Leverages Google's infrastructure to handle SMS delivery and compliance directly, allowing us to bypass the TRAI DLT registration regulatory hurdle in India. It is a pay-per-SMS model under the Blaze plan.
 * **Delivery:** The mobile client will trigger SMS verification directly via the Firebase SDK.
 
 ---

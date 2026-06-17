@@ -16,9 +16,9 @@ import java.util.UUID;
  *  - registration email-verification OTP, keyed by userId
  *  - login MFA challenge (temp-login token -> userId + OTP)
  *
- * OTPs are stored hashed (BCrypt) and expire via Redis TTL. This is intentionally
- * separate from {@link OtpService} (mobile/SMS, DB-backed) so the existing app
- * login is left untouched.
+ * OTPs are stored hashed (BCrypt) and expire via Redis TTL. This is the
+ * email-based owner auth flow only; customer phone login is handled separately
+ * by Firebase Phone Auth (see {@link FirebaseAuthService}).
  */
 @Service
 public class MfaOtpService {
