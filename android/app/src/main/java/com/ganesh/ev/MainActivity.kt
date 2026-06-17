@@ -3,6 +3,8 @@ package com.ganesh.ev
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.fragment.app.FragmentActivity
+import com.ganesh.ev.ui.components.BiometricGate
 import androidx.activity.enableEdgeToEdge
 import com.ganesh.ev.data.notifications.DeviceTokenRegistrar
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -43,7 +45,7 @@ import android.widget.Toast
 import androidx.lifecycle.lifecycleScope
 
 @AndroidEntryPoint
-class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
+class MainActivity : FragmentActivity(), PaymentResultWithDataListener {
 
     private lateinit var userPreferencesRepository: UserPreferencesRepository
     private lateinit var chargingViewModel: com.ganesh.ev.ui.viewmodel.ChargingViewModel
@@ -63,13 +65,19 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
                 "DARK" -> true
                 else -> isSystemInDarkTheme()
             }
+            val biometricLock by userPreferencesRepository.biometricLockEnabled
+                    .collectAsState(initial = false)
             EvTheme(darkTheme = darkTheme) {
                 Surface(
                         modifier = Modifier.fillMaxSize(),
                         color = MaterialTheme.colorScheme.background
-                ) { EVChargingApp(userPreferencesRepository, chargingViewModel) { controller ->
-                    navController = controller
-                } }
+                ) {
+                    BiometricGate(enabled = biometricLock) {
+                        EVChargingApp(userPreferencesRepository, chargingViewModel) { controller ->
+                            navController = controller
+                        }
+                    }
+                }
             }
         }
     }

@@ -30,6 +30,15 @@ class UserPreferencesRepository(private val context: Context) {
         val NOTIF_REMINDERS = booleanPreferencesKey("notif_reminders")
         val NOTIF_PAYMENTS = booleanPreferencesKey("notif_payments")
         val THEME_MODE = stringPreferencesKey("theme_mode") // SYSTEM | LIGHT | DARK
+        val BIOMETRIC_LOCK = booleanPreferencesKey("biometric_lock")
+    }
+
+    // Biometric app-lock (H2). Off by default.
+    val biometricLockEnabled: Flow<Boolean> =
+            context.dataStore.data.map { preferences -> preferences[BIOMETRIC_LOCK] ?: false }
+
+    suspend fun setBiometricLockEnabled(enabled: Boolean) {
+        context.dataStore.edit { preferences -> preferences[BIOMETRIC_LOCK] = enabled }
     }
 
     // Theme preference (C3b). Defaults to following the system.

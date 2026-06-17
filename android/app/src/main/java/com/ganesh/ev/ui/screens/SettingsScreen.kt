@@ -34,6 +34,8 @@ fun SettingsScreen(
                 userPreferencesRepository.paymentNotificationsEnabled.collectAsState(initial = true)
         val themeMode by
                 userPreferencesRepository.themeMode.collectAsState(initial = "SYSTEM")
+        val biometricLock by
+                userPreferencesRepository.biometricLockEnabled.collectAsState(initial = false)
 
         Column(
                 modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
@@ -140,6 +142,24 @@ fun SettingsScreen(
                                                 )
                                         }
                                 }
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // ── Security ──
+                        ClayCard(modifier = Modifier.fillMaxWidth()) {
+                                SettingsSwitchRow(
+                                        title = "Biometric app-lock",
+                                        subtitle = "Require fingerprint/face to open the app",
+                                        checked = biometricLock,
+                                        enabled = true,
+                                        onCheckedChange = { enabled ->
+                                                scope.launch {
+                                                        userPreferencesRepository
+                                                                .setBiometricLockEnabled(enabled)
+                                                }
+                                        }
+                                )
                         }
 
                         Spacer(modifier = Modifier.height(16.dp))
