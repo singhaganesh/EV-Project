@@ -91,6 +91,7 @@ object RetrofitClient {
 
                 // Stop after 3 attempts to avoid infinite loops if server is down or token is invalid
                 if (responseCount(response) >= 3) {
+                    SessionEvents.notifySessionExpired()
                     return null
                 }
 
@@ -116,9 +117,18 @@ object RetrofitClient {
                                     response.request.newBuilder()
                                         .header("Authorization", "Bearer $newAccess")
                                         .build()
-                                } else null
-                            } else null
+                                } else {
+                                    // Refresh succeeded but returned no token — unrecoverable.
+                                    SessionEvents.notifySessionExpired()
+                                    null
+                                }
+                            } else {
+                                // Refresh was rejected — the session has truly expired.
+                                SessionEvents.notifySessionExpired()
+                                null
+                            }
                         } catch (e: Exception) {
+                            // Network error (likely offline) — don't force a logout.
                             null
                         }
                     }

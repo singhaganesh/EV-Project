@@ -164,6 +164,21 @@ fun EVChargingApp(
         }
     }
 
+    // Graceful global sign-out (A4): when the session can't be refreshed, clear
+    // state and route to login instead of leaving the user on failing screens.
+    LaunchedEffect(Unit) {
+        com.ganesh.ev.data.network.SessionEvents.loggedOut.collect {
+            userPreferencesRepository.clearUserData()
+            RetrofitClient.clearAuthTokens()
+            currentUserId = null
+            currentUser = null
+            val current = navController.currentDestination?.route
+            if (current != "login" && current != "splash" && current != "onboarding") {
+                navController.navigate("login") { popUpTo(0) { inclusive = true } }
+            }
+        }
+    }
+
     // Shared ViewModel for Booking flow
     val bookingViewModel: BookingViewModel = viewModel()
 
