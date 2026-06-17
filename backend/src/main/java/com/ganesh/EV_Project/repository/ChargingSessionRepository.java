@@ -34,6 +34,15 @@ public interface ChargingSessionRepository extends JpaRepository<ChargingSession
 
     java.util.Optional<ChargingSession> findByRazorpayOrderId(String orderId);
 
+    // Whether a user has ever completed a charging session at a station — gates
+    // who may post a review (F2).
+    @org.springframework.data.jpa.repository.Query("SELECT COUNT(s) > 0 FROM ChargingSession s " +
+            "WHERE s.booking.user.id = :userId AND s.booking.slot.station.id = :stationId " +
+            "AND s.status = 'COMPLETED'")
+    boolean hasCompletedSession(
+            @org.springframework.data.repository.query.Param("userId") Long userId,
+            @org.springframework.data.repository.query.Param("stationId") Long stationId);
+
     java.util.List<ChargingSession> findByBookingUserId(Long userId);
 
     @org.springframework.data.jpa.repository.Query("SELECT MAX(s.endTime) FROM ChargingSession s WHERE s.booking.slot.station.id = :stationId AND s.status = 'COMPLETED'")

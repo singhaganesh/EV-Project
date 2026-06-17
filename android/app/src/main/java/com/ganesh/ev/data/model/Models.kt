@@ -151,6 +151,27 @@ data class Vehicle(
         @SerializedName("connectorType") val connectorType: String?
 )
 
+data class Review(
+        val id: Long,
+        @SerializedName("userName") val userName: String?,
+        val rating: Int,
+        val comment: String?,
+        @SerializedName("createdAt") val createdAt: String?
+)
+
+data class ReviewSummary(
+        val reviews: List<Review> = emptyList(),
+        val average: Double = 0.0,
+        val count: Long = 0,
+        @SerializedName("canReview") val canReview: Boolean = false,
+        @SerializedName("alreadyReviewed") val alreadyReviewed: Boolean = false
+)
+
+data class ReviewRequest(
+        val rating: Int,
+        val comment: String?
+)
+
 data class VehicleRequest(
         val make: String,
         val model: String,

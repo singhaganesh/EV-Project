@@ -5,9 +5,11 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -23,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -32,6 +35,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ganesh.ev.data.model.*
 import com.ganesh.ev.ui.theme.*
 import com.ganesh.ev.ui.viewmodel.FavoritesViewModel
+import com.ganesh.ev.ui.viewmodel.ReviewsViewModel
 import com.ganesh.ev.ui.viewmodel.StationUiState
 import com.ganesh.ev.ui.viewmodel.StationViewModel
 import com.google.android.gms.maps.model.CameraPosition
@@ -188,7 +192,7 @@ fun ClayStationDetailContent(
         when (selectedTab) {
             0 -> ChargerTabContent(slots = slots, slotUpdates = slotUpdates, onBookStation = onBookStation)
             1 -> DetailsTabContent(station = station, powerData = powerData)
-            2 -> ReviewsTabContent()
+            2 -> ReviewsTabContent(stationId = station.id)
         }
     }
 }
@@ -997,29 +1001,163 @@ private fun DetailsTabContent(station: Station, powerData: LivePowerData?) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  Reviews Tab — Placeholder
+//  Reviews Tab (F2)
 // ═══════════════════════════════════════════════════════════════
 @Composable
-private fun ReviewsTabContent() {
-    Box(modifier = Modifier.fillMaxSize().padding(48.dp), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(
-                    Icons.Default.RateReview,
-                    contentDescription = null,
-                    modifier = Modifier.size(64.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-            )
-            Spacer(modifier = Modifier.height(16.dp))
+private fun ReviewsTabContent(
+        stationId: Long,
+        viewModel: ReviewsViewModel = hiltViewModel()
+) {
+    val summary by viewModel.summary.collectAsState()
+    val submitting by viewModel.submitting.collectAsState()
+    val message by viewModel.message.collectAsState()
+    val context = LocalContext.current
+
+    LaunchedEffect(stationId) { viewModel.load(stationId) }
+    LaunchedEffect(message) {
+        message?.let {
+            Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
+            viewModel.clearMessage()
+        }
+    }
+
+    LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        // Summary header
+        item {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                        text = String.format(Locale.US, "%.1f", summary.average),
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                StarRow(rating = summary.average.toInt())
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                        text = "(${summary.count})",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        // Composer — only for users who charged here.
+        if (summary.canReview) {
+            item {
+                ReviewComposer(
+                        alreadyReviewed = summary.alreadyReviewed,
+                        submitting = submitting,
+                        onSubmit = { rating, comment -> viewModel.submit(stationId, rating, comment) }
+                )
+            }
+        }
+
+        if (summary.reviews.isEmpty()) {
+            item {
+                Text(
+                        text = "No reviews yet. Be the first to review this station.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(vertical = 16.dp)
+                )
+            }
+        } else {
+            items(summary.reviews) { review -> ReviewRow(review) }
+        }
+    }
+}
+
+@Composable
+private fun ReviewComposer(
+        alreadyReviewed: Boolean,
+        submitting: Boolean,
+        onSubmit: (rating: Int, comment: String?) -> Unit
+) {
+    var rating by remember { mutableIntStateOf(0) }
+    var comment by remember { mutableStateOf("") }
+
+    ClayCard(modifier = Modifier.fillMaxWidth()) {
+        Text(
+                text = if (alreadyReviewed) "Update your review" else "Write a review",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        // Tappable star picker
+        Row {
+            (1..5).forEach { star ->
+                Icon(
+                        imageVector =
+                                if (star <= rating) Icons.Default.Star else Icons.Default.StarBorder,
+                        contentDescription = "Rate $star",
+                        tint =
+                                if (star <= rating) Color(0xFFFFC107)
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(32.dp).clickable { rating = star }
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        OutlinedTextField(
+                value = comment,
+                onValueChange = { comment = it },
+                label = { Text("Share your experience (optional)") },
+                modifier = Modifier.fillMaxWidth(),
+                minLines = 2
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        ClayButton(
+                onClick = { onSubmit(rating, comment.trim().ifEmpty { null }) },
+                enabled = rating in 1..5 && !submitting,
+                modifier = Modifier.fillMaxWidth()
+        ) { Text(if (submitting) "Submitting…" else "Submit") }
+    }
+}
+
+@Composable
+private fun ReviewRow(review: com.ganesh.ev.data.model.Review) {
+    ClayCard(modifier = Modifier.fillMaxWidth()) {
+        Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+        ) {
             Text(
-                    text = "No reviews yet",
-                    style = MaterialTheme.typography.titleMedium,
+                    text = review.userName ?: "User",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold
+            )
+            StarRow(rating = review.rating)
+        }
+        if (!review.comment.isNullOrBlank()) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(text = review.comment, style = MaterialTheme.typography.bodyMedium)
+        }
+        review.createdAt?.let {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                    text = it.take(10),
+                    style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                    text = "Be the first to review this station",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+        }
+    }
+}
+
+@Composable
+private fun StarRow(rating: Int) {
+    Row {
+        (1..5).forEach { star ->
+            Icon(
+                    imageVector = if (star <= rating) Icons.Default.Star else Icons.Default.StarBorder,
+                    contentDescription = null,
+                    tint = if (star <= rating) Color(0xFFFFC107)
+                    else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                    modifier = Modifier.size(16.dp)
             )
         }
     }
