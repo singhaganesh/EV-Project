@@ -54,6 +54,9 @@ object Notifications {
     }
 
     fun show(context: Context, type: String?, title: String, body: String, deepLink: String?) {
+        // Respect the user's notification preferences (B2).
+        if (!NotificationPrefs.isEnabledFor(type)) return
+
         val channel =
                 when (type) {
                     "CHARGING_COMPLETE", "FORCE_STOPPED" -> CHANNEL_CHARGING

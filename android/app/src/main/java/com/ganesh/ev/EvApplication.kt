@@ -3,6 +3,7 @@ package com.ganesh.ev
 import android.app.Application
 import com.ganesh.ev.data.local.StationCache
 import com.ganesh.ev.data.network.RetrofitClient
+import com.ganesh.ev.data.notifications.NotificationPrefs
 import com.ganesh.ev.data.notifications.Notifications
 import com.ganesh.ev.data.repository.UserPreferencesRepository
 import com.ganesh.ev.service.ChargingManager
@@ -11,6 +12,7 @@ import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 
 /**
@@ -47,5 +49,12 @@ class EvApplication : Application() {
                 }
             }
         }
+
+        // Keep the in-memory notification-pref snapshot in sync so the FCM display
+        // path can honor the user's toggles synchronously (B2).
+        appScope.launch { prefs.notificationsEnabled.collect { NotificationPrefs.masterEnabled = it } }
+        appScope.launch { prefs.chargingNotificationsEnabled.collect { NotificationPrefs.charging = it } }
+        appScope.launch { prefs.reminderNotificationsEnabled.collect { NotificationPrefs.reminders = it } }
+        appScope.launch { prefs.paymentNotificationsEnabled.collect { NotificationPrefs.payments = it } }
     }
 }

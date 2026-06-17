@@ -26,13 +26,38 @@ class UserPreferencesRepository(private val context: Context) {
         val USER_ID = longPreferencesKey("user_id")
         val SHOULD_SHOW_ONBOARDING = booleanPreferencesKey("should_show_onboarding")
         val NOTIFICATIONS_ENABLED = booleanPreferencesKey("notifications_enabled")
+        val NOTIF_CHARGING = booleanPreferencesKey("notif_charging")
+        val NOTIF_REMINDERS = booleanPreferencesKey("notif_reminders")
+        val NOTIF_PAYMENTS = booleanPreferencesKey("notif_payments")
     }
 
+    // Master toggle + per-category toggles (B2). All default on.
     val notificationsEnabled: Flow<Boolean> =
             context.dataStore.data.map { preferences -> preferences[NOTIFICATIONS_ENABLED] ?: true }
 
+    val chargingNotificationsEnabled: Flow<Boolean> =
+            context.dataStore.data.map { preferences -> preferences[NOTIF_CHARGING] ?: true }
+
+    val reminderNotificationsEnabled: Flow<Boolean> =
+            context.dataStore.data.map { preferences -> preferences[NOTIF_REMINDERS] ?: true }
+
+    val paymentNotificationsEnabled: Flow<Boolean> =
+            context.dataStore.data.map { preferences -> preferences[NOTIF_PAYMENTS] ?: true }
+
     suspend fun setNotificationsEnabled(enabled: Boolean) {
         context.dataStore.edit { preferences -> preferences[NOTIFICATIONS_ENABLED] = enabled }
+    }
+
+    suspend fun setChargingNotificationsEnabled(enabled: Boolean) {
+        context.dataStore.edit { preferences -> preferences[NOTIF_CHARGING] = enabled }
+    }
+
+    suspend fun setReminderNotificationsEnabled(enabled: Boolean) {
+        context.dataStore.edit { preferences -> preferences[NOTIF_REMINDERS] = enabled }
+    }
+
+    suspend fun setPaymentNotificationsEnabled(enabled: Boolean) {
+        context.dataStore.edit { preferences -> preferences[NOTIF_PAYMENTS] = enabled }
     }
 
     val shouldShowOnboarding: Flow<Boolean> =

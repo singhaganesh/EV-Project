@@ -26,6 +26,12 @@ fun SettingsScreen(
         val scope = rememberCoroutineScope()
         val notificationsEnabled by
                 userPreferencesRepository.notificationsEnabled.collectAsState(initial = true)
+        val chargingNotifs by
+                userPreferencesRepository.chargingNotificationsEnabled.collectAsState(initial = true)
+        val reminderNotifs by
+                userPreferencesRepository.reminderNotificationsEnabled.collectAsState(initial = true)
+        val paymentNotifs by
+                userPreferencesRepository.paymentNotificationsEnabled.collectAsState(initial = true)
 
         Column(
                 modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
@@ -50,36 +56,59 @@ fun SettingsScreen(
                 ) {
                         // ── Notifications ──
                         ClayCard(modifier = Modifier.fillMaxWidth()) {
-                                Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                        Column(modifier = Modifier.weight(1f)) {
-                                                Text(
-                                                        "Notifications",
-                                                        style = MaterialTheme.typography.titleMedium
-                                                )
-                                                Text(
-                                                        "Charging updates and reminders",
-                                                        style = MaterialTheme.typography.bodySmall,
-                                                        color =
-                                                                MaterialTheme.colorScheme
-                                                                        .onSurfaceVariant
-                                                )
-                                        }
-                                        Switch(
-                                                checked = notificationsEnabled,
-                                                onCheckedChange = { enabled ->
-                                                        scope.launch {
-                                                                userPreferencesRepository
-                                                                        .setNotificationsEnabled(
-                                                                                enabled
-                                                                        )
-                                                        }
+                                SettingsSwitchRow(
+                                        title = "Notifications",
+                                        subtitle = "Master switch for all push alerts",
+                                        checked = notificationsEnabled,
+                                        enabled = true,
+                                        onCheckedChange = { enabled ->
+                                                scope.launch {
+                                                        userPreferencesRepository
+                                                                .setNotificationsEnabled(enabled)
                                                 }
-                                        )
-                                }
+                                        }
+                                )
+
+                                ClayDivider()
+
+                                SettingsSwitchRow(
+                                        title = "Charging",
+                                        subtitle = "Charging complete & stopped alerts",
+                                        checked = chargingNotifs,
+                                        enabled = notificationsEnabled,
+                                        onCheckedChange = { enabled ->
+                                                scope.launch {
+                                                        userPreferencesRepository
+                                                                .setChargingNotificationsEnabled(enabled)
+                                                }
+                                        }
+                                )
+
+                                SettingsSwitchRow(
+                                        title = "Reminders",
+                                        subtitle = "Reservation expiry reminders",
+                                        checked = reminderNotifs,
+                                        enabled = notificationsEnabled,
+                                        onCheckedChange = { enabled ->
+                                                scope.launch {
+                                                        userPreferencesRepository
+                                                                .setReminderNotificationsEnabled(enabled)
+                                                }
+                                        }
+                                )
+
+                                SettingsSwitchRow(
+                                        title = "Payments",
+                                        subtitle = "Payment confirmations",
+                                        checked = paymentNotifs,
+                                        enabled = notificationsEnabled,
+                                        onCheckedChange = { enabled ->
+                                                scope.launch {
+                                                        userPreferencesRepository
+                                                                .setPaymentNotificationsEnabled(enabled)
+                                                }
+                                        }
+                                )
                         }
 
                         Spacer(modifier = Modifier.height(16.dp))
@@ -137,5 +166,39 @@ fun SettingsScreen(
                                 )
                         }
                 }
+        }
+}
+
+@Composable
+private fun SettingsSwitchRow(
+        title: String,
+        subtitle: String,
+        checked: Boolean,
+        enabled: Boolean,
+        onCheckedChange: (Boolean) -> Unit
+) {
+        val contentAlpha = if (enabled) 1f else 0.4f
+        Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+                Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                                title,
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = contentAlpha)
+                        )
+                        Text(
+                                subtitle,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = contentAlpha)
+                        )
+                }
+                Switch(
+                        checked = checked && enabled,
+                        enabled = enabled,
+                        onCheckedChange = onCheckedChange
+                )
         }
 }
