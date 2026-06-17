@@ -27,9 +27,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ganesh.ev.data.model.*
 import com.ganesh.ev.ui.theme.*
+import com.ganesh.ev.ui.viewmodel.FavoritesViewModel
 import com.ganesh.ev.ui.viewmodel.StationUiState
 import com.ganesh.ev.ui.viewmodel.StationViewModel
 import com.google.android.gms.maps.model.CameraPosition
@@ -53,9 +55,14 @@ fun StationDetailScreen(
     val uiState by viewModel.uiState.collectAsState()
     val slotUpdates by viewModel.slotUpdates.collectAsState()
 
-    LaunchedEffect(stationId) { 
+    val favoritesViewModel: FavoritesViewModel = hiltViewModel()
+    val favoriteIds by favoritesViewModel.favoriteIds.collectAsState()
+    val isFavorite = favoriteIds.contains(stationId)
+
+    LaunchedEffect(stationId) {
         viewModel.loadStationDetail(stationId)
         viewModel.subscribeToStation(stationId)
+        favoritesViewModel.loadFavorites()
     }
 
     DisposableEffect(stationId) {
@@ -72,6 +79,21 @@ fun StationDetailScreen(
                                 Icon(
                                         Icons.AutoMirrored.Filled.ArrowBack,
                                         contentDescription = "Back"
+                                )
+                            }
+                        },
+                        actions = {
+                            IconButton(onClick = { favoritesViewModel.toggle(stationId) }) {
+                                Icon(
+                                        imageVector =
+                                                if (isFavorite) Icons.Default.Favorite
+                                                else Icons.Default.FavoriteBorder,
+                                        contentDescription =
+                                                if (isFavorite) "Remove from favorites"
+                                                else "Add to favorites",
+                                        tint =
+                                                if (isFavorite) MaterialTheme.colorScheme.primary
+                                                else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }

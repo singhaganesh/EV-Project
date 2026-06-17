@@ -62,6 +62,16 @@ interface ApiService {
                 @Body request: com.ganesh.ev.data.model.DeviceTokenRequest
         ): Response<ApiResponse<Void>>
 
+        // Favorites (F3) — saved stations for the authenticated user.
+        @GET("api/users/me/favorites")
+        suspend fun getFavorites(): Response<ApiResponse<List<Station>>>
+
+        @POST("api/users/me/favorites/{stationId}")
+        suspend fun addFavorite(@Path("stationId") stationId: Long): Response<ApiResponse<Void>>
+
+        @DELETE("api/users/me/favorites/{stationId}")
+        suspend fun removeFavorite(@Path("stationId") stationId: Long): Response<ApiResponse<Void>>
+
         @POST("api/payments/verify")
         suspend fun verifyPayment(@Body data: Map<String, String>): Response<ApiResponse<ChargingSession>>
 

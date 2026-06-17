@@ -24,6 +24,7 @@ fun ProfileScreen(
         onLogout: () -> Unit,
         onAccountDeleted: () -> Unit = onLogout,
         onOpenSettings: () -> Unit = {},
+        onOpenSaved: () -> Unit = {},
         onProfileUpdated: (User) -> Unit = {},
         viewModel: ProfileViewModel = hiltViewModel()
 ) {
@@ -238,6 +239,13 @@ fun ProfileScreen(
                         }
 
                         Spacer(modifier = Modifier.height(16.dp))
+
+                        ClayOutlinedButton(
+                                onClick = onOpenSaved,
+                                modifier = Modifier.fillMaxWidth()
+                        ) { Text("Saved Stations") }
+
+                        Spacer(modifier = Modifier.height(12.dp))
 
                         ClayOutlinedButton(
                                 onClick = onOpenSettings,
