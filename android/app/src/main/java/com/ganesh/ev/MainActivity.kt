@@ -5,6 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import com.ganesh.ev.data.notifications.DeviceTokenRegistrar
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
@@ -56,12 +57,18 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
 
         enableEdgeToEdge()
         setContent {
-            EvTheme {
+            val themeMode by userPreferencesRepository.themeMode.collectAsState(initial = "SYSTEM")
+            val darkTheme = when (themeMode) {
+                "LIGHT" -> false
+                "DARK" -> true
+                else -> isSystemInDarkTheme()
+            }
+            EvTheme(darkTheme = darkTheme) {
                 Surface(
                         modifier = Modifier.fillMaxSize(),
                         color = MaterialTheme.colorScheme.background
-                ) { EVChargingApp(userPreferencesRepository, chargingViewModel) { controller -> 
-                    navController = controller 
+                ) { EVChargingApp(userPreferencesRepository, chargingViewModel) { controller ->
+                    navController = controller
                 } }
             }
         }

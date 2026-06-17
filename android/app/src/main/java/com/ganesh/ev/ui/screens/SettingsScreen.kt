@@ -32,6 +32,8 @@ fun SettingsScreen(
                 userPreferencesRepository.reminderNotificationsEnabled.collectAsState(initial = true)
         val paymentNotifs by
                 userPreferencesRepository.paymentNotificationsEnabled.collectAsState(initial = true)
+        val themeMode by
+                userPreferencesRepository.themeMode.collectAsState(initial = "SYSTEM")
 
         Column(
                 modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
@@ -113,15 +115,31 @@ fun SettingsScreen(
 
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        // ── Appearance (placeholder) ──
+                        // ── Appearance ──
                         ClayCard(modifier = Modifier.fillMaxWidth()) {
                                 Text("Appearance", style = MaterialTheme.typography.titleMedium)
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                        "Follows your system theme",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                        listOf(
+                                                "SYSTEM" to "System",
+                                                "LIGHT" to "Light",
+                                                "DARK" to "Dark"
+                                        ).forEach { (value, label) ->
+                                                FilterChip(
+                                                        selected = themeMode == value,
+                                                        onClick = {
+                                                                scope.launch {
+                                                                        userPreferencesRepository
+                                                                                .setThemeMode(value)
+                                                                }
+                                                        },
+                                                        label = { Text(label) }
+                                                )
+                                        }
+                                }
                         }
 
                         Spacer(modifier = Modifier.height(16.dp))

@@ -29,6 +29,15 @@ class UserPreferencesRepository(private val context: Context) {
         val NOTIF_CHARGING = booleanPreferencesKey("notif_charging")
         val NOTIF_REMINDERS = booleanPreferencesKey("notif_reminders")
         val NOTIF_PAYMENTS = booleanPreferencesKey("notif_payments")
+        val THEME_MODE = stringPreferencesKey("theme_mode") // SYSTEM | LIGHT | DARK
+    }
+
+    // Theme preference (C3b). Defaults to following the system.
+    val themeMode: Flow<String> =
+            context.dataStore.data.map { preferences -> preferences[THEME_MODE] ?: "SYSTEM" }
+
+    suspend fun setThemeMode(mode: String) {
+        context.dataStore.edit { preferences -> preferences[THEME_MODE] = mode }
     }
 
     // Master toggle + per-category toggles (B2). All default on.
