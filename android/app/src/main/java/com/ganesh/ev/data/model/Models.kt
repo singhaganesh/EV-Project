@@ -143,6 +143,21 @@ data class UpdateProfileRequest(
         val email: String?
 )
 
+data class Vehicle(
+        val id: Long,
+        val make: String?,
+        val model: String?,
+        @SerializedName("batteryKwh") val batteryKwh: Double?,
+        @SerializedName("connectorType") val connectorType: String?
+)
+
+data class VehicleRequest(
+        val make: String,
+        val model: String,
+        @SerializedName("batteryKwh") val batteryKwh: Double?,
+        @SerializedName("connectorType") val connectorType: String?
+)
+
 data class BookingRequest(
         @SerializedName("userId") val userId: Long,
         @SerializedName("stationId") val stationId: Long,

@@ -72,6 +72,18 @@ interface ApiService {
         @DELETE("api/users/me/favorites/{stationId}")
         suspend fun removeFavorite(@Path("stationId") stationId: Long): Response<ApiResponse<Void>>
 
+        // Vehicle garage (C1).
+        @GET("api/users/me/vehicles")
+        suspend fun getVehicles(): Response<ApiResponse<List<com.ganesh.ev.data.model.Vehicle>>>
+
+        @POST("api/users/me/vehicles")
+        suspend fun addVehicle(
+                @Body request: com.ganesh.ev.data.model.VehicleRequest
+        ): Response<ApiResponse<com.ganesh.ev.data.model.Vehicle>>
+
+        @DELETE("api/users/me/vehicles/{id}")
+        suspend fun deleteVehicle(@Path("id") id: Long): Response<ApiResponse<Void>>
+
         @POST("api/payments/verify")
         suspend fun verifyPayment(@Body data: Map<String, String>): Response<ApiResponse<ChargingSession>>
 
