@@ -96,6 +96,24 @@ interface ApiService {
                 @Body request: com.ganesh.ev.data.model.ReviewRequest
         ): Response<ApiResponse<com.ganesh.ev.data.model.Review>>
 
+        // Recurring bookings (G2).
+        @GET("api/users/me/booking-templates")
+        suspend fun getBookingTemplates(): Response<ApiResponse<List<com.ganesh.ev.data.model.BookingTemplate>>>
+
+        @POST("api/users/me/booking-templates")
+        suspend fun createBookingTemplate(
+                @Body request: com.ganesh.ev.data.model.BookingTemplateRequest
+        ): Response<ApiResponse<com.ganesh.ev.data.model.BookingTemplate>>
+
+        @PUT("api/users/me/booking-templates/{id}")
+        suspend fun updateBookingTemplate(
+                @Path("id") id: Long,
+                @Body request: com.ganesh.ev.data.model.BookingTemplateRequest
+        ): Response<ApiResponse<com.ganesh.ev.data.model.BookingTemplate>>
+
+        @DELETE("api/users/me/booking-templates/{id}")
+        suspend fun deleteBookingTemplate(@Path("id") id: Long): Response<ApiResponse<Void>>
+
         @POST("api/payments/verify")
         suspend fun verifyPayment(@Body data: Map<String, String>): Response<ApiResponse<ChargingSession>>
 

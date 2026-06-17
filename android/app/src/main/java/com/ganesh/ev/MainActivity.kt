@@ -151,6 +151,7 @@ sealed class Screen(val route: String) {
     object Settings : Screen("settings")
     object Saved : Screen("saved")
     object Vehicles : Screen("vehicles")
+    object Recurring : Screen("recurring")
     object Onboarding : Screen("onboarding")
 }
 
@@ -625,6 +626,7 @@ fun EVChargingApp(
                         onOpenSettings = { navController.navigate(Screen.Settings.route) },
                         onOpenSaved = { navController.navigate(Screen.Saved.route) },
                         onOpenVehicles = { navController.navigate(Screen.Vehicles.route) },
+                        onOpenRecurring = { navController.navigate(Screen.Recurring.route) },
                         onProfileUpdated = { updated ->
                             currentUser = updated
                             coroutineScope.launch { userPreferencesRepository.saveUser(updated) }
@@ -651,6 +653,10 @@ fun EVChargingApp(
 
             composable(Screen.Vehicles.route) {
                 VehiclesScreen(onBack = { navController.popBackStack() })
+            }
+
+            composable(Screen.Recurring.route) {
+                RecurringBookingsScreen(onBack = { navController.popBackStack() })
             }
         }
     }

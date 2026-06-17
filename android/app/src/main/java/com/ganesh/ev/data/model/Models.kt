@@ -172,6 +172,27 @@ data class ReviewRequest(
         val comment: String?
 )
 
+data class BookingTemplate(
+        val id: Long,
+        @SerializedName("stationId") val stationId: Long,
+        @SerializedName("vehicleId") val vehicleId: Long?,
+        @SerializedName("connectorType") val connectorType: String,
+        @SerializedName("vehicleType") val vehicleType: String,
+        @SerializedName("timeOfDay") val timeOfDay: String,   // "HH:mm[:ss]"
+        @SerializedName("daysOfWeek") val daysOfWeek: String,  // CSV "MON,TUE"
+        val active: Boolean
+)
+
+data class BookingTemplateRequest(
+        @SerializedName("stationId") val stationId: Long,
+        @SerializedName("vehicleId") val vehicleId: Long?,
+        @SerializedName("connectorType") val connectorType: String,
+        @SerializedName("vehicleType") val vehicleType: String,
+        @SerializedName("timeOfDay") val timeOfDay: String,   // "HH:mm"
+        @SerializedName("daysOfWeek") val daysOfWeek: String,
+        val active: Boolean? = null
+)
+
 data class VehicleRequest(
         val make: String,
         val model: String,

@@ -26,6 +26,7 @@ fun ProfileScreen(
         onOpenSettings: () -> Unit = {},
         onOpenSaved: () -> Unit = {},
         onOpenVehicles: () -> Unit = {},
+        onOpenRecurring: () -> Unit = {},
         onProfileUpdated: (User) -> Unit = {},
         viewModel: ProfileViewModel = hiltViewModel()
 ) {
@@ -252,6 +253,13 @@ fun ProfileScreen(
                                 onClick = onOpenVehicles,
                                 modifier = Modifier.fillMaxWidth()
                         ) { Text("My Vehicles") }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        ClayOutlinedButton(
+                                onClick = onOpenRecurring,
+                                modifier = Modifier.fillMaxWidth()
+                        ) { Text("Recurring Bookings") }
 
                         Spacer(modifier = Modifier.height(12.dp))
 
