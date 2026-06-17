@@ -6,8 +6,11 @@ import com.ganesh.ev.data.model.ChargingSession
 import com.ganesh.ev.data.model.SimpleChargingSession
 import com.ganesh.ev.data.model.SimulatedSession
 import com.ganesh.ev.data.model.StartChargingRequest
+import com.ganesh.ev.data.local.JsonStore
 import com.ganesh.ev.data.network.RetrofitClient
 import com.ganesh.ev.service.ChargingManager
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -245,12 +248,26 @@ class ChargingViewModel : ViewModel() {
                 if (response.isSuccessful) {
                     val sessions = response.body()?.data ?: emptyList()
                     _uiState.value = ChargingUiState.SessionsLoaded(sessions)
+                    // Keep an offline copy for the next no-network load (A2).
+                    JsonStore.put("history_$userId", Gson().toJson(sessions))
                 } else {
-                    _uiState.value = ChargingUiState.Error("Failed to load history")
+                    emitCachedHistoryOr(userId, "Failed to load history")
                 }
             } catch (e: Exception) {
-                _uiState.value = ChargingUiState.Error("Network error: ${e.message}")
+                emitCachedHistoryOr(userId, "Network error: ${e.message}")
             }
+        }
+    }
+
+    // Serve the last cached history when the network is unavailable (A2).
+    private suspend fun emitCachedHistoryOr(userId: Long, message: String) {
+        val json = JsonStore.get("history_$userId")
+        if (json != null) {
+            val type = object : TypeToken<List<ChargingSession>>() {}.type
+            val cached: List<ChargingSession> = Gson().fromJson(json, type)
+            _uiState.value = ChargingUiState.SessionsLoaded(cached)
+        } else {
+            _uiState.value = ChargingUiState.Error(message)
         }
     }
 

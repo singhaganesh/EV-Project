@@ -1,6 +1,7 @@
 package com.ganesh.ev
 
 import android.app.Application
+import com.ganesh.ev.data.local.JsonStore
 import com.ganesh.ev.data.local.StationCache
 import com.ganesh.ev.data.network.RetrofitClient
 import com.ganesh.ev.data.notifications.NotificationPrefs
@@ -38,6 +39,7 @@ class EvApplication : Application() {
         Notifications.createChannels(this)
         ChargingManager.init(this)
         StationCache.init(this)
+        JsonStore.init(this)
 
         val prefs = UserPreferencesRepository(applicationContext)
 

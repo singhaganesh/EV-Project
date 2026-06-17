@@ -14,7 +14,7 @@ class EvMessagingService : FirebaseMessagingService() {
 
     override fun onNewToken(token: String) {
         super.onNewToken(token)
-        DeviceTokenRegistrar.register(token)
+        DeviceTokenRegistrar.enqueue(applicationContext)
     }
 
     override fun onMessageReceived(message: RemoteMessage) {

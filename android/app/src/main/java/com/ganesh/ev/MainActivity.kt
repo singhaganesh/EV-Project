@@ -19,6 +19,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavType
@@ -169,6 +170,7 @@ fun EVChargingApp(
     var currentUserId by remember { mutableStateOf<Long?>(null) }
     var currentUser by remember { mutableStateOf<User?>(null) }
     val coroutineScope = rememberCoroutineScope()
+    val appContext = LocalContext.current.applicationContext
 
     // Once signed in, register this device's FCM token (no UI / permission needed).
     // The POST_NOTIFICATIONS runtime prompt is requested later, at first charging
@@ -176,7 +178,7 @@ fun EVChargingApp(
     // one runtime-permission dialog can be shown at a time (CV-11).
     LaunchedEffect(currentUserId) {
         if (currentUserId != null) {
-            DeviceTokenRegistrar.fetchAndRegister()
+            DeviceTokenRegistrar.enqueue(appContext)
         }
     }
 

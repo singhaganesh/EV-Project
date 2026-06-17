@@ -1,38 +1,38 @@
 package com.ganesh.ev.data.notifications
 
-import com.ganesh.ev.data.model.DeviceTokenRequest
-import com.ganesh.ev.data.network.RetrofitClient
-import com.google.firebase.messaging.FirebaseMessaging
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
+import android.content.Context
+import androidx.work.BackoffPolicy
+import androidx.work.Constraints
+import androidx.work.ExistingWorkPolicy
+import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
+import androidx.work.WorkRequest
+import java.util.concurrent.TimeUnit
 
 /**
- * Registers this device's FCM token with the backend so the user can receive
- * push notifications (CV-11). Registration is skipped until the user is logged
- * in; [com.ganesh.ev.data.notifications.EvMessagingService] re-registers when the
- * token rotates.
+ * Registers this device's FCM token with the backend (CV-11) via WorkManager so
+ * a failed registration is retried durably (A2). Enqueued after login and on
+ * token rotation; the worker no-ops until the user is authenticated.
  */
 object DeviceTokenRegistrar {
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private const val WORK_NAME = "device-token-registration"
 
-    /** Fetches the current FCM token and registers it if the user is logged in. */
-    fun fetchAndRegister() {
-        FirebaseMessaging.getInstance().token.addOnSuccessListener { token ->
-            register(token)
-        }
-    }
-
-    fun register(token: String) {
-        if (RetrofitClient.getAuthToken().isEmpty()) return
-        scope.launch {
-            try {
-                RetrofitClient.apiService.registerDeviceToken(DeviceTokenRequest(token))
-            } catch (_: Exception) {
-                // Non-fatal: retried on next login or token rotation.
-            }
-        }
+    fun enqueue(context: Context) {
+        val request = OneTimeWorkRequestBuilder<DeviceTokenWorker>()
+                .setConstraints(
+                        Constraints.Builder()
+                                .setRequiredNetworkType(NetworkType.CONNECTED)
+                                .build()
+                )
+                .setBackoffCriteria(
+                        BackoffPolicy.EXPONENTIAL,
+                        WorkRequest.MIN_BACKOFF_MILLIS,
+                        TimeUnit.MILLISECONDS
+                )
+                .build()
+        WorkManager.getInstance(context)
+                .enqueueUniqueWork(WORK_NAME, ExistingWorkPolicy.REPLACE, request)
     }
 }

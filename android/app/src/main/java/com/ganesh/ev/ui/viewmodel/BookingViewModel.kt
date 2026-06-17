@@ -6,7 +6,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ganesh.ev.data.model.Booking
 import com.ganesh.ev.data.model.BookingRequest
+import com.ganesh.ev.data.local.JsonStore
 import com.ganesh.ev.data.network.RetrofitClient
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -123,22 +126,39 @@ class BookingViewModel : ViewModel() {
                     if (paginatedData != null) {
                         val newBookings = paginatedData.content
                         _bookingsList.value = if (isRefresh) newBookings else _bookingsList.value + newBookings
-                        
+
                         currentPage++
                         isLastPage = paginatedData.last
-                        
+
                         _uiState.value = BookingUiState.BookingsLoaded(_bookingsList.value)
+                        // Cache the first page for offline viewing (A2).
+                        if (isRefresh) JsonStore.put("bookings_$userId", Gson().toJson(_bookingsList.value))
                     } else {
                         if (isRefresh) _uiState.value = BookingUiState.Error("No bookings found")
                     }
                 } else {
-                    _uiState.value = BookingUiState.Error("Failed to load bookings: ${response.message()}")
+                    if (isRefresh) emitCachedBookingsOr(userId, "Failed to load bookings: ${response.message()}")
+                    else _uiState.value = BookingUiState.Error("Failed to load bookings: ${response.message()}")
                 }
             } catch (e: Exception) {
-                _uiState.value = BookingUiState.Error("Network error: ${e.message}")
+                if (isRefresh) emitCachedBookingsOr(userId, "Network error: ${e.message}")
+                else _uiState.value = BookingUiState.Error("Network error: ${e.message}")
             } finally {
                 isFetchingNextPage = false
             }
+        }
+    }
+
+    // Serve the last cached bookings when the network is unavailable (A2).
+    private suspend fun emitCachedBookingsOr(userId: Long, message: String) {
+        val json = JsonStore.get("bookings_$userId")
+        if (json != null) {
+            val type = object : TypeToken<List<Booking>>() {}.type
+            val cached: List<Booking> = Gson().fromJson(json, type)
+            _bookingsList.value = cached
+            _uiState.value = BookingUiState.BookingsLoaded(cached)
+        } else {
+            _uiState.value = BookingUiState.Error(message)
         }
     }
 
