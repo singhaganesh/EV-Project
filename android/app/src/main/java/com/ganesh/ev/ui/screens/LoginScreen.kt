@@ -1,8 +1,17 @@
 package com.ganesh.ev.ui.screens
 
 import android.app.Activity
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.ContextWrapper
+import android.content.Intent
+import android.content.IntentFilter
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import com.google.android.gms.auth.api.phone.SmsRetriever
+import com.google.android.gms.common.api.CommonStatusCodes
+import com.google.android.gms.common.api.Status
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -96,6 +105,56 @@ fun LoginScreen(
     LaunchedEffect(otp) {
         if (otp.length == 6 && uiState is AuthUiState.CodeSent) {
             viewModel.verifyCode(otp)
+        }
+    }
+
+    // ── SMS User Consent: auto-fill the OTP from the incoming SMS (one-tap) ──
+    val smsConsentLauncher = rememberLauncherForActivityResult(
+            ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val message = result.data?.getStringExtra(SmsRetriever.EXTRA_SMS_MESSAGE)
+            val code = message?.let { Regex("\\d{6}").find(it)?.value }
+            if (code != null) otp = code // fills the boxes and triggers auto-submit
+        }
+    }
+
+    // Listen for the verification SMS only while the OTP step is showing.
+    DisposableEffect(step) {
+        if (step != AuthStep.OTP) {
+            onDispose { }
+        } else {
+            val receiver = object : BroadcastReceiver() {
+                override fun onReceive(ctx: Context?, intent: Intent?) {
+                    if (intent?.action != SmsRetriever.SMS_RETRIEVED_ACTION) return
+                    val extras = intent.extras ?: return
+                    val status = extras.get(SmsRetriever.EXTRA_STATUS) as? Status ?: return
+                    if (status.statusCode == CommonStatusCodes.SUCCESS) {
+                        @Suppress("DEPRECATION")
+                        val consentIntent =
+                                extras.getParcelable<Intent>(SmsRetriever.EXTRA_CONSENT_INTENT)
+                        try {
+                            consentIntent?.let { smsConsentLauncher.launch(it) }
+                        } catch (_: Exception) { /* consent UI unavailable; user types manually */ }
+                    }
+                }
+            }
+            ContextCompat.registerReceiver(
+                    context,
+                    receiver,
+                    IntentFilter(SmsRetriever.SMS_RETRIEVED_ACTION),
+                    SmsRetriever.SEND_PERMISSION,
+                    null,
+                    ContextCompat.RECEIVER_EXPORTED
+            )
+            // Start listening for an SMS from any sender (5-minute window).
+            SmsRetriever.getClient(context).startSmsUserConsent(null)
+
+            onDispose {
+                try {
+                    context.unregisterReceiver(receiver)
+                } catch (_: Exception) { /* already unregistered */ }
+            }
         }
     }
 

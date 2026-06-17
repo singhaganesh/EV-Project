@@ -121,6 +121,9 @@ dependencies {
     implementation(libs.firebase.messaging)
     implementation(libs.firebase.auth)
 
+    // SMS User Consent API — auto-read the incoming OTP (one-tap, no READ_SMS).
+    implementation(libs.play.services.auth.api.phone)
+
     // Room (offline cache)
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)

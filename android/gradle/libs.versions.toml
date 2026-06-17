@@ -15,6 +15,7 @@ ksp = "2.2.10-2.0.2"
 room = "2.7.1"
 hilt = "2.57.1"
 hiltNavigationCompose = "1.2.0"
+playServicesAuthApiPhone = "18.0.1"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -42,6 +43,7 @@ room-compiler = { group = "androidx.room", name = "room-compiler", version.ref =
 hilt-android = { group = "com.google.dagger", name = "hilt-android", version.ref = "hilt" }
 hilt-compiler = { group = "com.google.dagger", name = "hilt-compiler", version.ref = "hilt" }
 hilt-navigation-compose = { group = "androidx.hilt", name = "hilt-navigation-compose", version.ref = "hiltNavigationCompose" }
+play-services-auth-api-phone = { group = "com.google.android.gms", name = "play-services-auth-api-phone", version.ref = "playServicesAuthApiPhone" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
