@@ -60,6 +60,8 @@ fun LoginScreen(
     var email by remember { mutableStateOf("") }
 
     var step by remember { mutableStateOf(AuthStep.MOBILE) }
+    // WhatsApp-style "is this number correct?" confirmation before sending the SMS.
+    var showConfirmDialog by remember { mutableStateOf(false) }
     // Bumped each time a code is (re)sent, to (re)start the resend countdown.
     var resendNonce by remember { mutableStateOf(0) }
     var resendSeconds by remember { mutableStateOf(0) }
@@ -164,9 +166,7 @@ fun LoginScreen(
                             onMobileChange = { input ->
                                 mobileDigits = input.filter { it.isDigit() }.take(10)
                             },
-                            onSubmit = {
-                                activity?.let { viewModel.sendCode(it, "+91$mobileDigits") }
-                            },
+                            onSubmit = { showConfirmDialog = true },
                             isLoading = isLoading
                     )
                 }
@@ -185,6 +185,28 @@ fun LoginScreen(
                     )
                 }
             }
+        }
+
+        if (showConfirmDialog) {
+            AlertDialog(
+                    onDismissRequest = { showConfirmDialog = false },
+                    text = {
+                        Text(
+                                "We will be verifying the phone number:\n\n" +
+                                        "+91 $mobileDigits\n\n" +
+                                        "Is this OK, or would you like to edit the number?"
+                        )
+                    },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            showConfirmDialog = false
+                            activity?.let { viewModel.sendCode(it, "+91$mobileDigits") }
+                        }) { Text("OK") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showConfirmDialog = false }) { Text("EDIT") }
+                    }
+            )
         }
     }
 }
