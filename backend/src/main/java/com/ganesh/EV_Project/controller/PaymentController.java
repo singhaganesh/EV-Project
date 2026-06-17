@@ -1,16 +1,24 @@
 package com.ganesh.EV_Project.controller;
 
 import com.ganesh.EV_Project.enums.SlotStatus;
+import com.ganesh.EV_Project.model.Booking;
 import com.ganesh.EV_Project.model.ChargerSlot;
 import com.ganesh.EV_Project.model.ChargingSession;
 import com.ganesh.EV_Project.model.Payment;
+import com.ganesh.EV_Project.model.User;
 import com.ganesh.EV_Project.payload.APIResponse;
 import com.ganesh.EV_Project.repository.ChargerSlotRepository;
 import com.ganesh.EV_Project.repository.ChargingSessionRepository;
 import com.ganesh.EV_Project.repository.PaymentRepository;
 import com.ganesh.EV_Project.service.RazorpayService;
+import com.ganesh.EV_Project.service.ReceiptService;
+import com.ganesh.EV_Project.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
@@ -31,6 +39,56 @@ public class PaymentController {
 
     @Autowired
     private ChargerSlotRepository slotRepository;
+
+    @Autowired
+    private ReceiptService receiptService;
+
+    @Autowired
+    private UserService userService;
+
+    /**
+     * Streams a payment-receipt PDF for a paid session. Only the session's own
+     * customer (or an admin) may download it.
+     */
+    @GetMapping("/{sessionId}/receipt")
+    public ResponseEntity<?> downloadReceipt(@PathVariable Long sessionId, Authentication authentication) {
+        User caller = userService.getAuthenticatedUser(authentication);
+        if (caller == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(APIResponse.builder().success(false).message("Unauthorized").build());
+        }
+
+        ChargingSession session = sessionRepository.findByIdWithDetails(sessionId).orElse(null);
+        if (session == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(APIResponse.builder().success(false).message("Session not found").build());
+        }
+
+        Booking booking = session.getBooking();
+        Long ownerId = (booking != null && booking.getUser() != null) ? booking.getUser().getId() : null;
+        boolean allowed = caller.getRole() == User.Role.ADMIN || (ownerId != null && ownerId.equals(caller.getId()));
+        if (!allowed) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(APIResponse.builder().success(false).message("Not allowed").build());
+        }
+
+        if (!"PAID".equals(session.getPaymentStatus())) {
+            return ResponseEntity.badRequest()
+                    .body(APIResponse.builder().success(false)
+                            .message("Receipt is available after payment is completed").build());
+        }
+
+        Payment payment = booking != null
+                ? paymentRepository.findByBookingId(booking.getId()).orElse(null)
+                : null;
+        byte[] pdf = receiptService.generate(session, payment);
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"plugsy-receipt-" + sessionId + ".pdf\"")
+                .contentType(MediaType.APPLICATION_PDF)
+                .body(pdf);
+    }
 
     @PostMapping("/verify")
     public ResponseEntity<?> verifyPayment(@RequestBody Map<String, String> data) {

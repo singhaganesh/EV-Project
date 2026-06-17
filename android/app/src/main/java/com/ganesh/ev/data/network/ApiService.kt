@@ -16,6 +16,7 @@ import com.ganesh.ev.data.model.Station
 import com.ganesh.ev.data.model.StationMarker
 import com.ganesh.ev.data.model.StationWithScore
 import com.ganesh.ev.data.model.ViewportResponse
+import okhttp3.ResponseBody
 import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.DELETE
@@ -24,6 +25,7 @@ import retrofit2.http.POST
 import retrofit2.http.PUT
 import retrofit2.http.Path
 import retrofit2.http.Query
+import retrofit2.http.Streaming
 
 interface ApiService {
 
@@ -62,6 +64,11 @@ interface ApiService {
 
         @POST("api/payments/verify")
         suspend fun verifyPayment(@Body data: Map<String, String>): Response<ApiResponse<ChargingSession>>
+
+        // Streams the payment-receipt PDF for a paid session (binary body).
+        @Streaming
+        @GET("api/payments/{sessionId}/receipt")
+        suspend fun downloadReceipt(@Path("sessionId") sessionId: Long): Response<ResponseBody>
 
         // Station APIs
         @GET("api/stations") suspend fun getAllStations(): Response<List<Station>>

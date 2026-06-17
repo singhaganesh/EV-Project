@@ -6,18 +6,22 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ganesh.ev.data.model.ChargingSession
 import com.ganesh.ev.ui.theme.ClayCard
 import com.ganesh.ev.ui.theme.ClayDivider
+import com.ganesh.ev.util.ReceiptHelper
+import kotlinx.coroutines.launch
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
@@ -30,6 +34,10 @@ fun PaymentSuccessScreen(
     session: ChargingSession,
     onGoHome: () -> Unit
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var downloading by remember { mutableStateOf(false) }
+
     Box(
         modifier = Modifier.fillMaxSize().background(Color(0xFFF8FEFF)),
         contentAlignment = Alignment.Center
@@ -101,7 +109,40 @@ fun PaymentSuccessScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(40.dp))
+            Spacer(modifier = Modifier.height(32.dp))
+
+            OutlinedButton(
+                onClick = {
+                    if (!downloading) {
+                        downloading = true
+                        scope.launch {
+                            val file = ReceiptHelper.download(context, session.id)
+                            downloading = false
+                            if (file != null) {
+                                ReceiptHelper.share(context, file)
+                            } else {
+                                android.widget.Toast.makeText(
+                                    context,
+                                    "Could not download receipt. Please try again.",
+                                    android.widget.Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        }
+                    }
+                },
+                modifier = Modifier.fillMaxWidth().height(56.dp),
+                shape = RoundedCornerShape(20.dp)
+            ) {
+                if (downloading) {
+                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                } else {
+                    Icon(Icons.Default.Download, null)
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text("Download / Share Receipt", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
 
             Button(
                 onClick = onGoHome,

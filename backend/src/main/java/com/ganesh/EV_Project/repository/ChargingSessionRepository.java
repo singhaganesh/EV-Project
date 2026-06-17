@@ -19,6 +19,14 @@ public interface ChargingSessionRepository extends JpaRepository<ChargingSession
 
     java.util.Optional<ChargingSession> findByBookingId(Long bookingId);
 
+    // Eagerly loads the booking/user/slot/station chain so a receipt can be
+    // rendered outside an open Hibernate session (no LazyInitializationException).
+    @org.springframework.data.jpa.repository.Query("SELECT s FROM ChargingSession s " +
+            "JOIN FETCH s.booking b JOIN FETCH b.user JOIN FETCH b.slot sl JOIN FETCH sl.station " +
+            "WHERE s.id = :id")
+    java.util.Optional<ChargingSession> findByIdWithDetails(
+            @org.springframework.data.repository.query.Param("id") Long id);
+
     @org.springframework.data.jpa.repository.Query("SELECT s FROM ChargingSession s " +
             "WHERE s.booking.slot.id = :slotId AND s.status = 'ONGOING'")
     java.util.Optional<ChargingSession> findOngoingBySlot(
