@@ -28,6 +28,8 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -413,7 +415,12 @@ fun OtpInputBoxes(
             },
             enabled = enabled,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-            modifier = modifier.focusRequester(focusRequester),
+            modifier = modifier
+                    .focusRequester(focusRequester)
+                    .semantics {
+                        contentDescription =
+                                "Enter the $length digit OTP. ${value.length} of $length entered."
+                    },
             decorationBox = {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     repeat(length) { index ->

@@ -26,6 +26,8 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -1150,7 +1152,7 @@ private fun ReviewRow(review: com.ganesh.ev.data.model.Review) {
 
 @Composable
 private fun StarRow(rating: Int) {
-    Row {
+    Row(modifier = Modifier.semantics { contentDescription = "$rating out of 5 stars" }) {
         (1..5).forEach { star ->
             Icon(
                     imageVector = if (star <= rating) Icons.Default.Star else Icons.Default.StarBorder,
