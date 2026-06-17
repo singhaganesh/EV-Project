@@ -1,182 +1,205 @@
 # Android Driver App — Product Audit & Production Roadmap ("Plugsy")
 
 **Author lens:** Mobile Product Manager + Principal Android Architect
-**Date:** 2026-06-16
+**Original audit:** 2026-06-16 · **Last updated:** 2026-06-17 (re-audited against source)
 **Scope:** The **consumer/driver Android app** only (`android/`, package `com.ganesh.ev`). The React owner/admin dashboard and Spring Boot backend are referenced only where the mobile experience depends on them.
-**App state:** `versionCode 1` / `versionName 1.0`, `minSdk 24`, `targetSdk 35`, release base URL `https://api.plugsy.in/`. Pre-first-release.
+**App state:** `versionCode 1` / `versionName 1.0`, `minSdk 24`, `targetSdk 35`, release base URL `https://api.plugsy.in/`. Pre-first-release — but the reliability/store-gate layer that the original audit called the gap to launch is now largely built (see Update Log).
 **Benchmarks:** ChargePoint, EVgo, Electrify America, PlugShare (global); Statiq, Kazam, Tata Power EZ Charge, ChargeZone (India, the actual competitive set).
 
-> **Relationship to the existing audit.** A full-stack `plans/pending/missing-features-audit.md` already exists (system-wide, 2026-06-12). This document does **not** replace it — it goes deeper on the *mobile client* with concrete Compose/Retrofit/StateFlow integration notes, and isolates Android-only gaps (background charging service, offline cache, on-device token persistence, deep links) that a system-wide audit doesn't separate out. Where priorities overlap (FCM, account deletion, reviews, route planning), they are kept consistent with that document.
+> **Relationship to the existing audit.** A full-stack `plans/pending/missing-features-audit.md` already exists (system-wide, 2026-06-12). This document does **not** replace it — it goes deeper on the *mobile client* with concrete Compose/Retrofit/StateFlow integration notes, and isolates Android-only concerns (background charging service, offline cache, on-device token persistence, deep links). Where priorities overlap, they are kept consistent with that document.
+
+---
+
+## Update Log — what changed since the 2026-06-16 audit
+
+The original audit concluded the gap to launch was **reliability under real-world conditions, store/legal gates, and observability — not more features.** Since then, most of that gap has been closed. Verified ✅ against current source:
+
+| Original item | Status now | Where (verified) |
+|---|---|---|
+| **Backend SMS-OTP precondition** (was the #1 launch blocker — backend generated OTP but never sent SMS) | ✅ **Resolved a different way** — replaced custom SMS OTP with **Firebase Phone Auth** (Google sends/verifies the SMS; **no India DLT registration needed**). App exchanges the Firebase ID token at `POST /api/auth/firebase-login` for the local JWT. | `AuthViewModel.kt`, `LoginScreen.kt`, backend `AuthController.firebaseLogin`, `FirebaseAuthService` |
+| **A1 — Background charging foreground service** | ✅ **Done** | `service/ChargingManager.kt` (process-singleton socket), `service/ChargingForegroundService.kt` (ongoing SoC notification + Stop action, `START_REDELIVER_INTENT`), manifest `FOREGROUND_SERVICE` + `FOREGROUND_SERVICE_DATA_SYNC` |
+| **A3 — Persist rotated tokens** | ✅ **Done** | `EvApplication.kt:42` `RetrofitClient.setTokenPersister { … }` writes refreshed access/refresh tokens back to DataStore |
+| **B1 — Push (FCM)** | ✅ **Done** | `data/notifications/EvMessagingService.kt`, `Notifications.kt` (3 channels), `DeviceTokenRegistrar.kt`, `POST /api/users/device-token` |
+| **H1 — Account deletion** | ✅ **Done** | `ProfileScreen.kt` delete dialog → `ProfileViewModel.deleteAccount()` → `DELETE /api/users/me` (PII anonymized, financial rows retained) |
+| **H3 — Deep links / App Links** | ✅ **Done** (App Links pending domain verification file) | Manifest `autoVerify` intent-filter for `https://plugsy.in/{charging,payment,bookings,station}` + `plugsy://` scheme; nav `deepLinks` in `MainActivity.kt` |
+| **I1 — Crash reporting + analytics** | ✅ **Done** | `firebase-crashlytics` + `firebase-analytics` deps; `util/AppAnalytics.kt` funnel (`app_open → station_view → booking_created → charging_started → charging_completed → payment_success`), instrumented in `ChargingViewModel`/`EvApplication` |
+| **C2 — Editable profile** | ✅ **Done** | `ProfileScreen.kt` inline name/email edit → `PUT /api/users/{id}` |
+| **C3 — Settings hub** | ⚠️ **Partial** | `SettingsScreen.kt`: notifications toggle, "follows system theme" (no real theme switch), about/version, static support email |
+| **E1 — Navigation hand-off** | ✅ **Done** | `ui/components/StationCard.kt:227` fires `google.navigation:q=…`; helper in `util/LocationHelper.kt` |
+| **A2 — Offline cache (Room)** | ⚠️ **Partial** | Room added (`data/local/*`), but caches **stations only** (`StationCache`/`StationDao`); read-path fallback in `StationViewModel.emitCachedOrError`. No active-booking/history cache; **no WorkManager**. |
+| **I4 — Hilt + repo refactor** | ⚠️ **Partial** | Hilt wired (`@HiltAndroidApp EvApplication`, `di/AppModule.kt`, `@HiltViewModel ProfileViewModel`, `hiltViewModel()`), but `MainActivity.kt:54-55` still **hand-constructs** `ChargingViewModel` + `UserPreferencesRepository`; most VMs still use plain `viewModel()`; nav graph still monolithic (~590 lines). |
+| **STOMP heartbeat `0,0`** | ✅ **Mitigated** | `StompClient.kt:31` OkHttp `pingInterval(20s)` surfaces a dead peer as `onFailure` → reconnect. |
+
+**Net effect:** of the original **High** tier (A1, A3, B1, H1, I1, D2), **five of six are done**; only **D2 (GST invoices)** remains. The launch-blocking work is now narrow.
 
 ---
 
 ## Section 1: Detailed List of Current Features (Audited)
 
-Each item below was **verified against source**, not just the feature brief. ✅ = present and wired; ⚠️ = present but with a caveat that affects production.
+Each item verified **against source**. ✅ = present and wired; ⚠️ = present but with a caveat that affects production.
 
 ### 1.1 Authentication & Session
-- ✅ **Mobile-number OTP** — `send-otp` / `validate-otp` (`ApiService.kt`). Profile completion captures **Name, Email, Role** (`CompleteProfileRequest`).
+- ✅ **Phone login via Firebase Phone Auth** (`AuthViewModel.kt`, `LoginScreen.kt`). Flow: `PhoneAuthProvider` send/resend/verify (incl. instant verification) → Firebase ID token → `POST /api/auth/firebase-login` exchanges it for the local JWT + refresh token. New users are created server-side immediately (phone is verified) and then set **Name/Email** via the authenticated `PUT /api/users/{id}` (the old `complete-profile` / `CompleteProfileRequest` were removed).
+- ✅ **Login UX hardened** — `+91` prefix + strict 10-digit validation (`^[6-9]\d{9}$`), **WhatsApp-style "verify this number?" confirm dialog**, segmented 6-box OTP input (auto-advance/backspace), **60s resend countdown**, auto-submit at 6 digits, and **SMS User Consent API** one-tap autofill of the incoming code. The debug "Your OTP" card was removed.
 - ✅ **Token lifecycle** — access + refresh tokens persisted in DataStore (`UserPreferencesRepository`); auto-login via `SplashScreen` (`onAuthValid` / `onAuthExpired`).
 - ✅ **Silent 401 recovery** — `RetrofitClient` registers an OkHttp `Authenticator` that calls `refresh-token` on a separate client (no interceptor recursion) and retries, capped at 3 attempts.
-- ⚠️ **Token-rotation persistence bug** — on refresh, the `Authenticator` updates the **in-memory** `authToken` only. It never writes the new token back to DataStore, and never updates the rotating refresh token. After a process restart the app reloads the *stale* token from DataStore and depends on another 401 round-trip to recover (and if the backend rotates refresh tokens, the user is silently logged out). *Real bug, not a feature gap — see roadmap M-blocker.*
+- ✅ **Token-rotation persistence (was a bug, now fixed)** — `EvApplication` hands `RetrofitClient` a persister callback so a token refreshed by the `Authenticator` is written back to DataStore and survives a process restart.
+- ⚠️ **Rate limiting is Firebase-side only** — the backend `firebase-login` endpoint has no throttle (it only verifies a token). Abuse protection for SMS sends relies entirely on Firebase's (adaptive, undocumented) anti-abuse. Acceptable, but worth noting for cost control.
+- ⚠️ **Release-signing fingerprint not yet registered** — Phone Auth will fail in a Play-Store release build until the **release keystore SHA-1/SHA-256** is added in Firebase (debug fingerprints are registered; no release keystore exists yet).
 
 ### 1.2 Onboarding
-- ✅ **4-page slider** (`OnboardingScreen`), gated by a DataStore `onboardingCompleted` flag, shown once before login.
+- ✅ **4-page slider** (`OnboardingScreen`), gated by a DataStore `should_show_onboarding` flag, shown once before login.
+- ⚠️ **`clearUserData()` wipes the onboarding flag too** (`UserPreferencesRepository.kt:77` `preferences.clear()`), so a logout re-shows onboarding on next launch. Minor, but a visible regression on logout.
 
 ### 1.3 Map / Discovery (`HomeScreen`)
-- ✅ Google Maps Compose with custom pins; **viewport-debounced** fetching via `getViewportWithNearby` (full data for top-N, lightweight pins for the rest — a genuinely good bandwidth optimization).
+- ✅ Google Maps Compose with custom pins; **viewport-debounced** fetching via `getViewportWithNearby` (full data for top-N, lightweight pins for the rest); 15%-delta refetch guard.
 - ✅ List/map toggle, **distance sort**, relative "last used" time, bottom station pager.
-- ⚠️ **No discovery-level filtering or text search** — connector type / charging speed / "available now" / network filters exist only on the *detail* screen (see 1.4), not on the map/list. No search-by-name/address box.
+- ✅ **Offline fallback** — when the network fails, `StationViewModel.emitCachedOrError` serves the last Room-cached stations instead of a blank screen (CV-10).
+- ✅ **Directions hand-off** — `StationCard` fires a `google.navigation:q=lat,lng` intent.
+- ⚠️ **No discovery-level filtering or text search** — connector/speed/"available now"/network filters and search-by-name/address still don't exist at the map/list level (`HomeScreen`/`StationViewModel` have no filter state). *(Gap F1.)*
 
 ### 1.4 Station Details (`StationDetailScreen`)
-- ✅ Operating-hours parsing with live open/closed computation; guns grouped by dispensary unit.
-- ✅ Filter chips (**Available / AC / DC**); **static** map preview.
-- ✅ Live grid metrics (Voltage, Current, Power, Forecasted Load) via `getStationLivePower` (`api/iot/...`).
-- ✅ Weighted scores (Traffic, Grid, Parking, Accessibility) via `getStationDetail`.
-- ⚠️ **`Station.rating` is display-only** — there is no write path (no reviews); the recommendation scoring reads a value nothing populates.
+- ✅ Operating-hours parsing with live open/closed computation; guns grouped by dispensary unit; tabs **Charger / Details / Reviews**.
+- ✅ Filter chips (**Available / AC / DC**) on the detail screen; **static** map preview.
+- ✅ Live grid metrics (Voltage, Current, Power, Forecasted Load) via `getStationLivePower`; weighted scores (Traffic, Grid, Parking, Accessibility) via `getStationDetail`.
+- ⚠️ **Reviews tab is a placeholder** — `ReviewsTabContent()` (`StationDetailScreen.kt:~981`) renders "No reviews yet / Be the first to review this station" with **no read or write path**. `Station.rating` remains display-only with nothing populating it. *(Gap F2.)*
 
 ### 1.5 Slot Booking (`SlotBookingScreen` + shared `BookingViewModel`)
 - ✅ Instant **20-minute reservation**, connector selection (CCS2 / Type-2), vehicle class (Car / Truck), and the **truck-fallback** prompt when car slots are exhausted.
-- ⚠️ **Instant-only** — no reserve-ahead / scheduled / recurring booking.
+- ⚠️ **Instant-only** — no reserve-ahead / scheduled / recurring booking. *(Gaps G1/G2.)*
 
 ### 1.6 Booking Management
 - ✅ Active-reservation **countdown timer**, booking detail with **cancel**, paginated history (`getUserBookings`, page/size).
 
-### 1.7 Real-Time Charging (`ChargingScreen` + `ChargingViewModel` + `StompClient`)
+### 1.7 Real-Time Charging (`ChargingScreen` + `ChargingViewModel` + `ChargingManager` + `StompClient`)
 - ✅ STOMP-over-WebSocket telemetry: live **SoC%** (pulsing ring), power, elapsed cost, energy, remaining time, **emergency stop**.
-- ✅ **Resilient socket** — `StompClient` reconnects with exponential backoff (2s→30s cap) and re-subscribes all topics on reconnect; JWT sent in the CONNECT frame.
-- ⚠️ **No background survival** — the session lives in a `ChargingViewModel` **constructed in `MainActivity.onCreate`** and an in-process OkHttp socket. There is **no foreground service** and **no `FOREGROUND_SERVICE` permission**. When the screen sleeps / app is backgrounded / Doze kicks in, the OS tears down the socket and (on process death) the session state is lost — recoverable only by re-fetching `getSessionByBooking`. For an app whose core promise is "watch your charge," this is the single biggest experiential risk.
-- ⚠️ STOMP heartbeat negotiated as `0,0` — half-open connections rely on TCP/OkHttp timeouts to be noticed.
+- ✅ **Background survival (was the #1 experiential risk, now fixed)** — the socket lives in the process-singleton `ChargingManager`, and `ChargingForegroundService` (type `dataSync`) keeps it alive with an **ongoing SoC notification + Stop action**. `ChargingViewModel` merely mirrors `ChargingManager.telemetry`; `onCleared` detaches the UI but **leaves the service running**. `START_REDELIVER_INTENT` + `ChargingManager.resume()` recover the session after process death. The charging notification deep-links back into the live screen (`?isNewSession=false`).
+- ✅ **Resilient socket** — exponential-backoff reconnect (2s→30s) with topic re-subscribe; JWT in the CONNECT frame; OkHttp `pingInterval(20s)` detects half-open connections (mitigates the old `heart-beat:0,0`).
+- ⚠️ **Error-recovery is heuristic** — `ChargingScreen` inspects error message text ("already exists", "session not found") to decide whether to start vs. resume. Works, but brittle to backend message changes.
 
 ### 1.8 Payment & Checkout
 - ✅ Invoice summary, **Razorpay** checkout (card/UPI), server-side **signature verification** (`payments/verify`), success screen. `MainActivity` implements `PaymentResultWithDataListener` and routes the result into the shared `ChargingViewModel`.
-- ⚠️ **No stored payment instrument, wallet, or receipt artifact** — Razorpay is re-entered every time; `PaymentSuccessScreen` produces no downloadable/emailed receipt or GST invoice.
+- ⚠️ **No stored payment instrument, wallet, or receipt artifact** — Razorpay is re-entered every session; no downloadable/emailed receipt or **GST invoice**. *(Gaps D1/D2.)*
 
-### 1.9 Profile (`ProfileScreen`)
-- ⚠️ **Read-only**. Shows name, email, role, mobile, member-since, last-updated, and **Logout** — nothing else. No edit, no vehicles, no payment methods, no settings, no notification prefs, no help, **no account deletion**.
+### 1.9 Profile (`ProfileScreen` + `ProfileViewModel`)
+- ✅ **Editable** name/email (inline edit → `PUT /api/users/{id}`), shows mobile/role/member-since/last-updated, **Logout**, **Settings** entry, and **Delete Account** (confirm dialog → `DELETE /api/users/me`).
+- ⚠️ **No vehicle garage, saved payment methods, profile photo, or per-category notification prefs.** *(Gaps C1, D1, B2.)*
 
-### 1.10 Architecture baseline (enabling context for Section 3)
-- ✅ MVVM + `StateFlow`; Navigation-Compose with a single sealed `Screen` graph in `MainActivity.kt`; Material 3 + custom "Clay" theme; Coil for images.
-- ⚠️ **No dependency injection** (Hilt/Koin absent) — ViewModels and repositories are constructed by hand (`ChargingViewModel()` in the Activity; `UserPreferencesRepository(context)` passed down). `MainActivity.kt` is ~550 lines and owns navigation, auth state, and payment callbacks.
-- ⚠️ **Persistence is DataStore-only** — **no Room, no WorkManager** → zero offline cache and no durable background work/retry.
-- ⚠️ **No FCM/Firebase** anywhere (no `google-services` plugin, no messaging dependency) despite `POST_NOTIFICATIONS` being declared.
-- ⚠️ **No deep links / App Links** — manifest has only the `LAUNCHER` intent-filter.
-- ⚠️ **No crash reporting / analytics** SDK (Crashlytics, Sentry, or equivalent).
+### 1.10 Architecture baseline
+- ✅ MVVM + `StateFlow`; Navigation-Compose with a single sealed `Screen` graph; Material 3 + custom "Clay" theme; Coil; **Hilt** DI; **Room**; **Firebase** (Auth/Messaging/Analytics/Crashlytics).
+- ⚠️ **Hilt only partially adopted** — `MainActivity.kt:54-55` still hand-wires `ChargingViewModel` + `UserPreferencesRepository`; most VMs use plain `viewModel()`/manual factories rather than injection; no repository layer abstracts `RetrofitClient`; the nav graph is still a ~590-line monolith. *(Gap I4.)*
+- ⚠️ **Room is minimal** — single `StationEntity`; no offline cache for active booking or history; **no WorkManager** for durable background retry. *(Gap A2.)*
+- ⚠️ **No graceful global sign-out** — when refresh ultimately fails, the `Authenticator` returns `null` with no app-level reaction; only the next `SplashScreen` launch routes to login. *(Gap A4.)*
+- ⚠️ **Notifications toggle not enforced** — `SettingsScreen`'s `notificationsEnabled` pref is stored but **not consulted** by `Notifications.show`/`EvMessagingService`; toggling it off does not actually suppress pushes. *(Gap B2.)*
 
 ---
 
 ## Section 2: Categorized Gaps & Missing Features
 
-Benchmarked against the competitive set. Items are grouped by category; severity is rationalized in Section 3.
+Status tags reflect the 2026-06-17 re-audit: **[DONE]**, **[PARTIAL]**, **[OPEN]**.
 
-### A. Reliability, Background & Offline  *(the mobile-only differentiators an app-level audit must own)*
-- **A1 — Background charging foreground service.** A started/bound `Service` (type `dataSync`/`connectedDevice`) hosting `StompClient`, with an **ongoing notification** showing live SoC and a stop action. The current design loses telemetry the moment the user leaves the screen.
-- **A2 — Offline cache (Room).** Last-known stations, active booking, and history readable with no network. Today a dead zone *at the charger* (the exact moment of need) yields a blank app.
-- **A3 — Persist rotated tokens.** Fix the `Authenticator` to write refreshed access/refresh tokens back through `UserPreferencesRepository`.
-- **A4 — Graceful global sign-out.** When refresh ultimately fails, broadcast a single "session expired" event that routes to `login` and clears state (today refresh-failure just returns `null` with no app-level reaction).
+### A. Reliability, Background & Offline
+- **A1 — Background charging foreground service.** **[DONE]** `ChargingManager` + `ChargingForegroundService`.
+- **A2 — Offline cache (Room).** **[PARTIAL]** Stations cached + served offline; **still missing**: active booking + history offline, and **WorkManager** for durable retry (e.g. device-token registration, payment verification retries).
+- **A3 — Persist rotated tokens.** **[DONE]** `EvApplication.setTokenPersister`.
+- **A4 — Graceful global sign-out.** **[OPEN]** Emit a `SharedFlow<AuthEvent>` from the network/repository layer on terminal refresh failure; collect in `EVChargingApp` to navigate to `login` and clear state. Today a truly-expired session just yields failing calls until the next cold start.
 
 ### B. Notifications & Alerts
-- **B1 — Push (FCM).** Device-token registration + handling for: **charging complete**, **reservation expiring** (T-5 / T-1 min on the 20-min hold), **session force-stopped & billed**, payment outcome. Backend already has the trigger points (force-stop, expiry scheduler, completion).
-- **B2 — In-app notification preferences** (per-category toggles) + the Android 13+ runtime `POST_NOTIFICATIONS` request flow (declared, not yet requested).
+- **B1 — Push (FCM).** **[DONE]** Token registration + typed channels + deep-linked taps; backend triggers exist (force-stop, expiry scheduler, completion).
+- **B2 — Notification preferences + runtime permission.** **[PARTIAL]** `POST_NOTIFICATIONS` is requested at first charging (`ChargingScreen`), and a **global** toggle exists — but the toggle is **not enforced** at display time, and there are **no per-category** toggles. Enforce the pref in `Notifications.show` and split per channel.
 
 ### C. Profile & Vehicle Management
-- **C1 — Vehicle garage.** Make/model/**battery kWh**/preferred connector. Powers accurate "remaining time," auto-selects the connector at booking, and is the prerequisite for route planning (G1).
-- **C2 — Editable profile** (name/email/photo) — currently impossible in-app.
-- **C3 — Settings hub** (notifications, theme, language, units), Help/FAQ, contact support, app version.
+- **C1 — Vehicle garage.** **[OPEN]** Make/model/**battery kWh**/preferred connector. Powers accurate "remaining time," auto-connector at booking, and is the prerequisite for route planning (E2).
+- **C2 — Editable profile.** **[DONE]** (photo still absent — minor).
+- **C3 — Settings hub.** **[PARTIAL]** Screen exists; **still missing**: real theme switch (currently "follows system" only), language/units, working Help/FAQ + contact action.
 
 ### D. Payment, Wallet & Loyalty
-- **D1 — Saved payment methods / wallet.** Tokenized card or **prepaid wallet with auto-reload** — the dominant pattern for Statiq/Kazam in India; removes checkout friction every session.
-- **D2 — Receipts & GST invoices** surfaced in-app (download/share/email), essential for the stated **truck/fleet** segment claiming input credit.
-- **D3 — Promo codes / referrals / loyalty.** Promo field at checkout, referral share, points or session-streak rewards.
-- **D4 — Auto-charge on session end** (post-paid), removing the manual checkout step entirely for wallet/tokenized users.
+- **D1 — Saved payment / prepaid wallet.** **[OPEN]** Tokenized card or prepaid wallet + auto-reload (dominant Statiq/Kazam pattern).
+- **D2 — Receipts & GST invoices.** **[OPEN]** Still the **single remaining High-tier launch gap** for the truck/fleet segment.
+- **D3 — Promo / referral / loyalty.** **[OPEN]**
+- **D4 — Auto-charge on session end** (post-paid). **[OPEN]** Depends on D1.
 
 ### E. Navigation & Route Planning
-- **E1 — Turn-by-turn hand-off.** A "Directions" action firing a `google.navigation:q=` intent (and an in-app static→interactive map). Cheap, high-utility, currently absent.
-- **E2 — Corridor / trip planning.** Origin→destination with charging stops along the route (PlugShare/ABRP's signature feature; especially relevant for inter-city trucking).
+- **E1 — Turn-by-turn hand-off.** **[DONE]** `google.navigation:` intent from `StationCard`. (Could also surface on `StationDetailScreen` for parity.)
+- **E2 — Corridor / trip planning.** **[OPEN]** Depends on C1 (vehicle range).
 
 ### F. Discovery & Social Trust
-- **F1 — Map/list filters + search** (connector, speed, available-now, network, price) and text search — today only on the detail screen.
-- **F2 — Ratings, reviews, photos, check-ins** (write path) — PlugShare's entire moat; also fixes the dead `Station.rating` input to recommendations.
-- **F3 — Favorites & recents** — saved stations + recent-from-history; pure retention win for commuters and fleets.
+- **F1 — Map/list filters + search.** **[OPEN]** Lift the detail filter chips to Home; add `StateFlow<FilterState>` + debounced text search.
+- **F2 — Ratings, reviews, photos.** **[OPEN]** Tab scaffolded but empty; needs a `Review` entity gated on a `COMPLETED` session, `POST`/list endpoints, composer in the Reviews tab, and recompute of `Station.rating`.
+- **F3 — Favorites & recents.** **[OPEN]**
 
 ### G. Booking Depth
-- **G1 — Reserve-ahead / scheduled bookings** beyond the instant 20-min hold.
-- **G2 — Recurring bookings** (commuter/fleet templates) — already a README roadmap commitment.
+- **G1 — Reserve-ahead / scheduled bookings.** **[OPEN]**
+- **G2 — Recurring bookings.** **[OPEN]**
 
 ### H. Account, Compliance & Security
-- **H1 — Account deletion + data export.** **Google Play hard requirement** for account-based apps, and a DPDP Act 2023 right. Currently no path in app or API — a **store-listing blocker**.
-- **H2 — Biometric app-lock** for a wallet/payment-bearing app.
-- **H3 — Deep links / App Links** — required to make notification taps, shared station links, and emailed receipts land in the right screen.
+- **H1 — Account deletion + data export.** **[PARTIAL → mostly DONE]** In-app deletion shipped (Play hard requirement satisfied). **Still needed**: a **public web deletion URL** for the Play Console field, and a **data-export** path (DPDP right).
+- **H2 — Biometric app-lock.** **[OPEN]** `androidx.biometric`; gate launch + payment.
+- **H3 — Deep links / App Links.** **[DONE, with one hosting step]** Intent-filters + nav deep links wired; **App Links `https` auto-verification requires hosting `https://plugsy.in/.well-known/assetlinks.json`** — until then only the `plugsy://` scheme reliably resolves.
 
 ### I. Quality & Observability
-- **I1 — Crash reporting + product analytics** (funnel: discover→book→charge→pay). You cannot operate a launch blind.
-- **I2 — Accessibility pass** (TalkBack on the booking→charging→payment funnel; `semantics{}` on custom Clay/telemetry composables).
-- **I3 — Localization (i18n)** — externalize strings; Hindi first for the truck segment.
-- **I4 — Architecture hardening** — introduce **Hilt** + a repository layer and split the monolithic `MainActivity` nav graph before feature volume makes it unmaintainable. (Enabler, not user-facing, but it gates the velocity of everything above.)
-
-> **Upstream dependency (not an Android task, but it gates launch):** the backend currently **generates OTPs but never sends an SMS** (flagged in the system audit as #1). No mobile feature matters until a real user can receive a login code. The Android team should treat this as a launch precondition owned by backend.
+- **I1 — Crash reporting + analytics.** **[DONE]** Crashlytics + Analytics funnel instrumented.
+- **I2 — Accessibility pass.** **[OPEN]** TalkBack on the booking→charging→payment funnel; `semantics{}` on Clay/telemetry composables (incl. the new segmented OTP boxes).
+- **I3 — Localization (i18n).** **[OPEN]** Strings still hard-coded; Hindi first for the truck segment.
+- **I4 — Architecture hardening.** **[PARTIAL]** Hilt present but not fully adopted; extract a repository layer behind `RetrofitClient`, inject `ChargingViewModel`/`UserPreferencesRepository`, and split the `MainActivity` nav graph.
 
 ---
 
-## Section 3: Prioritized Implementation Roadmap
+## Section 3: Prioritized Implementation Roadmap (revised 2026-06-17)
 
-Priority key: **High** = required for a credible commercial launch (blocker, trust, or core-experience). **Medium** = strongly expected by users / drives retention; fast-follow. **Low** = differentiating or polish; post-launch.
+Priority key: **High** = required for a credible commercial launch. **Medium** = retention/expectation; fast-follow. **Low** = differentiating/polish. **✅ Done / ⚠️ Partial** items are kept for traceability.
 
-| Feature | Priority | Business / User Impact | Architectural / Technical Notes (Compose + Retrofit + StateFlow) |
-|---|---|---|---|
-| **A1 — Background charging foreground service** | **High** | The core promise ("watch your charge") breaks when the screen sleeps; users see a dead session and distrust billing. | Foreground `Service` (manifest `FOREGROUND_SERVICE` + `FOREGROUND_SERVICE_DATA_SYNC` on API 34). Move `StompClient` ownership out of `ChargingViewModel`/Activity into the service; expose session state as a `StateFlow` the `ChargingScreen` collects via a bound connection or a repository singleton. Ongoing notification mirrors SoC + Stop action. |
-| **A3 — Persist rotated tokens** | **High** | Silent logouts / extra 401 round-trips after every app restart; worsens if backend rotates refresh tokens. | In `RetrofitClient`'s `Authenticator`, on success call back into `UserPreferencesRepository.saveAuthToken/saveRefreshToken` (inject a persistence callback to keep `RetrofitClient` a pure singleton). ~Half-day fix, high ROI. |
-| **B1 — Push notifications (FCM)** | **High** | A driver who walks away never learns charging finished or that the hold expired — direct churn + billing disputes. | Add `google-services` + `firebase-messaging`; `FirebaseMessagingService` for tokens/data messages; register token on login via a new `POST /api/users/device-token`. Notification taps route through deep links (H3). Backend trigger points already exist. |
-| **H1 — Account deletion + data export** | **High** | **Google Play will reject/limit the listing** without an in-app deletion path; also DPDP compliance. | `DELETE /api/users/me` (soft-delete + PII anonymization, retain financial rows). Surface in `ProfileScreen` with confirm dialog; also a public web URL for the Play Console field. |
-| **I1 — Crash reporting + analytics** | **High** | Launching without crash/funnel visibility means the first outage is a user complaint; no data to prioritize. | Crashlytics (rides on the Firebase setup from B1) + an analytics wrapper behind an interface; instrument the discover→book→charge→pay funnel. Minimal code, must precede public traffic. |
-| **D2 — Receipts / GST invoices (in-app)** | **High** | Table-stakes in India; the **truck/fleet** segment cannot expense charging without GST invoices. | Backend generates PDF; app adds "Download/Share invoice" on `PaymentSuccessScreen` + history rows (Coil/`FileProvider` or a download intent). |
-| **A2 — Offline cache (Room)** | **Medium** | The moment of need (standing at a charger, poor signal) is exactly when a network-only app fails. | Add Room; repositories return cached-then-fresh `Flow`s (single source of truth) feeding existing `StateFlow`s. Start with stations + active booking + history. |
-| **A4 — Graceful global sign-out** | **Medium** | A truly-expired session currently produces failed calls with no redirect — confusing dead-ends. | Emit a `SharedFlow<AuthEvent>` from the repository on terminal refresh failure; collect in `EVChargingApp` to navigate to `login` and clear state. |
-| **C1 — Vehicle garage** | **Medium** | Accurate remaining-time, auto connector selection, and the foundation for route planning; reduces booking friction. | `Vehicle` model + `api/users/{id}/vehicles` CRUD; `VehicleViewModel` (`StateFlow`); selected vehicle pre-fills `SlotBookingScreen`. |
-| **D1 — Saved payment / prepaid wallet** | **Medium** | Removes per-session checkout friction; wallet + auto-reload is the dominant Indian pattern (Statiq/Kazam). | Razorpay tokenization or a backend wallet ledger; new endpoints + a `WalletViewModel`; balance chip on Home/checkout. Pairs with D4 auto-charge. |
-| **E1 — Navigation hand-off** | **Medium** | Getting to the charger is half the job; a missing "Directions" button is a conspicuous gap vs. every competitor. | "Directions" button on `StationDetailScreen` firing a `google.navigation:q=lat,lng` intent. No backend. Low effort, high visibility. |
-| **F2 — Ratings & reviews (write)** | **Medium** | Trust signal that drives station choice; also feeds the currently-dead `Station.rating` recommendation input. | `Review` entity gated on a `COMPLETED` session; `POST` endpoint; review list + composer in `StationDetailScreen`; recompute rating on write. |
-| **F3 — Favorites & recents** | **Medium** | Repeat users (commuters, fleets) re-search every time; cheap retention lever. | `user_favorite_station` join + heart on `StationCard`/detail; "Recents" derived from booking history (no schema). |
-| **F1 — Discovery filters + search** | **Medium** | Users can't narrow the map to "DC, available now"; forces tap-through on every pin. | Lift the detail filter chips to Home; add a `StateFlow<FilterState>` in `StationViewModel`; debounce text search against name/address. |
-| **C2/C3 — Editable profile + settings hub** | **Medium** | Read-only profile feels unfinished; settings is where notif prefs (B2), theme, language, support live. | `PUT api/users/{id}`; convert `ProfileScreen` to stateful form; add a `SettingsScreen` route in the `Screen` sealed graph. |
-| **H2 — Biometric app-lock** | **Medium** | Protects a wallet/payment-bearing app on shared/lost devices. | `androidx.biometric`; gate launch + payment actions; toggle in settings (C3). |
-| **H3 — Deep links / App Links** | **Medium** | Prerequisite for B1 notification taps, shared-station links, and D2 emailed receipts to open the right screen. | Add `nav-graph` deep links + verified App Links intent-filters mapped onto existing `Screen` routes. |
-| **G1 — Reserve-ahead / scheduled booking** | **Low** | Removes the "only book when standing there" limitation; planning for trips/fleets. | Extend `BookingRequest` with a start time; backend slot-availability over a window; date/time picker in `SlotBookingScreen`. |
-| **E2 — Trip / corridor route planning** | **Low** | Signature differentiator (PlugShare/ABRP), high value for inter-city trucking — but only after the basics work. | Phase 1: stations within X km of a Directions polyline (needs C1 vehicle range). Defer SoC-aware stop optimization. |
-| **D3 — Promo / referral / loyalty** | **Low** | Growth/retention lever; meaningful only once the paid funnel is solid. | Promo field → backend validation at intent creation; referral share via `ACTION_SEND`; points ledger later. |
-| **G2 — Recurring bookings** | **Low** | Roadmap commitment; commuter/fleet convenience. | `BookingTemplate` materialized T-24h by the existing scheduler; app just manages templates. |
-| **I3 — Localization (Hindi)** | **Low** | Inclusivity for the truck segment; cheap to scaffold now, costly to retrofit later. | Externalize strings to resource qualifiers now; translate Hindi first. |
-| **I2 — Accessibility pass** | **Low** | Foundation exists (~42 `contentDescription`s); needs a TalkBack audit, not a rebuild. | Accessibility Scanner + TalkBack on the core funnel; `semantics{}` on custom telemetry/Clay composables. |
-| **I4 — Hilt + repository refactor** | **Low (enabler)** | Not user-facing, but `MainActivity` (~550 lines, hand-wired VMs) will throttle delivery of everything above. | Introduce Hilt; extract repositories; split the nav graph. Do it *alongside* A1/A2 since both restructure data ownership. |
-| **iOS / cross-platform** | **Won't (this release)** | Real demand exists, but it's a major investment; validate the funnel on Android first. | Later: Compose Multiplatform / KMP leverages the existing Kotlin layer; or a mobile-web driver flow on the React stack. |
+| Feature | Status | Priority | Business / User Impact | Technical Notes (Compose + Retrofit + StateFlow) |
+|---|---|---|---|---|
+| A1 — Background charging service | ✅ Done | — | Core "watch your charge" promise now survives backgrounding/Doze. | `ChargingManager` + `ChargingForegroundService`. |
+| A3 — Persist rotated tokens | ✅ Done | — | No more silent logouts after restart. | `EvApplication.setTokenPersister`. |
+| B1 — Push (FCM) | ✅ Done | — | Users learn charge-complete / hold-expiry / force-stop. | `EvMessagingService` + channels + device-token. |
+| H1 — Account deletion | ✅ Done | — | Satisfies Google Play deletion requirement (in-app). | `DELETE /api/users/me`. *Still add public web URL + export → see H1 row below.* |
+| I1 — Crash + analytics | ✅ Done | — | Launch is observable (funnel + crashes). | Crashlytics + `AppAnalytics`. |
+| Auth → Firebase Phone Auth | ✅ Done | — | Removes the old "OTP never sent" blocker; no DLT. | `firebase-login` token exchange. |
+| **D2 — Receipts / GST invoices (in-app)** | **[OPEN]** | **High** | The **last** launch blocker: truck/fleet cannot expense charging without GST invoices. | Backend generates PDF; "Download/Share invoice" on `PaymentSuccessScreen` + history rows via `FileProvider`/download intent. |
+| **H1b — Public deletion URL + data export** | **[OPEN]** | **High** | Play Console requires a **web** deletion URL even with in-app deletion; DPDP export right. | Static web page hitting the same delete flow; `GET /api/users/me/export` (JSON/email). |
+| **H3b — Host `assetlinks.json`** | **[OPEN]** | **High (small)** | Without it, `https://plugsy.in` App Links don't auto-verify → notification/shared links may not open the app. | Publish `https://plugsy.in/.well-known/assetlinks.json` with the app's signing cert SHA-256. |
+| **Release-keystore SHA in Firebase** | **[OPEN]** | **High (small)** | Phone Auth **fails in the Play release build** until the release signing fingerprint is registered. | Create release keystore → add SHA-1/SHA-256 in Firebase → re-download `google-services.json`. |
+| A2 — Offline cache (booking/history) + WorkManager | ⚠️ Partial | **Medium** | Stations cache exists; booking/history offline + durable retries still missing at the point of need. | Extend Room beyond `StationEntity`; add WorkManager for device-token + payment-verify retries. |
+| A4 — Graceful global sign-out | [OPEN] | **Medium** | Expired sessions currently dead-end until cold start. | `SharedFlow<AuthEvent>` on terminal refresh failure → navigate `login`. |
+| B2 — Enforce notif pref + per-category toggles | ⚠️ Partial | **Medium** | Toggling notifications off does nothing today; trust/ápp-store hygiene. | Consult the pref in `Notifications.show`; per-channel switches in `SettingsScreen`. |
+| C1 — Vehicle garage | [OPEN] | **Medium** | Accurate remaining-time, auto-connector, foundation for route planning. | `Vehicle` CRUD + `VehicleViewModel`; pre-fill `SlotBookingScreen`. |
+| D1 — Saved payment / wallet | [OPEN] | **Medium** | Removes per-session checkout friction (dominant India pattern). | Razorpay tokenization or backend wallet; `WalletViewModel`; balance chip. |
+| F1 — Discovery filters + search | [OPEN] | **Medium** | Can't narrow map to "DC, available now"; forces tap-through. | `StateFlow<FilterState>` in `StationViewModel`; debounced name/address search. |
+| F2 — Ratings & reviews (write) | [OPEN] (tab stubbed) | **Medium** | Trust signal; also feeds the dead `Station.rating`. | `Review` gated on `COMPLETED`; `POST`/list; fill the existing Reviews tab. |
+| F3 — Favorites & recents | [OPEN] | **Medium** | Cheap retention for commuters/fleets. | `user_favorite_station` + heart; recents from history. |
+| C3b — Real theme/language + working Help | ⚠️ Partial | **Medium** | Settings looks unfinished (placeholders). | Theme `StateFlow` in DataStore; string resources (ties to I3); Help → FAQ/contact intents. |
+| H2 — Biometric app-lock | [OPEN] | **Medium** | Protects a payment-bearing app. | `androidx.biometric`; gate launch + payment. |
+| I4 — Finish Hilt + repository refactor | ⚠️ Partial | **Medium (enabler)** | Hand-wired VMs + 590-line `MainActivity` throttle feature velocity. | Inject `ChargingViewModel`/prefs; repository layer over `RetrofitClient`; split nav graph. |
+| G1 — Reserve-ahead / scheduled booking | [OPEN] | **Low** | Removes "only book when standing there." | `BookingRequest` + start time; window availability; date/time picker. |
+| E2 — Trip / corridor route planning | [OPEN] | **Low** | Signature differentiator; needs C1 range first. | Stations within X km of a Directions polyline. |
+| D3 — Promo / referral / loyalty | [OPEN] | **Low** | Growth lever once the paid funnel is solid. | Promo at intent creation; referral via `ACTION_SEND`. |
+| G2 — Recurring bookings | [OPEN] | **Low** | Commuter/fleet convenience. | `BookingTemplate` materialized by the scheduler. |
+| I3 — Localization (Hindi) | [OPEN] | **Low** | Inclusivity for trucking; cheap now, costly later. | Externalize strings; translate Hindi first. |
+| I2 — Accessibility pass | [OPEN] | **Low** | Foundation exists; needs a TalkBack audit. | Scanner + `semantics{}` on telemetry/OTP composables. |
+| iOS / cross-platform | [OPEN] | Won't (this release) | Validate the funnel on Android first. | Later: KMP / mobile-web driver flow. |
 
 ---
 
-## Section 4: Priority Rationale
+## Section 4: Priority Rationale (revised)
 
-**What "High" means here: a paying stranger can complete the loop, trust it, and you can support it.** Four lenses decide the cut.
+**The original "make it shippable" tier is essentially built.** A paying stranger can now log in (Firebase Phone Auth, no DLT), discover/book/charge with the session surviving a backgrounded screen (foreground service), get told when it finishes (FCM), delete their account in-app (Play gate), and the team can see crashes and the funnel (Crashlytics + Analytics). That is a different posture than the 2026-06-16 audit, which correctly identified those as the launch gap.
 
-**1. A user must be able to charge end-to-end *and trust the result* — even when they put the phone in their pocket.**
-The defining act of this app is the live charging session, and today it is the most fragile path: the socket and session live in-process with **no foreground service**, so backgrounding or Doze kills telemetry, and process death loses the session. That is why **A1 (foreground service)** outranks every additive feature — a charging app that can't reliably show a charge in progress isn't shippable. **B1 (push)** is its complement: the realistic behavior is to walk away from the car, and without push the user never learns the charge finished or the hold expired. **A3 (persist tokens)** is a small but real correctness bug that erodes trust through silent logouts, so it earns High despite low effort.
+**What actually still blocks a clean store launch is now small and concrete:**
+1. **D2 — GST invoices.** The one remaining feature-level launch gap for the explicitly-targeted truck/fleet segment.
+2. **H1b / H3b / release-SHA — the "paperwork" gates.** A public deletion URL for the Play Console field, the hosted `assetlinks.json` so `https` App Links verify, and the **release-keystore fingerprint in Firebase** (without which Phone Auth breaks the moment you ship a signed release). These are low-effort but each is independently capable of blocking or breaking launch, so they are **High**.
 
-**2. The store and the law gate the listing regardless of feature richness.**
-**H1 (account deletion)** is a Google Play **publishing requirement** for account-based apps — no amount of polish ships without it, so it's High purely on gating. **D2 (GST invoices)** is similarly non-negotiable for the explicitly-targeted truck/fleet segment, who cannot expense charging without them.
+**The Medium tier is unchanged in spirit but now the real frontier:** finish the partials before adding new surface area — extend offline cache + WorkManager (A2), enforce/segment notifications (B2), graceful sign-out (A4), and complete the Hilt/repository refactor (I4) so the codebase can absorb the retention features (C1 vehicles, D1 wallet, F1 filters, F2 reviews, F3 favorites) without `MainActivity` becoming unmanageable.
 
-**3. You cannot operate a launch you cannot see.**
-**I1 (crash + analytics)** is High not for users but for the team: the first production crash and the first funnel drop-off must be observable, or every subsequent priority is guesswork. It's cheap and must land before public traffic.
+**The Low tier (route planning, loyalty, recurring, i18n, a11y) stays deliberately last** — they demo best and differentiate most, which is exactly why pre-launch teams over-invest in them. They multiply the value of a working core; they cannot substitute for closing the four small gates above.
 
-**4. Why the genuinely attractive features are deliberately *not* High.**
-Route planning (**E2**), loyalty (**D3**), and recurring bookings (**G2**) are the features that demo best and differentiate most — and they are exactly where pre-launch teams over-invest. They are sequenced **Low** on purpose: they multiply the value of a working core, but they cannot substitute for one. Building corridor planning on top of a session that drops when the screen sleeps just adds surface area to an unreliable base.
-
-**The Medium tier is the retention engine that turns a working app into a sticky one** — vehicle garage, wallet, navigation hand-off, reviews, favorites, filters. None are launch-blocking, but each materially reduces friction or increases repeat use, and several unblock the Low tier (vehicle range → route planning; deep links → push taps and receipts; wallet → auto-charge).
-
-**Suggested mobile sequencing (consistent with the system-wide audit's sprints):**
+**Suggested mobile sequencing (revised):**
 
 | Phase | Items | Theme |
 |---|---|---|
-| **Phase 1 — Make it shippable** | A1, A3, B1, H1, I1, D2 *(+ backend SMS-OTP precondition)* | Reliable core experience + store/legal/observability gates |
-| **Phase 2 — Make it sticky** | A2, A4, C1, D1, E1, F1, F2, F3, C2/C3, H2, H3 | Offline resilience + retention loop |
-| **Phase 3 — Make it differentiated** | G1, E2, D3, G2, I3, I2 | Planning, growth, inclusivity |
-| **Continuous** | I4 (Hilt/repo refactor) — fold into Phase 1/2 since A1/A2 already restructure data ownership | Velocity enabler |
+| **Phase 1 — Close the launch gates** | D2, H1b (web URL + export), H3b (assetlinks.json), release-keystore SHA | The last feature gate + store/legal/release paperwork |
+| **Phase 2 — Finish the partials, then retain** | A2 (booking/history + WorkManager), A4, B2, I4, then C1, D1, F1, F2, F3, C3b, H2 | Robustness + retention loop |
+| **Phase 3 — Differentiate** | G1, E2, D3, G2, I3, I2 | Planning, growth, inclusivity |
 
-**One-line bottom line:** the app has an impressively complete *happy-path*; the gap to commercial launch is **reliability under real-world conditions (background, offline, token rotation), the store/legal gates (deletion, invoices), and operational visibility (crash/analytics)** — not more features.
+**One-line bottom line:** the original audit's launch gap (reliability, store gates, observability) is **mostly closed**; what remains for a clean launch is **GST invoices plus three small store/release "paperwork" gates**, after which the work shifts decisively to **finishing the half-built robustness layer and the retention features.**
