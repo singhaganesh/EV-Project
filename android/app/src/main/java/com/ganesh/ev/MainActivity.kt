@@ -1,11 +1,11 @@
 package com.ganesh.ev
 
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.activity.viewModels
 import androidx.fragment.app.FragmentActivity
 import com.ganesh.ev.ui.components.BiometricGate
-import androidx.activity.enableEdgeToEdge
 import com.ganesh.ev.data.notifications.DeviceTokenRegistrar
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
@@ -37,6 +37,7 @@ import com.ganesh.ev.ui.theme.ClayBottomBar
 import com.ganesh.ev.ui.theme.EvTheme
 import com.ganesh.ev.ui.viewmodel.BookingViewModel
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -48,15 +49,18 @@ import androidx.lifecycle.lifecycleScope
 @AndroidEntryPoint
 class MainActivity : FragmentActivity(), PaymentResultWithDataListener {
 
-    private lateinit var userPreferencesRepository: UserPreferencesRepository
-    private lateinit var chargingViewModel: com.ganesh.ev.ui.viewmodel.ChargingViewModel
+    // Injected by Hilt (singleton from AppModule) instead of hand-constructed (I4).
+    @Inject
+    lateinit var userPreferencesRepository: UserPreferencesRepository
+
+    // Activity-scoped so the same instance is shared by the Compose charging/payment
+    // screens and the Razorpay result callback below — no manual construction (I4).
+    private val chargingViewModel: com.ganesh.ev.ui.viewmodel.ChargingViewModel by viewModels()
+
     private var navController: androidx.navigation.NavHostController? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        userPreferencesRepository = UserPreferencesRepository(applicationContext)
-        chargingViewModel = com.ganesh.ev.ui.viewmodel.ChargingViewModel()
 
         enableEdgeToEdge()
         setContent {
