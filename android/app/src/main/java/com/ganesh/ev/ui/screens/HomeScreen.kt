@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -106,6 +107,27 @@ fun HomeScreen(
                                                 )
                                         }
                                 else -> emptyList()
+                        }
+                }
+
+        // Discovery search + filters (F1). Applied client-side to the loaded
+        // nearby stations (which carry name/address/availableSlots/isOpen).
+        var searchQuery by remember { mutableStateOf("") }
+        var filterAvailable by remember { mutableStateOf(false) }
+        var filterOpenNow by remember { mutableStateOf(false) }
+
+        val filtersActive = searchQuery.isNotBlank() || filterAvailable || filterOpenNow
+        val filteredStations =
+                remember(nearbyStations, searchQuery, filterAvailable, filterOpenNow) {
+                        nearbyStations.filter { item ->
+                                val s = item.station
+                                val matchesQuery =
+                                        searchQuery.isBlank() ||
+                                                s.name.contains(searchQuery, ignoreCase = true) ||
+                                                s.address.contains(searchQuery, ignoreCase = true)
+                                val matchesAvailable = !filterAvailable || item.availableSlots > 0
+                                val matchesOpen = !filterOpenNow || (s.isOpen == true)
+                                matchesQuery && matchesAvailable && matchesOpen
                         }
                 }
 
@@ -260,18 +282,83 @@ fun HomeScreen(
                 },
                 containerColor = MaterialTheme.colorScheme.background
         ) { paddingValues ->
-                // Always show the map/content — never block with a full-screen loader
-                StationContent(
-                        nearbyStations = nearbyStations,
-                        otherPins = otherPins,
-                        showList = showList,
-                        isLoading = isLoadingStations,
-                        cameraPositionState = cameraPositionState,
-                        hasLocationPermission = hasPermissionResolved,
-                        onStationClick = onStationClick,
-                        onMarkerClick = { id, lat, lng -> viewModel.onMarkerClicked(id, lat, lng) },
-                        paddingValues = paddingValues
+                Column(
+                        modifier =
+                                Modifier.fillMaxSize()
+                                        .padding(top = paddingValues.calculateTopPadding())
+                ) {
+                        DiscoverySearchBar(
+                                query = searchQuery,
+                                onQueryChange = { searchQuery = it },
+                                available = filterAvailable,
+                                onAvailableChange = { filterAvailable = it },
+                                openNow = filterOpenNow,
+                                onOpenNowChange = { filterOpenNow = it }
+                        )
+                        Box(modifier = Modifier.weight(1f)) {
+                                // Filtered set drives both the map markers and the list. When a
+                                // filter/search is active, hide the lightweight far pins (they have
+                                // no name to match) to avoid confusion.
+                                StationContent(
+                                        nearbyStations = filteredStations,
+                                        otherPins = if (filtersActive) emptyList() else otherPins,
+                                        showList = showList,
+                                        isLoading = isLoadingStations,
+                                        cameraPositionState = cameraPositionState,
+                                        hasLocationPermission = hasPermissionResolved,
+                                        onStationClick = onStationClick,
+                                        onMarkerClick = { id, lat, lng ->
+                                                viewModel.onMarkerClicked(id, lat, lng)
+                                        },
+                                        paddingValues = PaddingValues(0.dp)
+                                )
+                        }
+                }
+        }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DiscoverySearchBar(
+        query: String,
+        onQueryChange: (String) -> Unit,
+        available: Boolean,
+        onAvailableChange: (Boolean) -> Unit,
+        openNow: Boolean,
+        onOpenNowChange: (Boolean) -> Unit
+) {
+        Column(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
+        ) {
+                OutlinedTextField(
+                        value = query,
+                        onValueChange = onQueryChange,
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("Search by name or address") },
+                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                        trailingIcon = {
+                                if (query.isNotEmpty()) {
+                                        IconButton(onClick = { onQueryChange("") }) {
+                                                Icon(Icons.Default.Close, contentDescription = "Clear")
+                                        }
+                                }
+                        },
+                        singleLine = true,
+                        shape = RoundedCornerShape(16.dp)
                 )
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                                selected = available,
+                                onClick = { onAvailableChange(!available) },
+                                label = { Text("Available now") }
+                        )
+                        FilterChip(
+                                selected = openNow,
+                                onClick = { onOpenNowChange(!openNow) },
+                                label = { Text("Open now") }
+                        )
+                }
         }
 }
 
