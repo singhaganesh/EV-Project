@@ -65,6 +65,9 @@ public class ChargingSessionController {
     @Autowired
     private com.ganesh.EV_Project.service.PushNotificationService pushNotificationService;
 
+    @Autowired
+    private com.ganesh.EV_Project.service.ChargingCompletionService completionService;
+
     /** True if the user owns the booking behind this session, or is an admin. */
     private boolean ownsBooking(User user, Booking booking) {
         return user != null && booking != null && booking.getUser() != null
@@ -181,76 +184,11 @@ public class ChargingSessionController {
             // ── HALT SMART SIMULATION ──
             ChargingSimulatorService.SimulatedSession finalVitals = simulatorService.stopSimulation(session.getBooking().getId());
 
-            // Calculate energy and cost
-            LocalDateTime endTime = LocalDateTime.now();
-            double hours = java.time.Duration.between(session.getStartTime(), endTime).toMinutes() / 60.0;
-            double energyConsumed = (finalVitals != null) ? finalVitals.getEnergyDispensedKwh() : (hours * session.getBooking().getSlot().getPowerKw());
-            double cost = com.ganesh.EV_Project.util.MoneyUtil.round2(
-                    (finalVitals != null) ? finalVitals.getTotalCost() : (energyConsumed * 15.0));
-
-            session.setEndTime(endTime);
-            session.setEnergyKwh(energyConsumed);
-            session.setTotalCost(cost);
-            session.setStatus("COMPLETED");
-
-            ChargingSession savedSession = chargingSessionRepository.save(session);
-
-            // Release Booking; hold the slot in PAYMENT_PENDING until payment
-            // is verified so another driver can't grab it before this one pays.
-            Booking booking = session.getBooking();
-            booking.setStatus(BookingStatus.COMPLETED);
-            booking.setActualEndTime(endTime);
-            bookingRepository.save(booking);
-
-            // Update slot status — held, not yet available
-            ChargerSlot slot = booking.getSlot();
-            slot.setStatus(SlotStatus.PAYMENT_PENDING);
-            slotRepository.save(slot);
-
-            // ── UPDATE STATION AND DISPENSARY LAST USED TIME ──
-            Station station = slot.getStation();
-            if (station != null) {
-                station.setLastUsedTime(endTime);
-                stationRepository.save(station);
-            }
-            
-            com.ganesh.EV_Project.model.Dispensary dispensary = slot.getDispensary();
-            if (dispensary != null) {
-                dispensary.setLastUsedTime(endTime);
-                dispensaryRepository.save(dispensary);
-            }
-
-            // ── CREATE RAZORPAY ORDER ──
-            String razorpayOrderId = null;
-            try {
-                razorpayOrderId = razorpayService.createOrder(cost, booking.getId().toString());
-                session.setRazorpayOrderId(razorpayOrderId);
-                chargingSessionRepository.save(session);
-            } catch (Exception e) {
-                // Log but don't fail session stop
-                System.err.println("Failed to create Razorpay Order: " + e.getMessage());
-            }
-
-            // Notify via WebSocket - Wrapped in try-catch to prevent failure
-            try {
-                webSocketController.notifySlotStatusChange(slot.getStation().getId(), slot);
-                webSocketController.notifyUserBookingUpdate(booking.getUser().getId(), Map.of(
-                    "bookingId", booking.getId(),
-                    "status", booking.getStatus()
-                ));
-            } catch (Exception wsEx) {
-                System.err.println("WebSocket Notification Failed: " + wsEx.getMessage());
-            }
-
-            // ── PUSH: charging complete (reaches the driver who walked away) ──
-            if (booking.getUser() != null) {
-                pushNotificationService.sendToUser(
-                        booking.getUser().getId(),
-                        "CHARGING_COMPLETE",
-                        "Charging complete",
-                        "Your session is done. Amount due: ₹" + cost + ".",
-                        "plugsy://payment/" + savedSession.getId());
-            }
+            // Finalize via the shared, idempotent service (same path the simulator
+            // uses to auto-complete a full battery while the app is closed).
+            Double finalEnergy = (finalVitals != null) ? finalVitals.getEnergyDispensedKwh() : null;
+            Double finalCost = (finalVitals != null) ? finalVitals.getTotalCost() : null;
+            ChargingSession savedSession = completionService.finalizeSession(session, finalEnergy, finalCost);
 
             return ResponseEntity.ok(APIResponse.builder()
                     .success(true)
@@ -258,8 +196,8 @@ public class ChargingSessionController {
                     .data(Map.of(
                         "id", savedSession.getId(),
                         "session", savedSession,
-                        "razorpayOrderId", razorpayOrderId != null ? razorpayOrderId : "",
-                        "totalCost", cost,
+                        "razorpayOrderId", savedSession.getRazorpayOrderId() != null ? savedSession.getRazorpayOrderId() : "",
+                        "totalCost", savedSession.getTotalCost() != null ? savedSession.getTotalCost() : 0.0,
                         "razorpayKeyId", razorpayKeyId
                     ))
                     .build());
@@ -328,6 +266,29 @@ public class ChargingSessionController {
                 return forbidden();
             }
             List<ChargingSession> sessions = chargingSessionRepository.findByBookingUserId(userId);
+            return ResponseEntity.ok(APIResponse.builder()
+                    .success(true)
+                    .data(sessions)
+                    .build());
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(APIResponse.builder()
+                    .success(false)
+                    .message(e.getMessage())
+                    .build());
+        }
+    }
+
+    /** Completed-but-unpaid sessions for the in-app pending-payment recovery. */
+    @GetMapping("/user/{userId}/outstanding")
+    public ResponseEntity<?> getOutstandingSessions(@PathVariable Long userId,
+                                                    Authentication authentication) {
+        try {
+            User currentUser = userService.getAuthenticatedUser(authentication);
+            if (currentUser == null
+                    || (currentUser.getRole() != User.Role.ADMIN && !currentUser.getId().equals(userId))) {
+                return forbidden();
+            }
+            List<ChargingSession> sessions = chargingSessionRepository.findOutstandingByUser(userId);
             return ResponseEntity.ok(APIResponse.builder()
                     .success(true)
                     .data(sessions)

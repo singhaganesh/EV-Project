@@ -45,6 +45,15 @@ public interface ChargingSessionRepository extends JpaRepository<ChargingSession
 
     java.util.List<ChargingSession> findByBookingUserId(Long userId);
 
+    // Completed-but-unpaid sessions for the in-app "pending payment" recovery.
+    // JOIN FETCH the chain so the station name is available for the banner.
+    @org.springframework.data.jpa.repository.Query("SELECT s FROM ChargingSession s " +
+            "JOIN FETCH s.booking b JOIN FETCH b.slot sl JOIN FETCH sl.station " +
+            "WHERE b.user.id = :userId AND s.status = 'COMPLETED' AND s.paymentStatus <> 'PAID' " +
+            "ORDER BY s.endTime DESC")
+    java.util.List<ChargingSession> findOutstandingByUser(
+            @org.springframework.data.repository.query.Param("userId") Long userId);
+
     @org.springframework.data.jpa.repository.Query("SELECT MAX(s.endTime) FROM ChargingSession s WHERE s.booking.slot.station.id = :stationId AND s.status = 'COMPLETED'")
     java.time.LocalDateTime findLatestSessionTimeByStation(@org.springframework.data.repository.query.Param("stationId") Long stationId);
 

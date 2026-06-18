@@ -30,6 +30,7 @@ public class ChargingSimulatorService {
     private final SimpMessagingTemplate messagingTemplate;
     private final BookingRepository bookingRepository;
     private final ChargingSessionRepository chargingSessionRepository;
+    private final ChargingCompletionService completionService;
 
     // Persist a snapshot of progress roughly every 6 ticks (~30s) so a restart
     // can resume from the last known state instead of orphaning the session.
@@ -99,12 +100,35 @@ public class ChargingSimulatorService {
 
         activeSessions.forEach((bookingId, session) -> {
             updateSessionVitals(session, stationChargingCount.get(session.stationId));
+
+            // Battery full / overtime → finalize server-side so the session ends
+            // even if the user's app is closed, then broadcast the final frame so
+            // an open app can auto-advance to payment.
+            if (session.completedReady) {
+                activeSessions.remove(bookingId);
+                autoComplete(session);
+                broadcastTelemetry(session);
+                return;
+            }
+
             broadcastTelemetry(session);
             if (++session.ticksSinceSnapshot >= SNAPSHOT_EVERY_TICKS) {
                 session.ticksSinceSnapshot = 0;
                 persistSnapshot(session);
             }
         });
+    }
+
+    /** Finalizes a full/overtime session through the shared completion path. */
+    private void autoComplete(SimulatedSession session) {
+        try {
+            chargingSessionRepository.findByBookingId(session.bookingId).ifPresent(cs ->
+                    completionService.finalizeSession(cs, session.energyDispensedKwh, session.totalCost));
+            log.info("Auto-completed charging for booking {} at {}% SoC",
+                    session.bookingId, Math.round(session.socPercentage));
+        } catch (Exception e) {
+            log.error("Auto-complete failed for booking {}: {}", session.bookingId, e.getMessage());
+        }
     }
 
     /** Persist live progress so a restart can resume this session authoritatively. */
@@ -218,7 +242,9 @@ public class ChargingSimulatorService {
         userUpdate.put("maxPowerKw", session.maxPowerKw);
         userUpdate.put("batteryCapacityKwh", session.batteryCapacityKwh);
         userUpdate.put("pricePerKwh", session.pricePerKwh);
-        
+        // Signals the app to tear down telemetry and move to the payment screen.
+        userUpdate.put("completed", session.completedReady);
+
         messagingTemplate.convertAndSend("/topic/session/" + session.bookingId, userUpdate);
 
         // Topic 2: Public (Aggregated for station searchers)
