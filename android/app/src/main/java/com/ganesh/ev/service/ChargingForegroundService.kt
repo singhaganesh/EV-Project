@@ -57,8 +57,13 @@ class ChargingForegroundService : Service() {
             observing = true
             scope.launch {
                 ChargingManager.telemetry.collect { telemetry ->
-                    NotificationManagerCompat.from(this@ChargingForegroundService)
-                            .notify(NOTIF_ID, buildNotification(telemetry))
+                    // Ignore the null emitted during teardown: re-posting here would
+                    // downgrade the card to the "Charging in progress" fallback and
+                    // leave it stranded after the session ends. onDestroy removes it.
+                    if (telemetry != null) {
+                        NotificationManagerCompat.from(this@ChargingForegroundService)
+                                .notify(NOTIF_ID, buildNotification(telemetry))
+                    }
                 }
             }
         }
@@ -129,5 +134,9 @@ class ChargingForegroundService : Service() {
         super.onDestroy()
         scope.cancel()
         observing = false
+        // Ensure the ongoing notification is gone when the service stops via
+        // stopService() (the disconnect path), not just the in-notification Stop action.
+        stopForegroundCompat()
+        NotificationManagerCompat.from(this).cancel(NOTIF_ID)
     }
 }
