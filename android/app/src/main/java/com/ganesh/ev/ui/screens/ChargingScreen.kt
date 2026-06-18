@@ -194,6 +194,22 @@ fun ChargingScreen(
                 }
             }
             else -> {
+                // No live telemetry yet, or the session has already finished
+                // (navigation to payment is in flight) — show a spinner instead of
+                // an empty 0% charging ring.
+                val loadedSession = (uiState as? ChargingUiState.SessionLoaded)?.session
+                val isFinished = loadedSession?.endTime != null
+                if (isFinished || telemetry == null) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        ClayProgressIndicator()
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            if (isFinished) "Session complete. Finishing up…"
+                            else "Connecting to charger...",
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                    }
+                } else {
                 // ── CENTERED ACTIVE CHARGING STATE ──
                 Box(
                     modifier = Modifier.fillMaxSize(),
@@ -400,6 +416,7 @@ fun ChargingScreen(
                                     }
                                 }
                             Spacer(modifier = Modifier.height(24.dp))
+                            }
                             }
                             }
                             }
