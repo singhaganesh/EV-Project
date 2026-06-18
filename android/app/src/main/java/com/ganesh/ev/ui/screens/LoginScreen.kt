@@ -1,17 +1,8 @@
 package com.ganesh.ev.ui.screens
 
 import android.app.Activity
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.ContextWrapper
-import android.content.Intent
-import android.content.IntentFilter
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.content.ContextCompat
-import com.google.android.gms.auth.api.phone.SmsRetriever
-import com.google.android.gms.common.api.CommonStatusCodes
-import com.google.android.gms.common.api.Status
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -110,55 +101,10 @@ fun LoginScreen(
         }
     }
 
-    // ── SMS User Consent: auto-fill the OTP from the incoming SMS (one-tap) ──
-    val smsConsentLauncher = rememberLauncherForActivityResult(
-            ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            val message = result.data?.getStringExtra(SmsRetriever.EXTRA_SMS_MESSAGE)
-            val code = message?.let { Regex("\\d{6}").find(it)?.value }
-            if (code != null) otp = code // fills the boxes and triggers auto-submit
-        }
-    }
-
-    // Listen for the verification SMS only while the OTP step is showing.
-    DisposableEffect(step) {
-        if (step != AuthStep.OTP) {
-            onDispose { }
-        } else {
-            val receiver = object : BroadcastReceiver() {
-                override fun onReceive(ctx: Context?, intent: Intent?) {
-                    if (intent?.action != SmsRetriever.SMS_RETRIEVED_ACTION) return
-                    val extras = intent.extras ?: return
-                    val status = extras.get(SmsRetriever.EXTRA_STATUS) as? Status ?: return
-                    if (status.statusCode == CommonStatusCodes.SUCCESS) {
-                        @Suppress("DEPRECATION")
-                        val consentIntent =
-                                extras.getParcelable<Intent>(SmsRetriever.EXTRA_CONSENT_INTENT)
-                        try {
-                            consentIntent?.let { smsConsentLauncher.launch(it) }
-                        } catch (_: Exception) { /* consent UI unavailable; user types manually */ }
-                    }
-                }
-            }
-            ContextCompat.registerReceiver(
-                    context,
-                    receiver,
-                    IntentFilter(SmsRetriever.SMS_RETRIEVED_ACTION),
-                    SmsRetriever.SEND_PERMISSION,
-                    null,
-                    ContextCompat.RECEIVER_EXPORTED
-            )
-            // Start listening for an SMS from any sender (5-minute window).
-            SmsRetriever.getClient(context).startSmsUserConsent(null)
-
-            onDispose {
-                try {
-                    context.unregisterReceiver(receiver)
-                } catch (_: Exception) { /* already unregistered */ }
-            }
-        }
-    }
+    // OTP autofill is handled by Firebase Phone Auth's built-in auto-retrieval
+    // (onVerificationCompleted signs the user in without manual entry). We do NOT
+    // run a second SMS reader (SMS User Consent) here: two readers competing for the
+    // same inbound SMS raced and intermittently crashed the screen on code arrival.
 
     val isLoading = uiState is AuthUiState.Loading
 
@@ -406,7 +352,12 @@ fun OtpInputBoxes(
         modifier: Modifier = Modifier
 ) {
     val focusRequester = remember { FocusRequester() }
-    LaunchedEffect(Unit) { focusRequester.requestFocus() }
+    LaunchedEffect(Unit) {
+        // Guard: requesting focus before the field attaches throws IllegalStateException.
+        try {
+            focusRequester.requestFocus()
+        } catch (_: Exception) { /* field not attached yet; user can tap to focus */ }
+    }
 
     BasicTextField(
             value = TextFieldValue(value, selection = TextRange(value.length)),
