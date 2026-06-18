@@ -22,7 +22,11 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ChargingHistoryScreen(userId: Long, viewModel: ChargingViewModel = viewModel()) {
+fun ChargingHistoryScreen(
+        userId: Long,
+        onPayNow: (Long) -> Unit = {},
+        viewModel: ChargingViewModel = viewModel()
+) {
     val uiState by viewModel.uiState.collectAsState()
 
     LaunchedEffect(userId) { viewModel.loadUserHistory(userId) }
@@ -67,7 +71,7 @@ fun ChargingHistoryScreen(userId: Long, viewModel: ChargingViewModel = viewModel
                             modifier = Modifier.fillMaxSize().padding(paddingValues),
                             contentPadding = PaddingValues(16.dp),
                             verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) { items(state.sessions) { session -> ClayHistoryCard(session = session) } }
+                    ) { items(state.sessions) { session -> ClayHistoryCard(session = session, onPayNow = onPayNow) } }
                 }
             }
             is ChargingUiState.Error -> {
@@ -92,7 +96,7 @@ fun ChargingHistoryScreen(userId: Long, viewModel: ChargingViewModel = viewModel
 }
 
 @Composable
-fun ClayHistoryCard(session: ChargingSession) {
+fun ClayHistoryCard(session: ChargingSession, onPayNow: (Long) -> Unit = {}) {
     ClayCard {
         Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -148,6 +152,17 @@ fun ClayHistoryCard(session: ChargingSession) {
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.primary
                 )
+            }
+        }
+
+        // Completed but not paid → let the user finish the payment from here
+        // (recovery path for sessions that auto-completed while the app was closed).
+        if (!session.paymentStatus.equals("PAID", ignoreCase = true) &&
+                session.status.equals("COMPLETED", ignoreCase = true)) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                ClayButton(onClick = { onPayNow(session.id) }) {
+                    Text("Pay ₹${String.format("%.2f", session.totalCost ?: 0.0)}")
+                }
             }
         }
 

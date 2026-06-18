@@ -154,6 +154,16 @@ class ChargingViewModel : ViewModel() {
         ChargingManager.disconnect()
     }
 
+    /**
+     * The backend auto-completed the session (battery full / overtime) while the
+     * app was open. Tear down telemetry — which clears the ongoing notification —
+     * and reload the now-COMPLETED session so the screen advances to payment.
+     */
+    fun handleExternalCompletion(sessionId: Long) {
+        stopWebSocketTelemetry()
+        loadSession(sessionId)
+    }
+
     override fun onCleared() {
         super.onCleared()
         // Detach from telemetry but keep ChargingManager + the foreground service

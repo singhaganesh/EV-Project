@@ -27,8 +27,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.ganesh.ev.data.model.ChargingSession
 import com.ganesh.ev.data.model.StationPin
 import com.ganesh.ev.data.model.StationWithScore
+import com.ganesh.ev.data.network.RetrofitClient
 import com.ganesh.ev.ui.components.StationCard
 import com.ganesh.ev.ui.theme.*
 import com.ganesh.ev.ui.viewmodel.StationUiState
@@ -48,6 +50,8 @@ import kotlinx.coroutines.delay
 fun HomeScreen(
         onLogout: () -> Unit,
         onStationClick: (Long) -> Unit,
+        userId: Long? = null,
+        onPayNow: (Long) -> Unit = {},
         viewModel: StationViewModel = viewModel()
 ) {
         val uiState by viewModel.uiState.collectAsState()
@@ -295,6 +299,11 @@ fun HomeScreen(
                                 openNow = filterOpenNow,
                                 onOpenNowChange = { filterOpenNow = it }
                         )
+
+                        // Safety net: if a session auto-completed (e.g. battery full
+                        // while the app was closed), surface the unpaid amount so the
+                        // payment is never lost even if the push was missed.
+                        PendingPaymentBanner(userId = userId, onPayNow = onPayNow)
                         Box(modifier = Modifier.weight(1f)) {
                                 // Filtered set drives both the map markers and the list. When a
                                 // filter/search is active, hide the lightweight far pins (they have
@@ -313,6 +322,56 @@ fun HomeScreen(
                                         paddingValues = PaddingValues(0.dp)
                                 )
                         }
+                }
+        }
+}
+
+/**
+ * Shows a "Pay now" card when the user has a completed-but-unpaid session.
+ * This is the recovery path for sessions that auto-completed while the app was
+ * closed (so a missed completion push never strands the payment).
+ */
+@Composable
+private fun PendingPaymentBanner(userId: Long?, onPayNow: (Long) -> Unit) {
+        if (userId == null) return
+        var pending by remember(userId) { mutableStateOf<ChargingSession?>(null) }
+        LaunchedEffect(userId) {
+                try {
+                        val resp = RetrofitClient.apiService.getOutstandingSessions(userId)
+                        if (resp.isSuccessful) {
+                                pending = resp.body()?.data?.firstOrNull()
+                        }
+                } catch (_: Exception) {
+                        // Offline / transient — banner just stays hidden.
+                }
+        }
+        val session = pending ?: return
+
+        ClayCard(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                containerColor = MaterialTheme.colorScheme.errorContainer
+        ) {
+                Row(
+                        modifier = Modifier.fillMaxWidth().padding(4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                        "Payment pending",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        color = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                                Text(
+                                        "${session.booking?.slot?.station?.name ?: "Charging session"} · ₹${
+                                                String.format("%.2f", session.totalCost ?: 0.0)
+                                        }",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        ClayButton(onClick = { onPayNow(session.id) }) { Text("Pay now") }
                 }
         }
 }

@@ -368,6 +368,10 @@ fun EVChargingApp(
                         },
                         onStationClick = { stationId ->
                             navController.navigate(Screen.StationDetail.createRoute(stationId))
+                        },
+                        userId = currentUserId,
+                        onPayNow = { sessionId ->
+                            navController.navigate(Screen.PaymentSummary.createRoute(sessionId))
                         }
                 )
             }
@@ -579,7 +583,14 @@ fun EVChargingApp(
             }
 
             composable("bottom_history") {
-                currentUserId?.let { userId -> ChargingHistoryScreen(userId = userId) }
+                currentUserId?.let { userId ->
+                    ChargingHistoryScreen(
+                            userId = userId,
+                            onPayNow = { sessionId ->
+                                navController.navigate(Screen.PaymentSummary.createRoute(sessionId))
+                            }
+                    )
+                }
             }
 
             composable("trip") {
@@ -595,7 +606,12 @@ fun EVChargingApp(
                     arguments = listOf(navArgument("userId") { type = NavType.LongType })
             ) { backStackEntry ->
                 val userId = backStackEntry.arguments?.getLong("userId") ?: return@composable
-                ChargingHistoryScreen(userId = userId)
+                ChargingHistoryScreen(
+                        userId = userId,
+                        onPayNow = { sessionId ->
+                            navController.navigate(Screen.PaymentSummary.createRoute(sessionId))
+                        }
+                )
             }
 
             composable(

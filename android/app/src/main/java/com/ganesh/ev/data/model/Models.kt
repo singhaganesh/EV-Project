@@ -238,7 +238,10 @@ data class SimulatedSession(
     val minutesRemaining: Double,
     val maxPowerKw: Double,
     val batteryCapacityKwh: Double,
-    val pricePerKwh: Double
+    val pricePerKwh: Double,
+    // Backend sets this true on the final frame (battery full / overtime) so the
+    // app can tear down telemetry and advance to the payment screen.
+    val completed: Boolean = false
 )
 
 data class PaginatedResponse<T>(

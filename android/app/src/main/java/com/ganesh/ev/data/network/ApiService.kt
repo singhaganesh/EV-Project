@@ -186,6 +186,12 @@ interface ApiService {
                 @Path("userId") userId: Long
         ): Response<ApiResponse<List<ChargingSession>>>
 
+        // Completed-but-unpaid sessions, for the in-app pending-payment recovery.
+        @GET("api/charging/user/{userId}/outstanding")
+        suspend fun getOutstandingSessions(
+                @Path("userId") userId: Long
+        ): Response<ApiResponse<List<ChargingSession>>>
+
         // Payment APIs
         @POST("api/payments/create-intent/{bookingId}")
         suspend fun createPaymentIntent(

@@ -100,6 +100,23 @@ fun ChargingScreen(
         }
     }
 
+    // Backend auto-completed the session (battery full / overtime) while we're on
+    // this screen — tear down telemetry and reload the session so we advance to
+    // payment, matching the manual-stop flow.
+    LaunchedEffect(telemetry?.completed) {
+        if (telemetry?.completed == true && !isCompleted) {
+            val sid = when (val s = uiState) {
+                is ChargingUiState.SessionStarted -> s.session.id
+                is ChargingUiState.SessionLoaded -> s.session.id
+                else -> sessionId ?: 0L
+            }
+            if (sid > 0) {
+                isCompleted = true
+                viewModel.handleExternalCompletion(sid)
+            }
+        }
+    }
+
     LaunchedEffect(uiState) {
         val state = uiState
         android.util.Log.d("ChargingScreen", "Current UI State: ${state.javaClass.simpleName}")
