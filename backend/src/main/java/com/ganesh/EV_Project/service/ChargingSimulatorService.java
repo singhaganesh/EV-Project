@@ -40,6 +40,12 @@ public class ChargingSimulatorService {
     @org.springframework.beans.factory.annotation.Value("${app.charging.max-session-minutes:240}")
     private long maxSessionMinutes;
 
+    // Wall-clock acceleration for the simulation: each 5s tick delivers this many
+    // multiples of real energy, so SoC climbs (and the session completes) faster.
+    // 1.0 = realtime (production); dev/demo overrides this to finish in minutes.
+    @org.springframework.beans.factory.annotation.Value("${app.charging.simulation-speed:1.0}")
+    private double simulationSpeed;
+
     // Track active sessions: <BookingId, SimulatedSession>
     private final Map<Long, SimulatedSession> activeSessions = new ConcurrentHashMap<>();
 
@@ -205,8 +211,9 @@ public class ChargingSimulatorService {
         session.currentA = (availablePower * noise * 1000.0) / session.voltageV;
         session.powerKw = (session.voltageV * session.currentA) / 1000.0;
 
-        // 4. Energy Accumulation (kWh)
-        double addedEnergy = (session.powerKw * 5.0) / 3600.0;
+        // 4. Energy Accumulation (kWh) — scaled by simulationSpeed so a full charge
+        // can be demoed in minutes instead of hours (1.0 = realtime).
+        double addedEnergy = ((session.powerKw * 5.0) / 3600.0) * simulationSpeed;
         session.energyDispensedKwh += addedEnergy;
         session.socPercentage = Math.min(100.0, session.socPercentage + (addedEnergy / session.batteryCapacityKwh * 100.0));
 
@@ -222,7 +229,8 @@ public class ChargingSimulatorService {
         // 6. Cost & ETC
         session.totalCost = session.energyDispensedKwh * session.pricePerKwh;
         if (session.powerKw > 0) {
-            session.minutesRemaining = ((session.batteryCapacityKwh * (1.0 - (session.socPercentage / 100.0))) / session.powerKw) * 60.0;
+            // Divide by simulationSpeed so the displayed ETA matches the accelerated pace.
+            session.minutesRemaining = (((session.batteryCapacityKwh * (1.0 - (session.socPercentage / 100.0))) / session.powerKw) * 60.0) / simulationSpeed;
         } else {
             session.minutesRemaining = 0;
         }
