@@ -108,12 +108,16 @@ public class ChargingSimulatorService {
             updateSessionVitals(session, stationChargingCount.get(session.stationId));
 
             // Battery full / overtime → finalize server-side so the session ends
-            // even if the user's app is closed, then broadcast the final frame so
-            // an open app can auto-advance to payment.
+            // even if the user's app is closed. Only after the DB is actually
+            // finalized do we drop the session and broadcast the completed frame —
+            // otherwise the app would be told "done" while the session is still
+            // ONGOING and would restart charging. On failure we keep it and retry
+            // next tick.
             if (session.completedReady) {
-                activeSessions.remove(bookingId);
-                autoComplete(session);
-                broadcastTelemetry(session);
+                if (autoComplete(session)) {
+                    activeSessions.remove(bookingId);
+                    broadcastTelemetry(session);
+                }
                 return;
             }
 
@@ -125,15 +129,19 @@ public class ChargingSimulatorService {
         });
     }
 
-    /** Finalizes a full/overtime session through the shared completion path. */
-    private void autoComplete(SimulatedSession session) {
+    /** Finalizes a full/overtime session; returns true once the DB is finalized. */
+    private boolean autoComplete(SimulatedSession session) {
         try {
-            chargingSessionRepository.findByBookingId(session.bookingId).ifPresent(cs ->
-                    completionService.finalizeSession(cs, session.energyDispensedKwh, session.totalCost));
+            var csOpt = chargingSessionRepository.findByBookingId(session.bookingId);
+            if (csOpt.isEmpty()) return true; // nothing to finalize — drop it
+            completionService.finalizeSession(csOpt.get().getId(),
+                    session.energyDispensedKwh, session.totalCost);
             log.info("Auto-completed charging for booking {} at {}% SoC",
                     session.bookingId, Math.round(session.socPercentage));
+            return true;
         } catch (Exception e) {
             log.error("Auto-complete failed for booking {}: {}", session.bookingId, e.getMessage());
+            return false;
         }
     }
 

@@ -188,7 +188,7 @@ public class ChargingSessionController {
             // uses to auto-complete a full battery while the app is closed).
             Double finalEnergy = (finalVitals != null) ? finalVitals.getEnergyDispensedKwh() : null;
             Double finalCost = (finalVitals != null) ? finalVitals.getTotalCost() : null;
-            ChargingSession savedSession = completionService.finalizeSession(session, finalEnergy, finalCost);
+            ChargingSession savedSession = completionService.finalizeSession(session.getId(), finalEnergy, finalCost);
 
             return ResponseEntity.ok(APIResponse.builder()
                     .success(true)

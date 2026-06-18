@@ -56,7 +56,16 @@ public class ChargingCompletionService {
      * @return the finalized session (or the unchanged session if already ended)
      */
     @Transactional
-    public ChargingSession finalizeSession(ChargingSession session, Double finalEnergyKwh, Double finalCost) {
+    public ChargingSession finalizeSession(Long sessionId, Double finalEnergyKwh, Double finalCost) {
+        // Re-load inside this transaction so the lazy associations (booking/slot/
+        // station/dispensary/user) initialize safely. The simulator's @Scheduled
+        // caller has no open-session-in-view, so a detached entity passed in here
+        // would throw LazyInitializationException, roll back the finalize, and leave
+        // the session stuck ONGOING while the app was told it completed.
+        ChargingSession session = chargingSessionRepository.findById(sessionId).orElse(null);
+        if (session == null) {
+            return null;
+        }
         // Idempotency guard — never finalize the same session twice.
         if (session.getEndTime() != null || "COMPLETED".equals(session.getStatus())) {
             return session;
@@ -121,13 +130,18 @@ public class ChargingCompletionService {
         }
 
         // Push reaches the driver who walked away; deeplink opens the payment screen.
+        // Best-effort: a push failure must never roll back the finalize.
         if (booking.getUser() != null) {
-            pushNotificationService.sendToUser(
-                    booking.getUser().getId(),
-                    "CHARGING_COMPLETE",
-                    "Charging complete",
-                    "Your session is done. Amount due: ₹" + cost + ".",
-                    "plugsy://payment/" + savedSession.getId());
+            try {
+                pushNotificationService.sendToUser(
+                        booking.getUser().getId(),
+                        "CHARGING_COMPLETE",
+                        "Charging complete",
+                        "Your session is done. Amount due: ₹" + cost + ".",
+                        "plugsy://payment/" + savedSession.getId());
+            } catch (Exception e) {
+                log.warn("Completion push failed for session {}: {}", session.getId(), e.getMessage());
+            }
         }
 
         return savedSession;
