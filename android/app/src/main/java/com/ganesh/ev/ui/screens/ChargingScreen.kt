@@ -40,6 +40,7 @@ import com.ganesh.ev.ui.viewmodel.ChargingViewModel
 import com.razorpay.Checkout
 import org.json.JSONObject
 import java.util.Locale
+import kotlin.math.roundToInt
 
 @Composable
 fun ChargingScreen(
@@ -219,7 +220,7 @@ fun ChargingScreen(
                                 contentAlignment = Alignment.Center,
                                 modifier = Modifier.size(240.dp).semantics {
                                     contentDescription =
-                                            "State of charge ${(telemetry?.socPercentage ?: 0.0).toInt()} percent"
+                                            "State of charge ${(telemetry?.socPercentage ?: 0.0).roundToInt()} percent"
                                 }
                             ) {
                                 val soc = telemetry?.socPercentage ?: 0.0
@@ -259,7 +260,7 @@ fun ChargingScreen(
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                     Row(verticalAlignment = Alignment.Bottom) {
                                         Text(
-                                            text = "${soc.toInt()}",
+                                            text = "${soc.roundToInt()}",
                                             style = MaterialTheme.typography.displayLarge.copy(
                                                 fontWeight = FontWeight.ExtraBold,
                                                 color = Color(0xFF1A2234),
