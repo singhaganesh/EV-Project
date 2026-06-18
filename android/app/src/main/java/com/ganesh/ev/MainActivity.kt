@@ -4,8 +4,7 @@ import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
-import androidx.fragment.app.FragmentActivity
-import com.ganesh.ev.ui.components.BiometricGate
+import androidx.activity.ComponentActivity
 import com.ganesh.ev.data.notifications.DeviceTokenRegistrar
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
@@ -48,7 +47,7 @@ import android.widget.Toast
 import androidx.lifecycle.lifecycleScope
 
 @AndroidEntryPoint
-class MainActivity : FragmentActivity(), PaymentResultWithDataListener {
+class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
 
     // Injected by Hilt (singleton from AppModule) instead of hand-constructed (I4).
     @Inject
@@ -71,17 +70,13 @@ class MainActivity : FragmentActivity(), PaymentResultWithDataListener {
                 "DARK" -> true
                 else -> isSystemInDarkTheme()
             }
-            val biometricLock by userPreferencesRepository.biometricLockEnabled
-                    .collectAsState(initial = false)
             EvTheme(darkTheme = darkTheme) {
                 Surface(
                         modifier = Modifier.fillMaxSize(),
                         color = MaterialTheme.colorScheme.background
                 ) {
-                    BiometricGate(enabled = biometricLock) {
-                        EVChargingApp(userPreferencesRepository, chargingViewModel) { controller ->
-                            navController = controller
-                        }
+                    EVChargingApp(userPreferencesRepository, chargingViewModel) { controller ->
+                        navController = controller
                     }
                 }
             }

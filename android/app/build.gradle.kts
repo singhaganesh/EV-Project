@@ -128,11 +128,6 @@ dependencies {
     // SMS User Consent API — auto-read the incoming OTP (one-tap, no READ_SMS).
     implementation(libs.play.services.auth.api.phone)
 
-    // Biometric app-lock (H2). fragment-ktx provides the FragmentActivity that
-    // BiometricPrompt requires.
-    implementation("androidx.biometric:biometric:1.1.0")
-    implementation("androidx.fragment:fragment-ktx:1.6.2")
-
     // WorkManager — durable, retrying background work (A2).
     implementation("androidx.work:work-runtime-ktx:2.9.1")
 
