@@ -3,7 +3,9 @@ package com.ganesh.ev.ui.screens
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
@@ -86,7 +88,9 @@ fun ProfileScreen(
                                 )
         ) {
                 Column(
-                        modifier = Modifier.fillMaxSize().padding(24.dp),
+                        modifier = Modifier.fillMaxSize()
+                                .verticalScroll(rememberScrollState())
+                                .padding(24.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                         Spacer(modifier = Modifier.height(40.dp))
@@ -268,7 +272,7 @@ fun ProfileScreen(
                                 modifier = Modifier.fillMaxWidth()
                         ) { Text("Settings") }
 
-                        Spacer(modifier = Modifier.weight(1f))
+                        Spacer(modifier = Modifier.height(32.dp))
 
                         ClayButton(
                                 onClick = onLogout,
