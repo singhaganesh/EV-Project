@@ -40,6 +40,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 
 import com.razorpay.PaymentResultWithDataListener
 import com.razorpay.PaymentData
@@ -61,6 +62,18 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Restore persisted auth tokens into the network client up front, so entry
+        // points that bypass the splash screen — e.g. a notification deeplink straight
+        // to the payment screen — are authenticated before their first API call.
+        runBlocking {
+            try {
+                userPreferencesRepository.authToken.first()?.takeIf { it.isNotEmpty() }
+                        ?.let { RetrofitClient.setAuthToken(it) }
+                userPreferencesRepository.refreshToken.first()?.takeIf { it.isNotEmpty() }
+                        ?.let { RetrofitClient.setRefreshToken(it) }
+            } catch (_: Exception) { /* no persisted session yet */ }
+        }
 
         enableEdgeToEdge()
         setContent {
@@ -174,6 +187,20 @@ fun EVChargingApp(
     var currentUser by remember { mutableStateOf<User?>(null) }
     val coroutineScope = rememberCoroutineScope()
     val appContext = LocalContext.current.applicationContext
+
+    // Restore the signed-in user up front so entry points that bypass the splash
+    // screen (e.g. a notification deeplink to the payment screen) still have user
+    // context — bottom bar, user-scoped screens — after the deeplinked flow.
+    LaunchedEffect(Unit) {
+        if (currentUser == null) {
+            try {
+                userPreferencesRepository.currentUser.first()?.let { user ->
+                    currentUser = user
+                    currentUserId = user.id
+                }
+            } catch (_: Exception) { /* not signed in */ }
+        }
+    }
 
     // Once signed in, register this device's FCM token (no UI / permission needed).
     // The POST_NOTIFICATIONS runtime prompt is requested later, at first charging
