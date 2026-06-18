@@ -56,6 +56,7 @@ fun StationDetailScreen(
         stationId: Long,
         onBack: () -> Unit,
         onBookStation: () -> Unit,
+        initialTab: Int = 0,
         viewModel: StationViewModel = viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -140,6 +141,7 @@ fun StationDetailScreen(
                         slotUpdates = slotUpdates,
                         powerData = state.powerData,
                         onBookStation = { onBookStation() },
+                        initialTab = initialTab,
                         modifier = Modifier.padding(paddingValues)
                 )
             }
@@ -155,9 +157,10 @@ fun ClayStationDetailContent(
         slotUpdates: Map<Long, SimulatedSession>,
         powerData: LivePowerData?,
         onBookStation: () -> Unit,
+        initialTab: Int = 0,
         modifier: Modifier = Modifier
 ) {
-    var selectedTab by remember { mutableIntStateOf(0) }
+    var selectedTab by remember { mutableIntStateOf(initialTab) }
     val tabs = listOf("Charger", "Details", "Reviews")
 
     Column(modifier = modifier.fillMaxSize()) {

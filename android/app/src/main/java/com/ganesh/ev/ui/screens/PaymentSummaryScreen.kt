@@ -28,6 +28,7 @@ fun PaymentSummaryScreen(
     sessionId: Long,
     onPaymentSuccess: () -> Unit,
     onBack: () -> Unit,
+    onWriteReview: (Long) -> Unit = {},
     viewModel: ChargingViewModel = viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -90,7 +91,8 @@ fun PaymentSummaryScreen(
                 if (isPaid) {
                     PaymentSuccessScreen(
                         session = session,
-                        onGoHome = onPaymentSuccess
+                        onGoHome = onPaymentSuccess,
+                        onWriteReview = onWriteReview
                     )
                 } else {
                     Column(

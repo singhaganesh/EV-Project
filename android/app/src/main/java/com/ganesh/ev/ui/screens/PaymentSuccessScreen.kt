@@ -8,6 +8,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -32,7 +33,8 @@ import java.time.format.DateTimeFormatter
 @Composable
 fun PaymentSuccessScreen(
     session: ChargingSession,
-    onGoHome: () -> Unit
+    onGoHome: () -> Unit,
+    onWriteReview: (Long) -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -139,6 +141,21 @@ fun PaymentSuccessScreen(
                     Icon(Icons.Default.Download, null)
                     Spacer(modifier = Modifier.width(12.dp))
                     Text("Download / Share Receipt", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                }
+            }
+
+            // Let the user rate the station for the session they just paid for.
+            val reviewStationId = session.booking?.slot?.station?.id
+            if (reviewStationId != null) {
+                Spacer(modifier = Modifier.height(12.dp))
+                OutlinedButton(
+                    onClick = { onWriteReview(reviewStationId) },
+                    modifier = Modifier.fillMaxWidth().height(56.dp),
+                    shape = RoundedCornerShape(20.dp)
+                ) {
+                    Icon(Icons.Default.Star, null)
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text("Rate your experience", fontWeight = FontWeight.Bold, fontSize = 15.sp)
                 }
             }
 

@@ -110,8 +110,8 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
 sealed class Screen(val route: String) {
     object Login : Screen("login")
     object Home : Screen("home")
-    object StationDetail : Screen("station/{stationId}") {
-        fun createRoute(stationId: Long) = "station/$stationId"
+    object StationDetail : Screen("station/{stationId}?tab={tab}") {
+        fun createRoute(stationId: Long, tab: Int = 0) = "station/$stationId?tab=$tab"
     }
     object SlotBooking : Screen("booking/station/{stationId}") {
         fun createRoute(stationId: Long) = "booking/station/$stationId"
@@ -374,15 +374,20 @@ fun EVChargingApp(
 
             composable(
                     route = Screen.StationDetail.route,
-                    arguments = listOf(navArgument("stationId") { type = NavType.LongType }),
+                    arguments = listOf(
+                        navArgument("stationId") { type = NavType.LongType },
+                        navArgument("tab") { type = NavType.IntType; defaultValue = 0 }
+                    ),
                     deepLinks = listOf(
                         navDeepLink { uriPattern = "https://plugsy.in/station/{stationId}" },
                         navDeepLink { uriPattern = "plugsy://station/{stationId}" }
                     )
             ) { backStackEntry ->
                 val stationId = backStackEntry.arguments?.getLong("stationId") ?: return@composable
+                val tab = backStackEntry.arguments?.getInt("tab") ?: 0
                 StationDetailScreen(
                         stationId = stationId,
+                        initialTab = tab,
                         onBack = { navController.popBackStack() },
                         onBookStation = {
                             bookingViewModel.resetState()
@@ -560,6 +565,13 @@ fun EVChargingApp(
                             navController.navigate("home") {
                                 // Clear all payment/charging related screens from stack
                                 popUpTo("home") { inclusive = true }
+                            }
+                        },
+                        onWriteReview = { stationId ->
+                            // Open the station on its Reviews tab (index 2) so the user
+                            // can rate the session they just paid for.
+                            navController.navigate(Screen.StationDetail.createRoute(stationId, tab = 2)) {
+                                popUpTo("home")
                             }
                         },
                         onBack = { navController.popBackStack() }
