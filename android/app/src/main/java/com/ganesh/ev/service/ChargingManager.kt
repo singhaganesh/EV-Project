@@ -83,7 +83,15 @@ object ChargingManager {
         client.connect()
         client.subscribe("/topic/session/$bookingId") { json ->
             try {
-                _telemetry.value = gson.fromJson(json, SimulatedSession::class.java)
+                val t = gson.fromJson(json, SimulatedSession::class.java)
+                _telemetry.value = t
+                if (t?.completed == true) {
+                    // Backend finished the session — stop receiving (off the socket
+                    // callback thread). The completed frame stays in _telemetry so the
+                    // foreground service swaps to the "tap to pay" card and an open
+                    // charging screen advances to payment.
+                    scope.launch { disconnectSocketOnly() }
+                }
             } catch (e: Exception) {
                 Log.e("ChargingManager", "Error parsing telemetry: ${e.message}")
             }

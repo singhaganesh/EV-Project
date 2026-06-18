@@ -32,6 +32,9 @@ class ChargingForegroundService : Service() {
         const val EXTRA_BOOKING_ID = "bookingId"
         const val ACTION_STOP = "com.ganesh.ev.action.STOP_CHARGING"
         private const val NOTIF_ID = 4242
+        // Separate id so stopping the service (which cancels NOTIF_ID) doesn't
+        // also remove the "tap to pay" completion card.
+        private const val COMPLETE_NOTIF_ID = 4243
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -57,12 +60,20 @@ class ChargingForegroundService : Service() {
             observing = true
             scope.launch {
                 ChargingManager.telemetry.collect { telemetry ->
-                    // Ignore the null emitted during teardown: re-posting here would
-                    // downgrade the card to the "Charging in progress" fallback and
-                    // leave it stranded after the session ends. onDestroy removes it.
-                    if (telemetry != null) {
-                        NotificationManagerCompat.from(this@ChargingForegroundService)
-                                .notify(NOTIF_ID, buildNotification(telemetry))
+                    when {
+                        // Null is emitted during teardown — ignore (onDestroy removes
+                        // the card), don't downgrade to the "in progress" fallback.
+                        telemetry == null -> {}
+                        // Session finished (battery full / overtime): swap the ongoing
+                        // card for a dismissable "tap to pay" card and stop the service.
+                        telemetry.completed -> {
+                            showCompletionNotification()
+                            stopForegroundCompat()
+                            stopSelf()
+                        }
+                        else ->
+                                NotificationManagerCompat.from(this@ChargingForegroundService)
+                                        .notify(NOTIF_ID, buildNotification(telemetry))
                     }
                 }
             }
@@ -119,6 +130,37 @@ class ChargingForegroundService : Service() {
                 .setContentIntent(contentIntent)
                 .addAction(0, "Stop", stopIntent)
                 .build()
+    }
+
+    /** Terminal "Charging complete — tap to pay" card shown when the battery is full. */
+    private fun showCompletionNotification() {
+        val sessionId = ChargingManager.activeSessionId
+        val tapIntent = if (sessionId > 0) {
+            Intent(Intent.ACTION_VIEW, Uri.parse("plugsy://payment/$sessionId"))
+                    .setPackage(packageName)
+        } else {
+            // Lost the session id (process death mid-session) — open the app; the
+            // Home banner / history "Pay now" still recovers the payment.
+            packageManager.getLaunchIntentForPackage(packageName)
+        }
+        val contentIntent = tapIntent?.let {
+            PendingIntent.getActivity(
+                    this,
+                    2,
+                    it,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+        }
+
+        val notification = NotificationCompat.Builder(this, Notifications.CHANNEL_CHARGING)
+                .setSmallIcon(applicationInfo.icon)
+                .setContentTitle("Charging complete")
+                .setContentText("Your vehicle is charged. Tap to pay.")
+                .setAutoCancel(true)
+                .apply { contentIntent?.let { setContentIntent(it) } }
+                .build()
+
+        NotificationManagerCompat.from(this).notify(COMPLETE_NOTIF_ID, notification)
     }
 
     private fun stopForegroundCompat() {
