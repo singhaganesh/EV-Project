@@ -1,8 +1,13 @@
 package com.ganesh.ev.ui.screens
 
 import android.app.Activity
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.ContextWrapper
+import android.content.Intent
+import android.content.IntentFilter
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -26,12 +31,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
+import androidx.core.os.BundleCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ganesh.ev.data.model.User
 import com.ganesh.ev.ui.theme.*
 import com.ganesh.ev.ui.viewmodel.AuthUiState
 import com.ganesh.ev.ui.viewmodel.AuthViewModel
 import com.ganesh.ev.ui.viewmodel.AuthViewModelFactory
+import com.google.android.gms.auth.api.phone.SmsRetriever
+import com.google.android.gms.common.api.CommonStatusCodes
+import com.google.android.gms.common.api.Status
 import kotlinx.coroutines.delay
 
 private enum class AuthStep { MOBILE, OTP, PROFILE }
@@ -101,10 +111,69 @@ fun LoginScreen(
         }
     }
 
-    // OTP autofill is handled by Firebase Phone Auth's built-in auto-retrieval
-    // (onVerificationCompleted signs the user in without manual entry). We do NOT
-    // run a second SMS reader (SMS User Consent) here: two readers competing for the
-    // same inbound SMS raced and intermittently crashed the screen on code arrival.
+    // ── SMS User Consent: the "Allow" prompt that auto-reads the incoming OTP ──
+    // This coexists with Firebase's own silent auto-retrieval; whichever reads the
+    // SMS first wins (both end in a successful login). EVERY step is wrapped in
+    // try/catch and the receiver is lifecycle-bound, so a failure can never crash
+    // the OTP screen the way the earlier, unguarded version did.
+    val smsConsentLauncher = rememberLauncherForActivityResult(
+            ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        try {
+            if (result.resultCode == Activity.RESULT_OK) {
+                val message = result.data?.getStringExtra(SmsRetriever.EXTRA_SMS_MESSAGE)
+                val code = message?.let { Regex("\\d{6}").find(it)?.value }
+                if (!code.isNullOrEmpty()) {
+                    otp = code // LaunchedEffect(otp) auto-submits once 6 digits are set
+                }
+            }
+        } catch (_: Exception) { /* never crash the OTP screen */ }
+    }
+
+    // (Re)start the consent listener each time a code is sent (resendNonce bumps on
+    // every send, including the first) and tear the receiver down when we leave.
+    DisposableEffect(resendNonce) {
+        if (resendNonce <= 0) {
+            onDispose { }
+        } else {
+            val receiver = object : BroadcastReceiver() {
+                override fun onReceive(ctx: Context?, intent: Intent?) {
+                    try {
+                        if (intent?.action != SmsRetriever.SMS_RETRIEVED_ACTION) return
+                        val extras = intent.extras ?: return
+                        val status = BundleCompat.getParcelable(
+                                extras, SmsRetriever.EXTRA_STATUS, Status::class.java
+                        ) ?: return
+                        if (status.statusCode == CommonStatusCodes.SUCCESS) {
+                            val consentIntent = BundleCompat.getParcelable(
+                                    extras, SmsRetriever.EXTRA_CONSENT_INTENT, Intent::class.java
+                            )
+                            if (consentIntent != null) smsConsentLauncher.launch(consentIntent)
+                        }
+                    } catch (_: Exception) { /* never crash the OTP screen */ }
+                }
+            }
+            try {
+                ContextCompat.registerReceiver(
+                        context,
+                        receiver,
+                        IntentFilter(SmsRetriever.SMS_RETRIEVED_ACTION),
+                        SmsRetriever.SEND_PERMISSION,
+                        null,
+                        ContextCompat.RECEIVER_EXPORTED
+                )
+            } catch (_: Exception) { /* ignore registration failure */ }
+            try {
+                SmsRetriever.getClient(context).startSmsUserConsent(null)
+            } catch (_: Exception) { /* ignore */ }
+
+            onDispose {
+                try {
+                    context.unregisterReceiver(receiver)
+                } catch (_: Exception) { /* receiver may already be gone */ }
+            }
+        }
+    }
 
     val isLoading = uiState is AuthUiState.Loading
 
