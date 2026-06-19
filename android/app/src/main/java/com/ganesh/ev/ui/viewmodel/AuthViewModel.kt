@@ -51,6 +51,11 @@ class AuthViewModel(
     private var verificationId: String? = null
     private var resendToken: PhoneAuthProvider.ForceResendingToken? = null
     private var phoneE164: String = ""
+    // True once an SMS has been dispatched (onCodeSent). Used to distinguish
+    // SMS-based auto-retrieval (which we ignore, so the "Allow" consent prompt
+    // drives verification) from instant verification (no SMS — must be honored,
+    // else the user is stuck with no code to enter).
+    private var smsDispatched = false
 
     // Held between firebase-login and profile completion for new users.
     private var pendingToken: String? = null
@@ -59,7 +64,11 @@ class AuthViewModel(
 
     private val callbacks = object : PhoneAuthProvider.OnVerificationStateChangedCallbacks() {
         override fun onVerificationCompleted(credential: PhoneAuthCredential) {
-            // Instant verification / auto-retrieval — sign in without manual entry.
+            // If an SMS was already sent, this is SMS-based auto-retrieval: ignore it
+            // so the visible "Allow" consent prompt (or manual entry) completes the
+            // login consistently. If no SMS was sent, this is instant verification —
+            // honor it, otherwise the user has nothing to enter and would be stuck.
+            if (smsDispatched) return
             signInWithCredential(credential)
         }
 
@@ -77,6 +86,7 @@ class AuthViewModel(
         override fun onCodeSent(id: String, token: PhoneAuthProvider.ForceResendingToken) {
             verificationId = id
             resendToken = token
+            smsDispatched = true
             _uiState.value = AuthUiState.CodeSent
         }
     }
@@ -84,6 +94,7 @@ class AuthViewModel(
     /** Starts SMS verification for a full E.164 number (e.g. +919876543210). */
     fun sendCode(activity: Activity, phoneNumberE164: String) {
         phoneE164 = phoneNumberE164
+        smsDispatched = false
         _uiState.value = AuthUiState.Loading
         PhoneAuthProvider.verifyPhoneNumber(
             PhoneAuthOptions.newBuilder(firebaseAuth)
