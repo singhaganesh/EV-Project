@@ -385,13 +385,16 @@ export default function AddStationModal({ isOpen, onClose, onSuccess }) {
                                 <div className="bg-white p-6 rounded-2xl border-2 border-slate-100 shadow-sm relative overflow-hidden group focus-within:border-orange-500 transition-colors">
                                     <div className="absolute top-0 right-0 w-24 h-24 bg-slate-50 rounded-bl-full -z-10 transition-colors group-focus-within:bg-orange-50/50" />
                                     <label className="block text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
-                                        <BatteryCharging className="w-5 h-5 text-slate-400" /> Commercial Truck Rate
+                                        <BatteryCharging className="w-5 h-5 text-slate-400" /> Commercial Truck Rate <span className="text-xs font-normal text-slate-400">(Optional)</span>
                                     </label>
                                     <div className="flex items-center">
                                         <span className="text-xl font-medium text-slate-400 mr-2">Rs.</span>
-                                        <input onWheel={(e) => e.target.blur()} type="number" step="0.5" name="truckPricePerKwh" value={formData.truckPricePerKwh} onChange={handleChange} className="w-full text-3xl font-bold bg-transparent border-0 focus:outline-none focus:ring-0 p-0 text-slate-900 placeholder:text-slate-300" placeholder="20.0" />
+                                        <input onWheel={(e) => e.target.blur()} type="number" step="0.5" name="truckPricePerKwh" value={formData.truckPricePerKwh} onChange={handleChange} className="w-full text-3xl font-bold bg-transparent border-0 focus:outline-none focus:ring-0 p-0 text-slate-900 placeholder:text-slate-300" placeholder="Optional" />
                                     </div>
-                                    <div className="text-xs font-medium text-slate-400 uppercase tracking-wider mt-2">Per kWh</div>
+                                    <div className="flex justify-between items-center mt-2">
+                                        <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">Per kWh</span>
+                                        <span className="text-[10px] font-medium text-amber-600/80 bg-amber-50 px-2 py-0.5 rounded-md font-sans">Leave blank if unsupported</span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
