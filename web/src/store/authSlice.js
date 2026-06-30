@@ -17,11 +17,15 @@ const authSlice = createSlice({
             state.user = user;
             state.token = token;
             state.isAuthenticated = true;
+            if (user) {
+                localStorage.setItem('user', JSON.stringify(user));
+            }
         },
         logout: (state) => {
             state.user = null;
             state.token = null;
             state.isAuthenticated = false;
+            localStorage.removeItem('user');
         },
     },
 });
