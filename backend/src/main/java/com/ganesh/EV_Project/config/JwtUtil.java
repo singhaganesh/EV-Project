@@ -24,6 +24,10 @@ public class JwtUtil {
     @Value("${jwt.expiration}")
     private Long expiration;
 
+    public Long getExpiration() {
+        return this.expiration;
+    }
+
     private SecretKey getSigningKey() {
         return Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
     }
@@ -41,7 +45,7 @@ public class JwtUtil {
         return claimsResolver.apply(claims);
     }
 
-    private Claims extractAllClaims(String token) {
+    public Claims extractAllClaims(String token) {
         return Jwts.parser()
                 .verifyWith(getSigningKey())
                 .build()

@@ -11,21 +11,21 @@ let inMemoryToken = null;
 export const tokenStorage = {
     getToken() {
         if (inMemoryToken) return inMemoryToken;
-        inMemoryToken = sessionStorage.getItem(TOKEN_KEY);
+        inMemoryToken = localStorage.getItem(TOKEN_KEY);
         return inMemoryToken;
     },
     setToken(token) {
         inMemoryToken = token || null;
         if (token) {
-            sessionStorage.setItem(TOKEN_KEY, token);
+            localStorage.setItem(TOKEN_KEY, token);
         } else {
-            sessionStorage.removeItem(TOKEN_KEY);
+            localStorage.removeItem(TOKEN_KEY);
         }
     },
     clear() {
         inMemoryToken = null;
-        sessionStorage.removeItem(TOKEN_KEY);
-        // Remove any token left behind by older builds that used localStorage.
         localStorage.removeItem(TOKEN_KEY);
+        // Clean up any token left behind in sessionStorage.
+        sessionStorage.removeItem(TOKEN_KEY);
     },
 };

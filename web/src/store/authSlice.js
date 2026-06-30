@@ -1,14 +1,9 @@
 import { createSlice } from '@reduxjs/toolkit';
-import { tokenStorage } from '../api/tokenStorage';
 
-const storedToken = tokenStorage.getToken() || null;
-if (!storedToken) {
-    localStorage.removeItem('user');
-}
 const initialState = {
-    token: storedToken,
-    user: storedToken ? (JSON.parse(localStorage.getItem('user')) || null) : null,
-    isAuthenticated: !!storedToken,
+    token: null,
+    user: null,
+    isAuthenticated: false,
     loading: false,
     error: null,
 };
@@ -22,15 +17,11 @@ const authSlice = createSlice({
             state.user = user;
             state.token = token;
             state.isAuthenticated = true;
-            tokenStorage.setToken(token);
-            localStorage.setItem('user', JSON.stringify(user));
         },
         logout: (state) => {
             state.user = null;
             state.token = null;
             state.isAuthenticated = false;
-            tokenStorage.clear();
-            localStorage.removeItem('user');
         },
     },
 });

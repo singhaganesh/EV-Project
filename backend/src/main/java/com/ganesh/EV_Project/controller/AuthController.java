@@ -27,6 +27,11 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
+import org.springframework.http.ResponseCookie;
+import org.springframework.http.HttpHeaders;
 
 import java.util.Arrays;
 import java.util.HashMap;
@@ -269,6 +274,20 @@ public class AuthController {
         String principal = user.getEmail() != null ? user.getEmail() : user.getMobileNumber();
         String token = jwtUtil.generateToken(principal, claims);
         RefreshToken refreshToken = refreshTokenService.createRefreshToken(user.getId());
+
+        // Set secure HTTP-only cookie for web clients
+        ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+        if (attributes != null && attributes.getResponse() != null) {
+            HttpServletResponse response = attributes.getResponse();
+            ResponseCookie cookie = ResponseCookie.from("token", token)
+                    .httpOnly(true)
+                    .secure(true)
+                    .path("/")
+                    .maxAge(jwtUtil.getExpiration() / 1000)
+                    .sameSite("Lax")
+                    .build();
+            response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
+        }
 
         Map<String, Object> data = new HashMap<>();
         data.put("token", token);
@@ -630,12 +649,28 @@ public class AuthController {
 
     @PostMapping("/logout")
     public ResponseEntity<?> logoutUser(Authentication authentication) {
-        String principal = authentication.getName();
-        User user = userService.findByPhoneNumber(principal);
-        if (user == null) user = userService.findByEmail(principal);
+        String principal = authentication != null ? authentication.getName() : null;
+        if (principal != null) {
+            User user = userService.findByPhoneNumber(principal);
+            if (user == null) user = userService.findByEmail(principal);
 
-        if (user != null) {
-            refreshTokenService.deleteByUserId(user.getId());
+            if (user != null) {
+                refreshTokenService.deleteByUserId(user.getId());
+            }
+        }
+
+        // Clear the token cookie
+        ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+        if (attributes != null && attributes.getResponse() != null) {
+            HttpServletResponse response = attributes.getResponse();
+            ResponseCookie cookie = ResponseCookie.from("token", "")
+                    .httpOnly(true)
+                    .secure(true)
+                    .path("/")
+                    .maxAge(0) // immediately expire
+                    .sameSite("Lax")
+                    .build();
+            response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
         }
 
         return ResponseEntity.ok(APIResponse.builder()

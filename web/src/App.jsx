@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { LayoutDashboard, MapPin, Users, Calendar, BarChart2, Settings, Wallet } from 'lucide-react';
+import { useDispatch } from 'react-redux';
 
 import DashboardLayout from './components/layout/DashboardLayout';
 import PrivateRoute from './components/auth/PrivateRoute';
@@ -16,6 +17,8 @@ import BookingsPage from './pages/owner/BookingsPage';
 import StationsList from './pages/admin/StationsList';
 import LoginPage from './pages/auth/LoginPage';
 import RegisterPage from './pages/auth/RegisterPage';
+import { setCredentials, logout } from './store/authSlice';
+import api from './api/axios';
 
 // Admin sidebar navigation — all paths under /admin/
 const adminNav = [
@@ -38,6 +41,39 @@ const ownerNav = [
 ];
 
 function App() {
+    const [checking, setChecking] = useState(true);
+    const dispatch = useDispatch();
+
+    useEffect(() => {
+        const verifySession = async () => {
+            try {
+                const response = await api.get('/auth/me');
+                if (response.data?.success && response.data?.data) {
+                    dispatch(setCredentials({ user: response.data.data, token: null }));
+                } else {
+                    dispatch(logout());
+                }
+            } catch (err) {
+                dispatch(logout());
+            } finally {
+                setChecking(false);
+            }
+        };
+
+        verifySession();
+    }, [dispatch]);
+
+    if (checking) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-slate-900">
+                <div className="flex flex-col items-center gap-3">
+                    <div className="w-10 h-10 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin"></div>
+                    <span className="text-sm font-medium text-slate-400 font-sans">Verifying session...</span>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <BrowserRouter>
             <Routes>
