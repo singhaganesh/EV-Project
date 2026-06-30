@@ -120,8 +120,8 @@ export default function AddStationModal({ isOpen, onClose, onSuccess }) {
             }
         }
         if (currentStep === 3) {
-            if (!formData.pricePerKwh || !formData.truckPricePerKwh) {
-                toast.error("Please fill pricing configurations");
+            if (!formData.pricePerKwh) {
+                toast.error("Please fill Standard Car Rate");
                 return;
             }
         }
@@ -156,7 +156,7 @@ export default function AddStationModal({ isOpen, onClose, onSuccess }) {
                 latitude: parseFloat(formData.latitude),
                 longitude: parseFloat(formData.longitude),
                 pricePerKwh: parseFloat(formData.pricePerKwh),
-                truckPricePerKwh: parseFloat(formData.truckPricePerKwh),
+                truckPricePerKwh: formData.truckPricePerKwh ? parseFloat(formData.truckPricePerKwh) : 0.0,
             };
 
             // 1. Create the Station
@@ -389,7 +389,7 @@ export default function AddStationModal({ isOpen, onClose, onSuccess }) {
                                     </label>
                                     <div className="flex items-center">
                                         <span className="text-xl font-medium text-slate-400 mr-2">Rs.</span>
-                                        <input onWheel={(e) => e.target.blur()} required type="number" step="0.5" name="truckPricePerKwh" value={formData.truckPricePerKwh} onChange={handleChange} className="w-full text-3xl font-bold bg-transparent border-0 focus:outline-none focus:ring-0 p-0 text-slate-900 placeholder:text-slate-300" placeholder="20.0" />
+                                        <input onWheel={(e) => e.target.blur()} type="number" step="0.5" name="truckPricePerKwh" value={formData.truckPricePerKwh} onChange={handleChange} className="w-full text-3xl font-bold bg-transparent border-0 focus:outline-none focus:ring-0 p-0 text-slate-900 placeholder:text-slate-300" placeholder="20.0" />
                                     </div>
                                     <div className="text-xs font-medium text-slate-400 uppercase tracking-wider mt-2">Per kWh</div>
                                 </div>
