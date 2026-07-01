@@ -67,4 +67,7 @@ public class Booking {
 
     @CreationTimestamp
     private LocalDateTime createdAt;
+
+    @Transient
+    private String paymentStatus;
 }

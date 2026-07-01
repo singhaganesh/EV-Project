@@ -182,11 +182,36 @@ public class BookingService {
     }
 
     public List<Booking> getBookingsByUser(Long userId) {
-        return bookingRepository.findByUserId(userId);
+        List<Booking> bookings = bookingRepository.findByUserId(userId);
+        populatePaymentStatuses(bookings);
+        return bookings;
     }
 
     public org.springframework.data.domain.Page<Booking> getBookingsByUser(Long userId, org.springframework.data.domain.Pageable pageable) {
-        return bookingRepository.findByUserId(userId, pageable);
+        org.springframework.data.domain.Page<Booking> bookingsPage = bookingRepository.findByUserId(userId, pageable);
+        if (bookingsPage.hasContent()) {
+            populatePaymentStatuses(bookingsPage.getContent());
+        }
+        return bookingsPage;
+    }
+
+    private void populatePaymentStatuses(List<Booking> bookings) {
+        if (bookings == null || bookings.isEmpty()) return;
+        List<Long> bookingIds = bookings.stream().map(Booking::getId).collect(Collectors.toList());
+        List<ChargingSession> sessions = chargingSessionRepository.findByBookingIdIn(bookingIds);
+
+        java.util.Map<Long, String> statusMap = sessions.stream()
+            .collect(Collectors.toMap(
+                s -> s.getBooking().getId(),
+                s -> s.getPaymentStatus() != null ? s.getPaymentStatus() : "UNPAID",
+                (existing, replacement) -> existing
+            ));
+
+        bookings.forEach(b -> {
+            if (b.getStatus() == BookingStatus.COMPLETED) {
+                b.setPaymentStatus(statusMap.getOrDefault(b.getId(), "UNPAID"));
+            }
+        });
     }
 
     public org.springframework.data.domain.Page<com.ganesh.EV_Project.dto.OwnerBookingRowDTO> getOwnerBookings(

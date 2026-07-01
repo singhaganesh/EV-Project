@@ -75,7 +75,8 @@ data class Booking(
         @SerializedName("priceEstimate") val priceEstimate: Double?,
         @SerializedName("vehicleType") val vehicleType: String?,
         @SerializedName("expiresAt") val expiresAt: String?,
-        @SerializedName("createdAt") val createdAt: String?
+        @SerializedName("createdAt") val createdAt: String?,
+        @SerializedName("paymentStatus") val paymentStatus: String? = null
 )
 
 enum class BookingStatus {

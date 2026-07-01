@@ -194,15 +194,19 @@ fun MyBookingsScreen(
 
 @Composable
 fun ClayBookingCard(booking: Booking, onClick: () -> Unit) {
+    val isUnpaid = booking.status == BookingStatus.COMPLETED && booking.paymentStatus == "UNPAID"
     val statusColor =
-            when (booking.status) {
-                BookingStatus.CONFIRMED -> MaterialTheme.colorScheme.primary
-                BookingStatus.ONGOING -> ClayInfo
-                BookingStatus.COMPLETED -> ClaySuccess
-                BookingStatus.CANCELLED -> MaterialTheme.colorScheme.error
-                BookingStatus.PENDING -> MaterialTheme.colorScheme.secondary
-                BookingStatus.EXPIRED -> MaterialTheme.colorScheme.error
-                else -> MaterialTheme.colorScheme.onSurfaceVariant
+            if (isUnpaid) {
+                androidx.compose.ui.graphics.Color(0xFFFF9800) // Deep orange/amber for Unpaid
+            } else {
+                when (booking.status) {
+                    BookingStatus.CONFIRMED -> MaterialTheme.colorScheme.primary
+                    BookingStatus.ONGOING -> ClayInfo
+                    BookingStatus.COMPLETED -> ClaySuccess
+                    BookingStatus.CANCELLED -> MaterialTheme.colorScheme.error
+                    BookingStatus.PENDING -> MaterialTheme.colorScheme.secondary
+                    BookingStatus.EXPIRED -> MaterialTheme.colorScheme.error
+                }
             }
 
     val stationName = booking.slot?.station?.name
@@ -230,7 +234,7 @@ fun ClayBookingCard(booking: Booking, onClick: () -> Unit) {
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(text = "Booking #${booking.id}", style = MaterialTheme.typography.titleMedium)
             }
-            StatusChip(text = booking.status.name, color = statusColor)
+            StatusChip(text = if (isUnpaid) "UNPAID" else booking.status.name, color = statusColor)
         }
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -326,15 +330,19 @@ fun ClayBookingCard(booking: Booking, onClick: () -> Unit) {
 // Simple list item without card design
 @Composable
 fun BookingListItem(booking: Booking, onClick: () -> Unit) {
+    val isUnpaid = booking.status == BookingStatus.COMPLETED && booking.paymentStatus == "UNPAID"
     val statusColor =
-            when (booking.status) {
-                BookingStatus.CONFIRMED -> MaterialTheme.colorScheme.primary
-                BookingStatus.ONGOING -> ClayInfo
-                BookingStatus.COMPLETED -> ClaySuccess
-                BookingStatus.CANCELLED -> MaterialTheme.colorScheme.error
-                BookingStatus.PENDING -> MaterialTheme.colorScheme.secondary
-                BookingStatus.EXPIRED -> MaterialTheme.colorScheme.error
-                else -> MaterialTheme.colorScheme.onSurfaceVariant
+            if (isUnpaid) {
+                androidx.compose.ui.graphics.Color(0xFFFF9800) // Deep orange/amber for Unpaid
+            } else {
+                when (booking.status) {
+                    BookingStatus.CONFIRMED -> MaterialTheme.colorScheme.primary
+                    BookingStatus.ONGOING -> ClayInfo
+                    BookingStatus.COMPLETED -> ClaySuccess
+                    BookingStatus.CANCELLED -> MaterialTheme.colorScheme.error
+                    BookingStatus.PENDING -> MaterialTheme.colorScheme.secondary
+                    BookingStatus.EXPIRED -> MaterialTheme.colorScheme.error
+                }
             }
 
     val stationName = booking.slot?.station?.name
@@ -364,7 +372,7 @@ fun BookingListItem(booking: Booking, onClick: () -> Unit) {
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(text = "Booking #${booking.id}", style = MaterialTheme.typography.titleMedium)
             }
-            StatusChip(text = booking.status.name, color = statusColor)
+            StatusChip(text = if (isUnpaid) "UNPAID" else booking.status.name, color = statusColor)
         }
 
         Spacer(modifier = Modifier.height(4.dp))

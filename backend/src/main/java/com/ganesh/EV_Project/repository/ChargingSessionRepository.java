@@ -167,4 +167,6 @@ public interface ChargingSessionRepository extends JpaRepository<ChargingSession
            "WHERE cs.dispensary_id = :dispensaryId AND s.status = 'COMPLETED' " +
            "GROUP BY hour ORDER BY hour ASC", nativeQuery = true)
     List<Object[]> getPeakUsageByDispensary(@org.springframework.data.repository.query.Param("dispensaryId") Long dispensaryId);
+
+    List<ChargingSession> findByBookingIdIn(List<Long> bookingIds);
 }
