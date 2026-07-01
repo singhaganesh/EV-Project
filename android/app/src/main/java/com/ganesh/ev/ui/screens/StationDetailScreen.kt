@@ -688,7 +688,11 @@ private fun DispensaryCard(
 // ═══════════════════════════════════════════════════════════════
 @Composable
 private fun ConnectorRow(slot: ChargerSlot, index: Int, liveData: SimulatedSession?) {
-    val status = if (liveData != null) SlotStatus.CHARGING else slot.status
+    val status = if (liveData != null) {
+        if (liveData.completed) SlotStatus.PAYMENT_PENDING else SlotStatus.CHARGING
+    } else {
+        slot.status
+    }
     
     Surface(
             shape = RoundedCornerShape(16.dp),
@@ -730,10 +734,24 @@ private fun ConnectorRow(slot: ChargerSlot, index: Int, liveData: SimulatedSessi
                 )
                 
                 if (liveData != null) {
+                    if (liveData.completed) {
+                        Text(
+                            text = "Charging completed",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                        Text(
+                            text = "⚡ Charging at ${String.format("%.1f", liveData.powerKw)}kW",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.secondary
+                        )
+                    }
+                } else if (status == SlotStatus.PAYMENT_PENDING) {
                     Text(
-                        text = "⚡ Charging at ${String.format("%.1f", liveData.powerKw)}kW",
+                        text = "Charging completed",
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.secondary
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 
@@ -749,6 +767,7 @@ private fun ConnectorRow(slot: ChargerSlot, index: Int, liveData: SimulatedSessi
                                     when (status) {
                                         SlotStatus.AVAILABLE -> Color(0xFF4CAF50)
                                         SlotStatus.CHARGING -> MaterialTheme.colorScheme.secondary
+                                        SlotStatus.PAYMENT_PENDING -> androidx.compose.ui.graphics.Color(0xFFFF9800)
                                         else -> Color(0xFF9E9E9E)
                                     }
                             )
@@ -758,6 +777,7 @@ private fun ConnectorRow(slot: ChargerSlot, index: Int, liveData: SimulatedSessi
                                 verticalAlignment = Alignment.CenterVertically
                         ) {
                             val badgeText = when {
+                                status == SlotStatus.PAYMENT_PENDING -> "Payment Pending"
                                 liveData != null -> "Busy (${liveData.socPercentage.toInt()}%)"
                                 status == SlotStatus.AVAILABLE -> "Available"
                                 else -> status.name.lowercase().replaceFirstChar { it.uppercase() }
@@ -850,6 +870,7 @@ private fun SlotStatusBadge(status: SlotStatus) {
                 SlotStatus.OCCUPIED -> Triple(Color(0xFFFFF3E0), Color(0xFFE65100), "Occupied")
                 SlotStatus.BOOKED -> Triple(Color(0xFFF3E5F5), Color(0xFF6A1B9A), "Booked")
                 SlotStatus.RESERVED -> Triple(Color(0xFFFFF8E1), Color(0xFFF9A825), "Reserved")
+                SlotStatus.PAYMENT_PENDING -> Triple(Color(0xFFFFE0B2), Color(0xFFE65100), "Payment Pending")
                 SlotStatus.MAINTENANCE ->
                         Triple(Color(0xFFFFEBEE), Color(0xFFC62828), "Maintenance")
             }

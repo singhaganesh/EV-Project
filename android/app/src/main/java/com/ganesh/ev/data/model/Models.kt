@@ -61,6 +61,7 @@ enum class SlotStatus {
         RESERVED,
         BOOKED,
         CHARGING,
+        PAYMENT_PENDING,
         MAINTENANCE,
         OCCUPIED
 }
