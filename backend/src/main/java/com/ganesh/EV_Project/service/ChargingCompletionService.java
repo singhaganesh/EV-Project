@@ -137,7 +137,7 @@ public class ChargingCompletionService {
                         booking.getUser().getId(),
                         "CHARGING_COMPLETE",
                         "Charging complete",
-                        "Your session is done. Amount due: ₹" + cost + ".",
+                        "Your vehicle is charged. Amount due: ₹" + cost + ". Tap to pay.",
                         "plugsy://payment/" + savedSession.getId());
             } catch (Exception e) {
                 log.warn("Completion push failed for session {}: {}", session.getId(), e.getMessage());

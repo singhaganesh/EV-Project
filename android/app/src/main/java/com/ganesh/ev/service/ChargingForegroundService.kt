@@ -67,7 +67,6 @@ class ChargingForegroundService : Service() {
                         // Session finished (battery full / overtime): swap the ongoing
                         // card for a dismissable "tap to pay" card and stop the service.
                         telemetry.completed -> {
-                            showCompletionNotification()
                             stopForegroundCompat()
                             stopSelf()
                         }
