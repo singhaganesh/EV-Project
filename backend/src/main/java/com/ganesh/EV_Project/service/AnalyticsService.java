@@ -123,4 +123,37 @@ public class AnalyticsService {
 
         return filledData;
     }
+
+    public DispensaryAnalyticsDTO getDispensaryAnalytics(Long dispensaryId) {
+        List<Object[]> metricsRaw = sessionRepository.getDispensaryMetrics(dispensaryId);
+        long totalSessions = 0L;
+        double totalEnergyKwh = 0.0;
+        double avgDurationMinutes = 0.0;
+
+        if (metricsRaw != null && !metricsRaw.isEmpty()) {
+            Object[] row = metricsRaw.get(0);
+            if (row != null) {
+                totalSessions = row[0] != null ? ((Number) row[0]).longValue() : 0L;
+                totalEnergyKwh = row[1] != null ? ((Number) row[1]).doubleValue() : 0.0;
+                avgDurationMinutes = row[2] != null ? ((Number) row[2]).doubleValue() : 0.0;
+            }
+        }
+
+        List<Object[]> peakRaw = sessionRepository.getPeakUsageByDispensary(dispensaryId);
+        Map<Integer, Long> hourMap = new HashMap<>();
+        if (peakRaw != null) {
+            for (Object[] row : peakRaw) {
+                if (row[0] != null) {
+                    hourMap.put(((Number) row[0]).intValue(), row[1] != null ? ((Number) row[1]).longValue() : 0L);
+                }
+            }
+        }
+
+        List<PeakHourDTO> peakHours = new ArrayList<>();
+        for (int i = 0; i < 24; i++) {
+            peakHours.add(new PeakHourDTO(i, hourMap.getOrDefault(i, 0L)));
+        }
+
+        return new DispensaryAnalyticsDTO(dispensaryId, totalSessions, totalEnergyKwh, avgDurationMinutes, peakHours);
+    }
 }

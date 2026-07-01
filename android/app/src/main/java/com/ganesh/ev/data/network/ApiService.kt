@@ -245,4 +245,9 @@ interface ApiService {
         suspend fun getStationLivePower(
                 @Path("stationId") stationId: Long
         ): Response<ApiResponse<LivePowerData>>
+
+        @GET("api/analytics/dispensary/{dispensaryId}")
+        suspend fun getDispensaryAnalytics(
+                @Path("dispensaryId") dispensaryId: Long
+        ): Response<ApiResponse<com.ganesh.ev.data.model.DispensaryAnalyticsDTO>>
 }

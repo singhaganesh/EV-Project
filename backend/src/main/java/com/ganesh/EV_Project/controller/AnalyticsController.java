@@ -47,4 +47,12 @@ public class AnalyticsController {
         AnalyticsSummaryDTO summary = analyticsService.getAnalyticsSummary(ownerId, days);
         return ResponseEntity.ok(summary);
     }
+
+    @GetMapping("/dispensary/{dispensaryId}")
+    @PreAuthorize("hasAnyRole('CUSTOMER', 'STATION_OWNER', 'ADMIN')")
+    public ResponseEntity<com.ganesh.EV_Project.dto.DispensaryAnalyticsDTO> getDispensaryAnalytics(
+            @PathVariable Long dispensaryId) {
+        com.ganesh.EV_Project.dto.DispensaryAnalyticsDTO stats = analyticsService.getDispensaryAnalytics(dispensaryId);
+        return ResponseEntity.ok(stats);
+    }
 }

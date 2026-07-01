@@ -39,6 +39,13 @@ class StationViewModel : ViewModel() {
     private val _slotUpdates = MutableStateFlow<Map<Long, SimulatedSession>>(emptyMap())
     val slotUpdates: StateFlow<Map<Long, SimulatedSession>> = _slotUpdates.asStateFlow()
 
+    // Dispensary analytics state cache
+    private val _dispensaryAnalytics = MutableStateFlow<Map<Long, com.ganesh.ev.data.model.DispensaryAnalyticsDTO>>(emptyMap())
+    val dispensaryAnalytics: StateFlow<Map<Long, com.ganesh.ev.data.model.DispensaryAnalyticsDTO>> = _dispensaryAnalytics.asStateFlow()
+
+    private val _isLoadingAnalytics = MutableStateFlow(false)
+    val isLoadingAnalytics: StateFlow<Boolean> = _isLoadingAnalytics.asStateFlow()
+
     private var stompClient: StompClient? = null
     private val gson = Gson()
 
@@ -343,6 +350,29 @@ class StationViewModel : ViewModel() {
                 }
             } catch (e: Exception) {
                 // Silent fail for power data updates
+            }
+        }
+    }
+
+    fun fetchDispensaryAnalytics(dispensaryId: Long) {
+        if (_dispensaryAnalytics.value.containsKey(dispensaryId)) return
+
+        viewModelScope.launch {
+            _isLoadingAnalytics.value = true
+            try {
+                val response = RetrofitClient.apiService.getDispensaryAnalytics(dispensaryId)
+                if (response.isSuccessful) {
+                    val stats = response.body()?.data
+                    if (stats != null) {
+                        val current = _dispensaryAnalytics.value.toMutableMap()
+                        current[dispensaryId] = stats
+                        _dispensaryAnalytics.value = current
+                    }
+                }
+            } catch (e: Exception) {
+                // Silent fail/retry supported
+            } finally {
+                _isLoadingAnalytics.value = false
             }
         }
     }

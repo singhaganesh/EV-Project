@@ -255,3 +255,16 @@ data class PaginatedResponse<T>(
     val last: Boolean,
     val empty: Boolean
 )
+
+data class DispensaryAnalyticsDTO(
+    val dispensaryId: Long,
+    val totalSessions: Long,
+    val totalEnergyKwh: Double,
+    val avgDurationMinutes: Double,
+    val peakHours: List<PeakHourDTO>
+)
+
+data class PeakHourDTO(
+    val hour: Int,
+    val sessionCount: Long
+)

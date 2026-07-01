@@ -151,4 +151,20 @@ public interface ChargingSessionRepository extends JpaRepository<ChargingSession
            "ORDER BY s.endTime DESC")
     java.util.List<com.ganesh.EV_Project.dto.TransactionRowDTO> getAllTransactions(
             @org.springframework.data.repository.query.Param("ownerId") Long ownerId);
+
+    @org.springframework.data.jpa.repository.Query(value = "SELECT " +
+           "COUNT(*) as totalSessions, " +
+           "COALESCE(SUM(s.energy_kwh), 0.0) as totalEnergy, " +
+           "COALESCE(AVG(EXTRACT(EPOCH FROM (s.end_time - s.start_time))/60), 0.0) as avgDuration " +
+           "FROM charging_sessions s JOIN bookings b ON s.booking_id = b.id " +
+           "JOIN charger_slots cs ON b.slot_id = cs.id " +
+           "WHERE cs.dispensary_id = :dispensaryId AND s.status = 'COMPLETED'", nativeQuery = true)
+    List<Object[]> getDispensaryMetrics(@org.springframework.data.repository.query.Param("dispensaryId") Long dispensaryId);
+
+    @org.springframework.data.jpa.repository.Query(value = "SELECT EXTRACT(HOUR FROM s.start_time) as hour, COUNT(*) as count " +
+           "FROM charging_sessions s JOIN bookings b ON s.booking_id = b.id " +
+           "JOIN charger_slots cs ON b.slot_id = cs.id " +
+           "WHERE cs.dispensary_id = :dispensaryId AND s.status = 'COMPLETED' " +
+           "GROUP BY hour ORDER BY hour ASC", nativeQuery = true)
+    List<Object[]> getPeakUsageByDispensary(@org.springframework.data.repository.query.Param("dispensaryId") Long dispensaryId);
 }

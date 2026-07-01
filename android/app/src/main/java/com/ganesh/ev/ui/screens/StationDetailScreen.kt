@@ -135,11 +135,17 @@ fun StationDetailScreen(
                 }
             }
             is StationUiState.StationDetailLoaded -> {
+                val analyticsData by viewModel.dispensaryAnalytics.collectAsState()
+                val isLoadingAnalytics by viewModel.isLoadingAnalytics.collectAsState()
+
                 ClayStationDetailContent(
                         station = state.station,
                         slots = state.slots,
                         slotUpdates = slotUpdates,
                         powerData = state.powerData,
+                        analyticsData = analyticsData,
+                        isLoadingAnalytics = isLoadingAnalytics,
+                        onFetchAnalytics = { id -> viewModel.fetchDispensaryAnalytics(id) },
                         onBookStation = { onBookStation() },
                         initialTab = initialTab,
                         modifier = Modifier.padding(paddingValues)
@@ -156,6 +162,9 @@ fun ClayStationDetailContent(
         slots: List<ChargerSlot>,
         slotUpdates: Map<Long, SimulatedSession>,
         powerData: LivePowerData?,
+        analyticsData: Map<Long, com.ganesh.ev.data.model.DispensaryAnalyticsDTO>,
+        isLoadingAnalytics: Boolean,
+        onFetchAnalytics: (Long) -> Unit,
         onBookStation: () -> Unit,
         initialTab: Int = 0,
         modifier: Modifier = Modifier
@@ -195,7 +204,14 @@ fun ClayStationDetailContent(
 
         // ── Tab Content ──
         when (selectedTab) {
-            0 -> ChargerTabContent(slots = slots, slotUpdates = slotUpdates, onBookStation = onBookStation)
+            0 -> ChargerTabContent(
+                    slots = slots,
+                    slotUpdates = slotUpdates,
+                    analyticsData = analyticsData,
+                    isLoadingAnalytics = isLoadingAnalytics,
+                    onFetchAnalytics = onFetchAnalytics,
+                    onBookStation = onBookStation
+            )
             1 -> DetailsTabContent(station = station, powerData = powerData)
             2 -> ReviewsTabContent(stationId = station.id)
         }
@@ -361,9 +377,12 @@ private fun convertTo24Hour(hour: Int, period: String): Int {
 // ═══════════════════════════════════════════════════════════════
 @Composable
 private fun ChargerTabContent(
-    slots: List<ChargerSlot>, 
-    slotUpdates: Map<Long, SimulatedSession>,
-    onBookStation: () -> Unit
+        slots: List<ChargerSlot>,
+        slotUpdates: Map<Long, SimulatedSession>,
+        analyticsData: Map<Long, com.ganesh.ev.data.model.DispensaryAnalyticsDTO>,
+        isLoadingAnalytics: Boolean,
+        onFetchAnalytics: (Long) -> Unit,
+        onBookStation: () -> Unit
 ) {
     var filterAvailable by remember { mutableStateOf(false) }
     var filterAC by remember { mutableStateOf(false) }
@@ -448,7 +467,10 @@ private fun ChargerTabContent(
                                 dispensary = dispensary,
                                 slots = slotsForMachine,
                                 slotUpdates = slotUpdates,
-                                station = slotsForMachine.firstOrNull()?.station
+                                station = slotsForMachine.firstOrNull()?.station,
+                                analyticsData = analyticsData,
+                                isLoadingAnalytics = isLoadingAnalytics,
+                                onFetchAnalytics = onFetchAnalytics
                         )
                     }
                 }
@@ -513,12 +535,16 @@ private fun FilterChipItem(label: String, selected: Boolean, onClick: () -> Unit
 // ═══════════════════════════════════════════════════════════════
 //  Dispensary Card (Machine Level) + Child Connectors
 // ═══════════════════════════════════════════════════════════════
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun DispensaryCard(
-    dispensary: Dispensary?, 
-    slots: List<ChargerSlot>, 
-    slotUpdates: Map<Long, SimulatedSession>,
-    station: Station?
+        dispensary: Dispensary?,
+        slots: List<ChargerSlot>,
+        slotUpdates: Map<Long, SimulatedSession>,
+        station: Station?,
+        analyticsData: Map<Long, com.ganesh.ev.data.model.DispensaryAnalyticsDTO>,
+        isLoadingAnalytics: Boolean,
+        onFetchAnalytics: (Long) -> Unit
 ) {
     val machineName = dispensary?.name ?: "Main Charger Unit"
     val isAc = slots.any { it.slotType == SlotType.AC }
@@ -531,8 +557,25 @@ private fun DispensaryCard(
         station?.pricePerKwh?.let { "₹ $it/kWh" } ?: ""
     }
 
+    var showBottomSheet by remember { mutableStateOf(false) }
+
+    if (showBottomSheet && dispensary != null) {
+        ModalBottomSheet(
+                onDismissRequest = { showBottomSheet = false },
+                sheetState = rememberModalBottomSheetState(),
+                containerColor = MaterialTheme.colorScheme.surface
+        ) {
+            DispensaryAnalyticsSheetContent(
+                    dispensaryId = dispensary.id,
+                    dispensaryName = dispensary.name ?: "Main Charger Unit",
+                    stats = analyticsData[dispensary.id],
+                    isLoading = isLoadingAnalytics
+            )
+        }
+    }
+
     ClayCard(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp), 
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
             cornerRadius = 24.dp
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -577,9 +620,16 @@ private fun DispensaryCard(
             Spacer(modifier = Modifier.height(16.dp))
 
             // Analytics Section
+            val sessionsCountText = analyticsData[dispensary?.id]?.totalSessions?.let { "$it sessions done so far" } ?: "Click to view usage history"
             Surface(
                     shape = RoundedCornerShape(12.dp),
-                    color = Color(0xFFFFF8E1).copy(alpha = 0.6f)
+                    color = Color(0xFFFFF8E1).copy(alpha = 0.6f),
+                    modifier = Modifier.clickable {
+                        if (dispensary != null) {
+                            onFetchAnalytics(dispensary.id)
+                            showBottomSheet = true
+                        }
+                    }
             ) {
                 Row(
                         modifier = Modifier.fillMaxWidth().padding(12.dp),
@@ -603,7 +653,7 @@ private fun DispensaryCard(
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                    text = "100+ charging sessions done so far",
+                                    text = sessionsCountText,
                                     fontSize = 12.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -617,6 +667,7 @@ private fun DispensaryCard(
                     )
                 }
             }
+
 
             Spacer(modifier = Modifier.height(16.dp))
 
@@ -1208,5 +1259,181 @@ private fun formatConnectorType(type: ConnectorType): String {
     return when (type) {
         ConnectorType.CCS2 -> "CCS-2"
         ConnectorType.TYPE_2 -> "Type 2"
+    }
+}
+
+@Composable
+private fun DispensaryAnalyticsSheetContent(
+        dispensaryId: Long,
+        dispensaryName: String,
+        stats: com.ganesh.ev.data.model.DispensaryAnalyticsDTO?,
+        isLoading: Boolean
+) {
+    Column(
+            modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+                text = dispensaryName,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+        )
+        Text(
+                text = "Historical Usage Analytics",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        if (isLoading && stats == null) {
+            Box(
+                    modifier = Modifier.fillMaxWidth().height(200.dp),
+                    contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator()
+            }
+        } else if (stats != null) {
+            Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Box(
+                        modifier = Modifier
+                                .weight(1f)
+                                .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(16.dp))
+                                .padding(16.dp),
+                        contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                                text = "${stats.totalSessions}",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                                text = "Sessions",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                Box(
+                        modifier = Modifier
+                                .weight(1f)
+                                .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(16.dp))
+                                .padding(16.dp),
+                        contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                                text = "${stats.totalEnergyKwh.toInt()} kWh",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                                text = "Total Energy",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                Box(
+                        modifier = Modifier
+                                .weight(1f)
+                                .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(16.dp))
+                                .padding(16.dp),
+                        contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                                text = "${stats.avgDurationMinutes.toInt()} min",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                                text = "Avg Time",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Start
+            ) {
+                Text(
+                        text = "Hourly Busy Pattern (24 Hours)",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            val maxSessions = stats.peakHours.maxOfOrNull { it.sessionCount } ?: 1L
+            val chartMax = if (maxSessions == 0L) 1L else maxSessions
+
+            Row(
+                    modifier = Modifier
+                            .fillMaxWidth()
+                            .height(160.dp)
+                            .padding(horizontal = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Bottom
+            ) {
+                stats.peakHours.forEach { hourData ->
+                    val progress = hourData.sessionCount.toFloat() / chartMax
+                    Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.weight(1f)
+                    ) {
+                        Box(
+                                modifier = Modifier
+                                        .fillMaxWidth(0.6f)
+                                        .height(Math.max(4f, progress * 130).dp)
+                                        .background(
+                                                color = if (hourData.hour in 9..17) MaterialTheme.colorScheme.primary
+                                                else MaterialTheme.colorScheme.secondary,
+                                                shape = RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp)
+                                        )
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        val hourText = when (hourData.hour) {
+                            0 -> "12A"
+                            6 -> "6A"
+                            12 -> "12P"
+                            18 -> "6P"
+                            23 -> "11P"
+                            else -> ""
+                        }
+                        Text(
+                                text = hourText,
+                                fontSize = 8.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        } else {
+            Box(
+                    modifier = Modifier.fillMaxWidth().height(200.dp),
+                    contentAlignment = Alignment.Center
+            ) {
+                Text("No historical data available for this charger.")
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
     }
 }
