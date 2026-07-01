@@ -264,12 +264,20 @@ public class ChargingSimulatorService {
         messagingTemplate.convertAndSend("/topic/session/" + session.bookingId, userUpdate);
 
         // Topic 2: Public (Aggregated for station searchers)
-        Map<String, Object> publicUpdate = Map.of(
-            "slotId", session.slotId,
-            "status", "CHARGING",
-            "soc", Math.round(session.socPercentage),
-            "timeLeft", (int) Math.ceil(session.minutesRemaining)
-        );
+        Map<String, Object> publicUpdate = new java.util.HashMap<>();
+        publicUpdate.put("bookingId", session.bookingId);
+        publicUpdate.put("slotId", session.slotId);
+        publicUpdate.put("stationId", session.stationId);
+        publicUpdate.put("powerKw", session.powerKw);
+        publicUpdate.put("energyDispensedKwh", session.energyDispensedKwh);
+        publicUpdate.put("socPercentage", session.socPercentage);
+        publicUpdate.put("totalCost", session.totalCost);
+        publicUpdate.put("minutesRemaining", session.minutesRemaining);
+        publicUpdate.put("maxPowerKw", session.maxPowerKw);
+        publicUpdate.put("batteryCapacityKwh", session.batteryCapacityKwh);
+        publicUpdate.put("pricePerKwh", session.pricePerKwh);
+        publicUpdate.put("completed", session.completedReady);
+
         messagingTemplate.convertAndSend("/topic/station/" + session.stationId, publicUpdate);
 
         // Topic 3: Owner (Full health metrics for the dashboard)
