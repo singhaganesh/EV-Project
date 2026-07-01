@@ -194,7 +194,7 @@ fun MyBookingsScreen(
 
 @Composable
 fun ClayBookingCard(booking: Booking, onClick: () -> Unit) {
-    val isUnpaid = booking.status == BookingStatus.COMPLETED && booking.paymentStatus == "UNPAID"
+    val isUnpaid = booking.status == BookingStatus.COMPLETED && booking.paymentStatus != "PAID"
     val statusColor =
             if (isUnpaid) {
                 androidx.compose.ui.graphics.Color(0xFFFF9800) // Deep orange/amber for Unpaid
@@ -330,7 +330,7 @@ fun ClayBookingCard(booking: Booking, onClick: () -> Unit) {
 // Simple list item without card design
 @Composable
 fun BookingListItem(booking: Booking, onClick: () -> Unit) {
-    val isUnpaid = booking.status == BookingStatus.COMPLETED && booking.paymentStatus == "UNPAID"
+    val isUnpaid = booking.status == BookingStatus.COMPLETED && booking.paymentStatus != "PAID"
     val statusColor =
             if (isUnpaid) {
                 androidx.compose.ui.graphics.Color(0xFFFF9800) // Deep orange/amber for Unpaid
